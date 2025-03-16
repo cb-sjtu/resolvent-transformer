@@ -1,0 +1,13 @@
+mesh_multi_snapshot:  
+  name: valid_mesh_multi_snapshot
+  description: multiple meshes in the list, from the same geometry, just different snapshots. bs = None
+  task: mesh_list
+  data_folder: ${data.data_folder}
+  geometries: ${data.valid_geometries}
+  materials: ${data.valid_materials}
+  num_meshes: 3
+  same_geometry: True
+  snapshot_range: [1, 11]
+  num_workers: ${data.num_workers}
+  infinite: True
+  print_info: False

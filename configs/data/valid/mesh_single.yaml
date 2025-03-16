@@ -1,0 +1,11 @@
+mesh_single:  
+  name: valid_mesh_single
+  task: mesh_single
+  data_folder: ${data.data_folder}
+  geometries: ${data.valid_geometries}
+  materials: ${data.valid_materials}
+  num_meshes: 1
+  batch_size_per_process: ${data.batchsize}
+  num_workers: ${data.num_workers}
+  infinite: True
+  print_info: False

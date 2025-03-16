@@ -1,0 +1,13 @@
+mesh_multi_geometry_train:  
+  name: valid_mesh_multi_geometry_train
+  description: multiple meshes in the list, from different geometries. bs = None. data from training
+  task: mesh_list
+  data_folder: ${data.data_folder}
+  geometries: ${data.train_geometries}
+  materials: ${data.train_materials}
+  num_meshes: 3
+  same_geometry: False
+  snapshot_range: [1, 11]
+  num_workers: ${data.num_workers}
+  infinite: True
+  print_info: False

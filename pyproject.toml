@@ -1,0 +1,40 @@
+[tool.ruff]
+exclude = ["reference/*", "deprecated/*"]
+
+target-version = "py311"
+line-length = 120
+indent-width = 4
+
+[tool.ruff.lint.isort]
+known-third-party = ["wandb"]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 80
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = [
+    # "E402", # module level import not at top of file
+    # "E501", # line too long
+    # "E741", # ambiguous variable name
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E401", "E402"]

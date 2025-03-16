@@ -1,0 +1,16 @@
+eqn_snapshot_noslice:
+  name: train_eqn_snapshot_noslice
+  split: snapshot
+  geometry: cycle
+  rotate: ${data.rotate}
+  flip: ${data.flip}
+  data_folder: ${data.data_folder}
+  geometries: ${data.train_geometries}
+  materials: ${data.train_materials}
+  eqns_per_prompt: null
+  batch_size_per_process: ${data.batchsize}
+  batch_size_per_record: 1
+  num_workers: ${data.num_workers}
+  infinite: ${data.infinite}
+  print_info: ${data.print_info}
+  pin_memory: ${data.pin_memory}
