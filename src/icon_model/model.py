@@ -7,7 +7,7 @@ import numpy as np
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=500):
-        super(PositionalEncoding, self).__init__()
+        super().__init__()
         
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
@@ -30,7 +30,7 @@ class PositionalEncoding(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads):
-        super(MultiHeadAttention, self).__init__()
+        super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
         
         self.d_model = d_model
@@ -82,7 +82,7 @@ class MultiHeadAttention(nn.Module):
 
 class PositionwiseFeedForward(nn.Module):
     def __init__(self, d_model, d_ff):
-        super(PositionwiseFeedForward, self).__init__()
+        super().__init__()
         self.fc1 = nn.Linear(d_model, d_ff)
         self.fc2 = nn.Linear(d_ff, d_model)
         
@@ -94,7 +94,7 @@ class PositionwiseFeedForward(nn.Module):
 
 class EncoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout=0.1):
-        super(EncoderLayer, self).__init__()
+        super().__init__()
         
         self.self_attn = MultiHeadAttention(d_model, num_heads)
         self.feed_forward = PositionwiseFeedForward(d_model, d_ff)
@@ -116,7 +116,7 @@ class EncoderLayer(nn.Module):
 
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout=0.1):
-        super(DecoderLayer, self).__init__()
+        super().__init__()
         
         self.self_attn = MultiHeadAttention(d_model, num_heads)
         self.cross_attn = MultiHeadAttention(d_model, num_heads)
@@ -143,7 +143,7 @@ class DecoderLayer(nn.Module):
 
 class Encoder(nn.Module):
     def __init__(self, input_dim, d_model, num_layers, num_heads, d_ff, max_seq_len, dropout=0.1):
-        super(Encoder, self).__init__()
+        super().__init__()
         
         self.input_embedding = nn.Linear(input_dim, d_model)
         self.positional_encoding = PositionalEncoding(d_model, max_seq_len)
@@ -170,7 +170,7 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(self, input_dim, d_model, num_layers, num_heads, d_ff, max_seq_len, dropout=0.1):
-        super(Decoder, self).__init__()
+        super().__init__()
         
         self.input_embedding = nn.Linear(input_dim, d_model)
         self.positional_encoding = PositionalEncoding(d_model, max_seq_len)
@@ -207,7 +207,7 @@ class OperatorTransformer(nn.Module):
                  d_ff=1024,
                  max_seq_len=1000,
                  dropout=0.1):
-        super(OperatorTransformer, self).__init__()
+        super().__init__()
         
         self.encoder = Encoder(
             input_dim=f_input_dim,
