@@ -20,10 +20,6 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
         
     def forward(self, x):
-        """
-        Args:
-            x: [batch_size, seq_len, d_model]
-        """
         x = x + self.pe[:, :x.size(1), :]
         return x
 
@@ -195,17 +191,30 @@ class Decoder(nn.Module):
 
 class OperatorTransformer(nn.Module):
     def __init__(self, 
-                 f_input_dim,        # (x,y) from f 
-                 g_input_dim,        # x from g
-                 g_output_dim,       # y from g
+                 f_input_dim=None,   # (x,y) from f 
+                 g_input_dim=None,   # x from g
+                 g_output_dim=None,  # y from g
                  d_model=256,        
                  num_encoder_layers=6,
                  num_decoder_layers=6,
                  num_heads=8,
                  d_ff=1024,
                  max_seq_len=1000,
-                 dropout=0.1):
+                 dropout=0.1,
+                 cfg=None):
         super().__init__()
+        
+        if cfg is not None:
+            f_input_dim = int(cfg.model.f_input_dim)
+            g_input_dim = int(cfg.model.g_input_dim)
+            g_output_dim = int(cfg.model.g_output_dim)
+            d_model = int(cfg.model.d_model)
+            num_encoder_layers = int(cfg.model.num_encoder_layers)
+            num_decoder_layers = int(cfg.model.num_decoder_layers)
+            num_heads = int(cfg.model.num_heads)
+            d_ff = int(cfg.model.d_ff)
+            max_seq_len = int(cfg.model.max_seq_len)
+            dropout = float(cfg.model.dropout)
         
         self.encoder = Encoder(
             input_dim=f_input_dim,

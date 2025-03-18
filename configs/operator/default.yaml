@@ -1,0 +1,17 @@
+# @package _global_
+
+# Basic configuration
+seed: 42
+run_name: operator_run
+compile: false
+generate_synthetic_data: true
+deterministic: false
+optimized_metric: "valid/loss"
+dynamo_cache_size_limit: 64  # Set dynamo cache size limit
+print_lv: 1  # Print detail level
+
+# SDPA configuration
+sdpa:
+  - math         # Default backend
+  - efficient    # Use efficient attention if available
+  - flash        # Use flash attention if available 
