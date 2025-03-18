@@ -10,8 +10,6 @@ from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from lightning.pytorch.loggers import Logger, CSVLogger
 from omegaconf import DictConfig, OmegaConf
 
-rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-
 from src.operator_model.operator_lit_module import OperatorLitModule
 from src.operator_model.data import OperatorDataModule, OperatorData
 from src.utils import ( 
@@ -24,7 +22,7 @@ from src.utils import (
     task_wrapper,
 )
 
-
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
@@ -47,7 +45,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         g_output_dim = cfg.model.g_output_dim
         
         train_data = []
-        for i in range(num_functions):
+        for _ in range(num_functions):
             train_data.append(
                 OperatorData(
                     f_samples=torch.randn(1, f_seq_len, f_input_dim),
@@ -57,7 +55,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
             )
         
         val_data = []
-        for i in range(num_functions//5):
+        for _ in range(num_functions//5):
             val_data.append(
                 OperatorData(
                     f_samples=torch.randn(1, f_seq_len, f_input_dim),
