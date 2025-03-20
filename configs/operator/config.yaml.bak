@@ -1,0 +1,55 @@
+# @package _global_
+
+# General configuration
+seed: 42
+run_name: operator_run
+compile: false
+generate_synthetic_data: true
+deterministic: false
+optimized_metric: "valid/loss"
+dynamo_cache_size_limit: 64 # cache size limit for dynamo
+
+# Model configuration
+model:
+  f_input_dim: 2        # (x,y) pairs from input functions
+  g_input_dim: 1        # x values from target function
+  g_output_dim: 1       # y values from target function
+  f_seq_len: 100        # Number of samples for input function
+  g_seq_len: 50         # Number of samples for target function
+  d_model: 256          # Transformer model dimension
+  num_encoder_layers: 4 # Number of encoder layers
+  num_decoder_layers: 4 # Number of decoder layers 
+  num_heads: 8          # Number of attention heads
+  d_ff: 1024            # Feed-forward hidden dimension
+  max_seq_len: 500      # Maximum sequence length for positional encoding
+  dropout: 0.1          # Dropout rate
+
+# Optimization parameters
+opt:
+  peak_lr: 0.001        # Peak learning rate
+  weight_decay: 0.01    # Weight decay for AdamW optimizer
+  warmup_percent: 10    # Percentage of steps for warmup
+  decay_percent: 90     # Percentage of steps for decay
+
+# Data parameters
+data:
+  batch_size: 32        # Batch size for dataloaders
+  num_workers: 4        # Number of workers for dataloaders
+  pin_memory: true      # Whether to pin memory
+  valid: {}             # initialize valid data set configuration
+  
+# Training parameters
+trainer:
+  accelerator: auto     # Automatic selection of accelerator
+  devices: auto         # Number of devices to use 
+  precision: 32         # Floating point precision
+  max_epochs: 50        # Maximum number of epochs
+  max_steps: 5000       # Maximum number of steps
+  log_every_n_steps: 10 # Log frequency
+  
+# SDPA configuration
+sdpa:
+  - math                # Default backend 
+
+# Print level
+print_lv: 1             # print detail level 

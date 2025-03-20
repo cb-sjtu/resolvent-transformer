@@ -1,0 +1,10 @@
+# @package _global_
+
+# Disable Python warnings
+ignore_warnings: False
+
+# Request user to provide tags if none are provided in the configuration
+enforce_tags: True
+
+# Pretty print the configuration tree at startup using the Rich library
+print_config: True 
