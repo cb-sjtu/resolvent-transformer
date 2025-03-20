@@ -1,12 +1,6 @@
 # testbed
 
-Some class and function names are inherited from `icon-solid-dev`, feel free to change them.
-
-@ Wang Shuo: You can focus on the dataloader part. feel free to create new data class in `src/data/data_utils.py`.
-
-@ Kong Haoming: You can focus on the model and training part. You can start from standard operator learning with classic encoder-decoder transformer. This will also be our baseline.
-
-Check `icon-solid-dev` for more examples.
+Some class and function names are inherited from `icon-solid-dev`, feel free to change them. Check `icon-solid-dev` for more examples.
 
 ## environment
 
@@ -14,6 +8,15 @@ Check `icon-solid-dev` for more examples.
 conda env create -f env.yaml # create the environment named sg  
 conda activate sg # activate the environment sg
 ```
+
+## Format code
+
+In the activated environment, run `conda install pre-commit -y && pre-commit install` in the root directory of the project to install the pre-commit hook. This will check the code format when committing. The commit will be rejected if the code format check fails. The code will then be auto-formatted, so you can add the change and commit again. 
+
+Note that you need to run `pre-commit install` for each project.
+
+Mannual format before commit: `ruff format & ruff check --fix`
+
 
 ## run
 
