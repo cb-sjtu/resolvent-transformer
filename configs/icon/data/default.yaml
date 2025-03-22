@@ -3,7 +3,6 @@ defaults:
     - dummy_icon
   - valid:
     - dummy_icon
-_target_: src.data.datamodule_icon.IconDataModule
 
 data_folder: ${paths.data_dir}/icon_data
 batchsize: 8

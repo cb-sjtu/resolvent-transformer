@@ -1,9 +1,10 @@
+import hydra
 from lightning import LightningDataModule
 from omegaconf import DictConfig
 
 import src.data.data_utils as du
 from src.data.dataloader import CycleDataLooper, DataLooper
-from src.data.datasets.dummy_icon import IconData, IconDataset
+from src.data.datasets.dummy_icon import IconData
 
 
 class IconDataModule(LightningDataModule):
@@ -28,7 +29,7 @@ class IconDataModule(LightningDataModule):
             data = du.concat_data(data_list)
             return data
 
-        trainset = IconDataset(cfg=cfg)
+        trainset = hydra.utils.instantiate(cfg.dataset)
         return DataLooper(trainset, cfg, batch_size=cfg.batch_size_per_process, collate_fn=collate_fn)
 
     def train_dataloader(self):
@@ -57,9 +58,6 @@ class IconDataModule(LightningDataModule):
 
     def test_dataloader(self):
         pass
-
-    def _collate_fn(self, batch: list[IconData]):
-        return du.concat_data(batch)
 
     def teardown(self, stage=None):
         pass
