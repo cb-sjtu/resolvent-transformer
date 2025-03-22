@@ -1,4 +1,3 @@
-import os
 from typing import Any
 
 import hydra
@@ -9,6 +8,18 @@ import torch._dynamo
 from lightning import Callback, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
+
+from src.data.datamodule_ol import OperatorDataModule
+from src.models.operator_lit_module import OperatorLitModule
+from src.utils import (  # noqa: E402
+    RankedLogger,
+    extras,
+    get_metric_value,
+    instantiate_callbacks,
+    instantiate_loggers,
+    log_hyperparameters,
+    task_wrapper,
+)
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
@@ -27,17 +38,6 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 #
 # more info: https://github.com/ashleve/rootutils
 # ------------------------------------------------------------------------------------ #
-from src.data import FnLitDataModule  # noqa: E402
-from src.models import IceLitModule  # noqa: E402
-from src.utils import (  # noqa: E402
-    RankedLogger,
-    extras,
-    get_metric_value,
-    instantiate_callbacks,
-    instantiate_loggers,
-    log_hyperparameters,
-    task_wrapper,
-)
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -59,13 +59,13 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     if cfg.get("seed"):
         L.seed_everything(cfg.seed, workers=True)
 
-    # log.info(f"Instantiating datamodule <{cfg.data._target_}>")
+    log.info(f"Instantiating datamodule <{cfg.data._target_}>")
     # datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
-    datamodule = FnLitDataModule(cfg)
+    datamodule = OperatorDataModule(cfg)
 
-    # log.info(f"Instantiating model <{cfg.model._target_}>")
+    log.info(f"Instantiating model <{cfg.model._target_}>")
     # model: LightningModule = hydra.utils.instantiate(cfg.model)
-    model = IceLitModule(cfg, compile=cfg.model.get("compile", False))
+    model = OperatorLitModule(cfg, compile=cfg.model.get("compile", False))
 
     log.info("Instantiating callbacks...")
     callbacks: list[Callback] = instantiate_callbacks(cfg.get("callbacks"))
@@ -109,10 +109,7 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     return metric_dict, object_dict
 
 
-config_file_name = "train_custom.yaml" if os.path.exists("./configs/operator/train_custom.yaml") else "train.yaml"
-
-
-@hydra.main(version_base="1.3", config_path="../configs/operator", config_name=config_file_name)
+@hydra.main(version_base="1.3", config_path="../configs/operator", config_name="train")
 def main(cfg: DictConfig) -> float | None:
     """Main entry point for training.
 
