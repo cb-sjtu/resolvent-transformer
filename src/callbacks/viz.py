@@ -3,7 +3,7 @@ import lightning as L
 from . import viz_utils as vu
 
 
-class VizNode(L.Callback):
+class Viz(L.Callback):
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         if batch_idx != 0:
             return  # only plot for the first batch
