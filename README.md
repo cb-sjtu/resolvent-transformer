@@ -27,8 +27,8 @@ We will consider open source this repository when it's stable and useful for oth
 ## environment
 
 ```bash
-conda env create -f env.yaml # create the environment named sg  
-conda activate sg # activate the environment sg
+conda env create -f env.yaml # create the environment named icon
+conda activate icon # activate the environment icon
 ```
 
 ## Format code
