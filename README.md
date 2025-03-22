@@ -1,12 +1,34 @@
-# testbed
+# Testbed
 
-Some class and function names are inherited from `icon-solid-dev`, feel free to change them. Check `icon-solid-dev` for more examples.
+This repository is a private repository shared inside our group as a template. It's actively maintained. 
+
+Although it's a private repository, we may start from this repository for new projects and publish the code. Sometimes we have to publish anonymous code for peer review. So this repository is **ready to be published anonymously any time**.
+
+It includes:
+- Published/Standard models and algorithms for operator learning and in-context operator learning, for tutorial and benchmark. Here published means on arXiv.
+- Testbed datasets and dataloaders.
+- Standard training and evaluation pipelines as examples.
+- Utilities, including visualization, logging, etc.
+
+It should not include:
+- Ongoing research that are not ready for publication
+- Codes that breaks anonymity. There are some exceptions: 
+  - `configs/logger/wandb.yaml` group_name
+  - `configs/paths/default.yaml` data_dir
+  - TODO: improve the anonymity and list all the exceptions.
+
+If you want to do some experiments, you should:
+- Create a new repository based on this template. This template will contain some parts that you do not need. Feel free to remove them for clarity.
+- When you publish your code, please replace this `README.md` with your own one. Remember to remove the personal information discussed above for anonymity. Try to remove the parts that are not related to your project for clarity.
+- If you has something worth being included in this template, add them and create a pull request.
+
+We will consider open source this repository when it's stable and useful for others.
 
 ## environment
 
 ```bash
-conda env create -f env.yaml # create the environment named sg  
-conda activate sg # activate the environment sg
+conda env create -f env.yaml # create the environment named icon
+conda activate icon # activate the environment icon
 ```
 
 ## Format code

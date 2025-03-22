@@ -1,16 +1,7 @@
-from dataclasses import dataclass
-
 import torch
 from torch.utils.data import Dataset
 
-import src.data.data_utils as du
-
-
-@dataclass
-class OperatorData(du.DataBase):
-    f_samples: torch.Tensor = None
-    g_inputs: torch.Tensor = None
-    g_targets: torch.Tensor = None
+from src.data.data_utils import OperatorData
 
 
 class DummyOperatorDataset(Dataset):

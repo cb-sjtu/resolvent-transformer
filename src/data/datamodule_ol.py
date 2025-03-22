@@ -3,8 +3,8 @@ from lightning import LightningDataModule
 from omegaconf import DictConfig
 
 import src.data.data_utils as du
+from src.data.data_utils import OperatorData
 from src.data.dataloader import CycleDataLooper, DataLooper
-from src.data.datasets.dummy_operator import OperatorData
 
 
 class OperatorDataModule(LightningDataModule):
