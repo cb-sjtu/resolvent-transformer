@@ -1,7 +1,7 @@
 from omegaconf import DictConfig
 from torch import nn
 
-from src.data.datasets.dummy_operator import OperatorData
+from src.data.data_utils import OperatorData
 
 from .transformer import get_transformer
 

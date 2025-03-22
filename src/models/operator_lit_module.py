@@ -6,7 +6,7 @@ from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchmetrics import MeanMetric, MetricCollection
 
-from src.data.datasets.dummy_operator import OperatorData
+from src.data.data_utils import OperatorData
 from src.models.components.enc_dec_ol import EncDecOL
 from src.opt import WarmupCosineDecayScheduler
 
