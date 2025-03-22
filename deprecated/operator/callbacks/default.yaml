@@ -1,0 +1,11 @@
+# Callback configuration for Operator model
+
+defaults:
+  - /callbacks/model_summary      # Reference model summary from top-level directory
+  - /callbacks/rich_progress_bar  # Reference progress bar from top-level directory
+  - checkpoint                    # Operator-specific checkpoint (in current directory)
+  - _self_
+
+# Model summary configuration
+model_summary:
+  max_depth: -1                   # Print all levels 

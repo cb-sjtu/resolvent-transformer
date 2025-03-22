@@ -21,7 +21,7 @@ Mannual format before commit: `ruff format && ruff check --fix`
 ## run
 
 ```bash
-python src/train.py
+python src/train_operator.py # logger=[csv,wandb] data.batchsize=32
 ```
 
 ## Custom training

@@ -59,17 +59,10 @@ class OperatorLitModule(L.LightningModule):
     def _loss_function(self, pred, target):
         return F.mse_loss(pred, target)
 
-    def _loss_operator(self, batch) -> torch.Tensor:
-        if isinstance(batch, dict):
-            f_samples = batch["f_samples"]
-            g_inputs = batch["g_inputs"]
-            g_targets = batch["g_targets"]
-        elif isinstance(batch, OperatorData):
-            f_samples = batch.f_samples
-            g_inputs = batch.g_inputs
-            g_targets = batch.g_targets
-        else:
-            raise ValueError(f"unsupported batch type: {type(batch)}")
+    def _loss_operator(self, batch: OperatorData) -> torch.Tensor:
+        f_samples = batch.f_samples
+        g_inputs = batch.g_inputs
+        g_targets = batch.g_targets
 
         g_outputs = self._model_forward(f_samples, g_inputs)
 
@@ -77,27 +70,16 @@ class OperatorLitModule(L.LightningModule):
 
         return loss
 
-    def get_pred(self, batch):
-        if isinstance(batch, dict):
-            f_samples = batch["f_samples"]
-            g_inputs = batch["g_inputs"]
-        elif isinstance(batch, OperatorData):
-            f_samples = batch.f_samples
-            g_inputs = batch.g_inputs
-        else:
-            raise ValueError(f"unsupported batch type: {type(batch)}")
+    def get_pred(self, batch: OperatorData) -> torch.Tensor:
+        f_samples = batch.f_samples
+        g_inputs = batch.g_inputs
 
         return self._model_forward(f_samples, g_inputs)
 
-    def get_error(self, batch) -> torch.Tensor:
+    def get_error(self, batch: OperatorData) -> torch.Tensor:
         g_outputs = self.get_pred(batch)
 
-        if isinstance(batch, dict):
-            g_targets = batch["g_targets"]
-        elif isinstance(batch, OperatorData):
-            g_targets = batch.g_targets
-        else:
-            raise ValueError(f"unsupported batch type: {type(batch)}")
+        g_targets = batch.g_targets
 
         return torch.abs(g_outputs - g_targets)
 
@@ -107,7 +89,7 @@ class OperatorLitModule(L.LightningModule):
         for metrics in self.valid_metrics:
             metrics.reset()
 
-    def training_step(self, batch, batch_idx) -> torch.Tensor:
+    def training_step(self, batch: OperatorData, batch_idx: int) -> torch.Tensor:
         loss = self._loss_operator(batch)
 
         self.train_metrics(loss)
@@ -116,7 +98,7 @@ class OperatorLitModule(L.LightningModule):
         return loss
 
     ############ validation #############
-    def validation_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+    def validation_step(self, batch: OperatorData, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         loss = self._loss_operator(batch)
         error = self.get_error(batch)
 

@@ -1,8 +1,15 @@
-# @package _global_
+defaults:
+  - train:
+    - dummy_ol
+    - dummy_ol_large
+  - valid:
+    - dummy_ol
 
-# Data parameters
-data:
-  batch_size: 32        # Batch size
-  num_workers: 4        # Number of worker processes for data loader
-  pin_memory: true      # Whether to use memory pinning (improves GPU loading speed)
-  valid: {}             # Validation dataset configuration 
+
+
+data_folder: ${paths.data_dir}/xxx
+batchsize: 16
+num_workers: 2
+infinite: True
+print_info: False
+pin_memory: False
