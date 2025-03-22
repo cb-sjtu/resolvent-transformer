@@ -37,18 +37,17 @@ class OperatorLitModule(L.LightningModule):
 
         self.train_metrics = MeanMetric()
 
-        valid_data_count = max(1, len(self.cfg.data.valid) if hasattr(self.cfg.data, "valid") else 1)
-
         # Use MetricCollection to group metrics
+        self.metric_names = [
+            "loss",  # total loss
+            "error",  # error
+            # add more metrics here
+        ]
+
         self.valid_metrics = torch.nn.ModuleList(
             [
-                MetricCollection(
-                    {
-                        "loss": MeanMetric(),
-                        "error": MeanMetric(),
-                    }
-                )
-                for _ in range(valid_data_count)
+                MetricCollection({k: MeanMetric() for k in self.metric_names})
+                for _ in range(len(self.cfg.data.valid))  # initialize metrics for each valid_loader
             ]
         )
 
@@ -91,29 +90,26 @@ class OperatorLitModule(L.LightningModule):
         loss = self._loss_operator(batch)
         error = self.get_error(batch)
 
-        idx = min(dataloader_idx, len(self.valid_metrics) - 1)
-        self.valid_metrics[idx]["loss"].update(loss.mean().item())
-        self.valid_metrics[idx]["error"].update(error.mean().item())
+        metrics = {"loss": loss.mean(), "error": error.mean()}
 
-        prefix = "valid"
-        if hasattr(self.cfg.data, "valid") and self.cfg.data.valid:
-            valid_keys = list(self.cfg.data.valid.keys())
-            if valid_keys and dataloader_idx < len(valid_keys):
-                prefix = f"valid_{valid_keys[dataloader_idx]}"
+        for metric_name in self.metric_names:
+            self.valid_metrics[dataloader_idx][metric_name].update(metrics[metric_name])
 
-        self.log(f"{prefix}/loss", self.valid_metrics[idx]["loss"], on_step=False, on_epoch=True)
-        self.log(f"{prefix}/error", self.valid_metrics[idx]["error"], on_step=False, on_epoch=True)
+        valid_key = list(self.cfg.data.valid.keys())[dataloader_idx]
+        valid_name = self.cfg.data.valid[valid_key].name
 
-        return loss
+        for metric_name in self.metric_names:
+            self.log(
+                f"{valid_name}/{metric_name}",
+                self.valid_metrics[dataloader_idx][metric_name],
+                on_step=False,
+                on_epoch=True,
+                add_dataloader_idx=False,
+            )
+        return metrics
 
     def test_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
-        loss = self._loss_operator(batch)
-        error = self.get_error(batch)
-
-        self.log("test/loss", loss.mean(), on_step=False, on_epoch=True)
-        self.log("test/error", error.mean(), on_step=False, on_epoch=True)
-
-        return loss
+        pass
 
     def restore_ckpt(self, ckpt_path: str) -> None:
         ckpt = torch.load(ckpt_path, weights_only=False)
