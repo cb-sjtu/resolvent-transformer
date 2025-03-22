@@ -1,21 +1,16 @@
 defaults:
   - train:
     - dummy_ol
+    - dummy_ol_large
   - valid:
     - dummy_ol
+    - dummy_ol_large
 
-_target_: src.data.datamodule_ol.OperatorDataModule
 
-data_folder: ${paths.data_dir}/xxx
+data_folder: ${paths.data_dir}/placeholder
+
 batchsize: 16
 num_workers: 2
 infinite: True
 print_info: False
 pin_memory: False
-seed: 42
-
-f_seq_len: 100
-g_seq_len: 50
-f_inout_dim: 2
-g_in_dim: 1
-g_out_dim: 1

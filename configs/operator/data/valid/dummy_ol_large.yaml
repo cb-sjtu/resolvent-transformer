@@ -1,8 +1,18 @@
 dummy_ol_large:
   name: dummy_ol_large
-  description: xxx
+  description: "Operator Learning dummy data, larger size"
+
+  dataset:
+    _target_: src.data.datasets.dummy_operator.DummyOperatorDataset
+    f_seq_len: 200
+    g_seq_len: 100
+    f_inout_dim: 2
+    g_in_dim: 1
+    g_out_dim: 1
+
   batch_size_per_process: ${data.batchsize}
   num_workers: ${data.num_workers}
   infinite: ${data.infinite}
   print_info: ${data.print_info}
   pin_memory: ${data.pin_memory}
+
