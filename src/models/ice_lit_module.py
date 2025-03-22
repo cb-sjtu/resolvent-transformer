@@ -74,7 +74,6 @@ class IceLitModule(L.LightningModule):
         """
         pass
 
-
     def get_error(self, data: du.DataMeshList) -> tuple[torch.Tensor, ...]:
         """
         get the error collection, including
@@ -91,7 +90,6 @@ class IceLitModule(L.LightningModule):
             metrics.reset()
 
     def training_step(self, batch: du.DataEqn | du.DataMeshList, batch_idx) -> torch.Tensor:
-
         if isinstance(batch, du.DataMeshList):
             loss = self._loss_meshlist(batch)
         elif isinstance(batch, du.DataEqn):
@@ -111,7 +109,6 @@ class IceLitModule(L.LightningModule):
             raise ValueError(f"Invalid batch type: {type(batch)}")
 
     def validation_step_meshlist(self, batch: du.DataMeshList, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
-
         loss = self._loss_meshlist(batch)
         error = self.get_error(batch)
 

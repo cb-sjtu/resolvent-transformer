@@ -77,7 +77,7 @@ class DataBase:
         new_data = type(self)()
         for attr, value in self.__dict__.items():
             if isinstance(value, torch.Tensor | np.ndarray):
-                new_value = value[bid: bid + 1] if keep_dim else value[bid]
+                new_value = value[bid : bid + 1] if keep_dim else value[bid]
                 setattr(new_data, attr, new_value)
             elif isinstance(value, list | tuple):
                 new_value = [value[bid]] if keep_dim else value[bid]
@@ -230,7 +230,6 @@ class DataEqn(DataBase):
         self.A = A
         self.XI = XI
         self.mask = mask
-
 
 
 @dataclass

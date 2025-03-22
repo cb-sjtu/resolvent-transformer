@@ -86,7 +86,6 @@ class FnLitDataModule(L.LightningDataModule):
             dataloopers.append(datalooper)
         return CycleDataLooper(dataloopers)
 
-
     def dataloader_mesh_list(self, cfg):
         """
         a MeshList with multiple meshes.
@@ -96,7 +95,6 @@ class FnLitDataModule(L.LightningDataModule):
         validset = MeshListDataset(cfg=cfg)
         datalooper = DataLooper(validset, cfg, batch_size, collate_fn=None)
         return datalooper
-
 
     def train_dataloader(self):
         # cycle through the dataloaders of the different splits
@@ -111,7 +109,7 @@ class FnLitDataModule(L.LightningDataModule):
                 dataloopers.append(self.dataloader_eqn_cycle_geometry(cfg))
             else:
                 raise ValueError(f"Invalid geometry: {cfg.geometry}")
-        return CycleDataLooper(dataloopers) # return a single cycle dataloader
+        return CycleDataLooper(dataloopers)  # return a single cycle dataloader
 
     def val_dataloader(self):
         """Create and return the validation dataloader.
@@ -126,7 +124,7 @@ class FnLitDataModule(L.LightningDataModule):
                 dataloopers.append(self.dataloader_mesh_list(cfg))
             else:
                 raise ValueError(f"Invalid task: {cfg.task}")
-        return dataloopers # return a list of dataloopers for separate validation
+        return dataloopers  # return a list of dataloopers for separate validation
 
     def test_dataloader(self):
         """Create and return the test dataloader.

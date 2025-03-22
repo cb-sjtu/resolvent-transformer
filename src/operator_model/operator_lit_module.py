@@ -6,10 +6,9 @@ from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchmetrics import MeanMetric, MetricCollection
 
-import src.data.data_utils as du
+from src.operator_model.data import OperatorData
 from src.operator_model.model import OperatorTransformer
 from src.opt import WarmupCosineDecayScheduler
-from src.operator_model.data import OperatorData
 
 
 class OperatorLitModule(L.LightningModule):
@@ -38,8 +37,8 @@ class OperatorLitModule(L.LightningModule):
 
         self.train_metrics = MeanMetric()
 
-        valid_data_count = max(1, len(self.cfg.data.valid) if hasattr(self.cfg.data, 'valid') else 1)
-        
+        valid_data_count = max(1, len(self.cfg.data.valid) if hasattr(self.cfg.data, "valid") else 1)
+
         # Use MetricCollection to group metrics
         self.valid_metrics = torch.nn.ModuleList(
             [
@@ -54,53 +53,52 @@ class OperatorLitModule(L.LightningModule):
         )
 
     def _model_forward(self, f_samples, g_inputs):
-        
         with sdpa_kernel(self.sdpa_backends):
             return self.net(f_samples, g_inputs)
-    
+
     def _loss_function(self, pred, target):
         return F.mse_loss(pred, target)
 
     def _loss_operator(self, batch) -> torch.Tensor:
         if isinstance(batch, dict):
-            f_samples = batch['f_samples']
-            g_inputs = batch['g_inputs']
-            g_targets = batch['g_targets']
+            f_samples = batch["f_samples"]
+            g_inputs = batch["g_inputs"]
+            g_targets = batch["g_targets"]
         elif isinstance(batch, OperatorData):
             f_samples = batch.f_samples
             g_inputs = batch.g_inputs
             g_targets = batch.g_targets
         else:
             raise ValueError(f"unsupported batch type: {type(batch)}")
-        
+
         g_outputs = self._model_forward(f_samples, g_inputs)
-        
+
         loss = self._loss_function(g_outputs, g_targets)
-        
+
         return loss
 
     def get_pred(self, batch):
         if isinstance(batch, dict):
-            f_samples = batch['f_samples']
-            g_inputs = batch['g_inputs']
+            f_samples = batch["f_samples"]
+            g_inputs = batch["g_inputs"]
         elif isinstance(batch, OperatorData):
             f_samples = batch.f_samples
             g_inputs = batch.g_inputs
         else:
             raise ValueError(f"unsupported batch type: {type(batch)}")
-        
+
         return self._model_forward(f_samples, g_inputs)
 
     def get_error(self, batch) -> torch.Tensor:
         g_outputs = self.get_pred(batch)
-        
+
         if isinstance(batch, dict):
-            g_targets = batch['g_targets']
+            g_targets = batch["g_targets"]
         elif isinstance(batch, OperatorData):
             g_targets = batch.g_targets
         else:
             raise ValueError(f"unsupported batch type: {type(batch)}")
-        
+
         return torch.abs(g_outputs - g_targets)
 
     ############ training #############
@@ -111,45 +109,45 @@ class OperatorLitModule(L.LightningModule):
 
     def training_step(self, batch, batch_idx) -> torch.Tensor:
         loss = self._loss_operator(batch)
-        
+
         self.train_metrics(loss)
         self.log("train/loss", self.train_metrics, on_step=True, on_epoch=True)
-        
+
         return loss
 
     ############ validation #############
     def validation_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         loss = self._loss_operator(batch)
         error = self.get_error(batch)
-        
+
         idx = min(dataloader_idx, len(self.valid_metrics) - 1)
         self.valid_metrics[idx]["loss"].update(loss.mean().item())
         self.valid_metrics[idx]["error"].update(error.mean().item())
-        
+
         prefix = "valid"
-        if hasattr(self.cfg.data, 'valid') and self.cfg.data.valid:
+        if hasattr(self.cfg.data, "valid") and self.cfg.data.valid:
             valid_keys = list(self.cfg.data.valid.keys())
             if valid_keys and dataloader_idx < len(valid_keys):
                 prefix = f"valid_{valid_keys[dataloader_idx]}"
-        
+
         self.log(f"{prefix}/loss", self.valid_metrics[idx]["loss"], on_step=False, on_epoch=True)
         self.log(f"{prefix}/error", self.valid_metrics[idx]["error"], on_step=False, on_epoch=True)
-        
+
         return loss
-    
+
     def test_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         loss = self._loss_operator(batch)
         error = self.get_error(batch)
-        
-        self.log(f"test/loss", loss.mean(), on_step=False, on_epoch=True)
-        self.log(f"test/error", error.mean(), on_step=False, on_epoch=True)
-        
+
+        self.log("test/loss", loss.mean(), on_step=False, on_epoch=True)
+        self.log("test/error", error.mean(), on_step=False, on_epoch=True)
+
         return loss
 
     def restore_ckpt(self, ckpt_path: str) -> None:
         ckpt = torch.load(ckpt_path, weights_only=False)
         # print(ckpt['state_dict'].keys())
-        state_dict = {k[4:]: v for k, v in ckpt["state_dict"].items() if k.startswith('net.')}  # 移除键中前缀 'net.'
+        state_dict = {k[4:]: v for k, v in ckpt["state_dict"].items() if k.startswith("net.")}  # 移除键中前缀 'net.'
         self.net.load_state_dict(state_dict)
 
     def setup(self, stage: str) -> None:
@@ -176,4 +174,4 @@ class OperatorLitModule(L.LightningModule):
                 "interval": "step",
                 "frequency": 1,
             },
-        } 
+        }
