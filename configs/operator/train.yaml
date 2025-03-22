@@ -1,48 +1,57 @@
 # @package _global_
 
-# Operator model training configuration
-
-# Import operator base configuration
+# specify here default configuration
+# order of defaults determines the order in which configs override each other
 defaults:
-  - default                  # Base configuration (in operator directory)
-  - model/transformer        # Model configuration
-  - data/default             # Data configuration
-  - optimizer/default        # Optimizer configuration
-  - paths.yaml               # Path configuration
-  - extras.yaml              # Extra configuration
-  - trainer.yaml             # Trainer configuration
-  - logger.yaml              # Logger configuration
-  - callbacks: default       # Specialized callbacks (in operator/callbacks directory)
-  - _self_                   # Ensure current file has priority
+  - _self_
+  - data: default
+  - model: ol-enc-dec
+  - loss: ol
+  - opt: default
+  - callbacks: default
+  - logger: many_loggers # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
+  - trainer: ddp
+  - paths: default
+  - extras: default
+  - hydra: default
 
-# Task name
-task_name: "operator_training"
+  # experiment configs allow for version control of specific hyperparameters
+  # e.g. best hyperparameters for given model and datamodule
+  - experiment: null
 
-# Training settings
-train: true
+  # config for hyperparameter optimization
+  - hparams_search: null
+
+  # optional local config for machine/user specific settings
+  # it's optional since it doesn't need to exist and is excluded from version control
+  - optional local: default
+
+  # debugging config (enable through command line, e.g. `python train.py debug=default)
+  - debug: null
+
+# task name, determines output directory path
+task_name: "train"
+
+# tags to help you identify your experiments
+# you can overwrite this in experiment configs
+# overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
+tags: ["dev"]
+
+# set False to skip model training
+train: True
+
+# evaluate on test set, using best model weights achieved during training
+# lightning chooses best weights based on the metric specified in checkpoint callback
 test: false
+
+# simply provide checkpoint path to resume training
 ckpt_path: null
 
-# Print configuration
-print_config: true
-
-# Optimization metric (for hyperparameter optimization)
-optimized_metric: "valid/loss"
-
-# Tags
-tags: ["operator", "development"]
-
-# Dynamic graph compilation cache size limit
-dynamo_cache_size_limit: 64
-
-# Random seed
+# seed for random number generators in pytorch, numpy and python.random
 seed: 42
 
-# SDPA configuration
-sdpa:
-  - math         # Default backend
-  - efficient    # Use efficient attention if available
-  - flash        # Use flash attention if available
+dynamo_cache_size_limit: 0
 
-# Print detail level
-print_lv: 1 
+print_lv: 1
+
+sdpa: ["cudnn", "efficient", "flash", "math"] # may move to model in the future

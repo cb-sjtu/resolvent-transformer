@@ -1,6 +1,0 @@
-defaults:
-  - default
-  - _self_
-  
-output: grad_psi_grad_I
-prompt: equation

@@ -6,8 +6,8 @@ from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchmetrics import MeanMetric, MetricCollection
 
-from src.operator_model.data import OperatorData
-from src.operator_model.model import OperatorTransformer
+from src.data.datasets.dummy_operator import OperatorData
+from src.models.components.enc_dec_ol import EncDecOL
 from src.opt import WarmupCosineDecayScheduler
 
 
@@ -24,7 +24,7 @@ class OperatorLitModule(L.LightningModule):
 
         # self.net = hydra.utils.instantiate(cfg.model)
 
-        self.net = OperatorTransformer(cfg=cfg)
+        self.net = EncDecOL(cfg=cfg)
 
         sdpa_map = {
             "cudnn": SDPBackend.CUDNN_ATTENTION,
@@ -52,54 +52,25 @@ class OperatorLitModule(L.LightningModule):
             ]
         )
 
-    def _model_forward(self, f_samples, g_inputs):
+    def _model_forward(self, data: OperatorData):
         with sdpa_kernel(self.sdpa_backends):
-            return self.net(f_samples, g_inputs)
+            return self.net(data)
 
-    def _loss_function(self, pred, target):
+    def _loss_function(self, data: OperatorData):
+        pred = self._model_forward(data)
+        target = data.g_targets
         return F.mse_loss(pred, target)
 
-    def _loss_operator(self, batch) -> torch.Tensor:
-        if isinstance(batch, dict):
-            f_samples = batch["f_samples"]
-            g_inputs = batch["g_inputs"]
-            g_targets = batch["g_targets"]
-        elif isinstance(batch, OperatorData):
-            f_samples = batch.f_samples
-            g_inputs = batch.g_inputs
-            g_targets = batch.g_targets
-        else:
-            raise ValueError(f"unsupported batch type: {type(batch)}")
-
-        g_outputs = self._model_forward(f_samples, g_inputs)
-
-        loss = self._loss_function(g_outputs, g_targets)
-
+    def _loss_operator(self, data: OperatorData) -> torch.Tensor:
+        loss = self._loss_function(data)
         return loss
 
-    def get_pred(self, batch):
-        if isinstance(batch, dict):
-            f_samples = batch["f_samples"]
-            g_inputs = batch["g_inputs"]
-        elif isinstance(batch, OperatorData):
-            f_samples = batch.f_samples
-            g_inputs = batch.g_inputs
-        else:
-            raise ValueError(f"unsupported batch type: {type(batch)}")
+    def get_pred(self, data: OperatorData) -> torch.Tensor:
+        return self._model_forward(data)
 
-        return self._model_forward(f_samples, g_inputs)
-
-    def get_error(self, batch) -> torch.Tensor:
-        g_outputs = self.get_pred(batch)
-
-        if isinstance(batch, dict):
-            g_targets = batch["g_targets"]
-        elif isinstance(batch, OperatorData):
-            g_targets = batch.g_targets
-        else:
-            raise ValueError(f"unsupported batch type: {type(batch)}")
-
-        return torch.abs(g_outputs - g_targets)
+    def get_error(self, data: OperatorData) -> torch.Tensor:
+        pred = self.get_pred(data)
+        return torch.abs(pred - data.g_targets)
 
     ############ training #############
 
@@ -107,7 +78,7 @@ class OperatorLitModule(L.LightningModule):
         for metrics in self.valid_metrics:
             metrics.reset()
 
-    def training_step(self, batch, batch_idx) -> torch.Tensor:
+    def training_step(self, batch: OperatorData, batch_idx: int) -> torch.Tensor:
         loss = self._loss_operator(batch)
 
         self.train_metrics(loss)
@@ -116,7 +87,7 @@ class OperatorLitModule(L.LightningModule):
         return loss
 
     ############ validation #############
-    def validation_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+    def validation_step(self, batch: OperatorData, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         loss = self._loss_operator(batch)
         error = self.get_error(batch)
 
