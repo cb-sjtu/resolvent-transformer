@@ -1,8 +1,14 @@
 dummy_ol:
   name: dummy_ol
-  description: xxx
+  description: "Operator Learning dummy data"
   batch_size_per_process: ${data.batchsize}
   num_workers: ${data.num_workers}
   infinite: ${data.infinite}
   print_info: ${data.print_info}
   pin_memory: ${data.pin_memory}
+  f_seq_len: ${data.f_seq_len}
+  g_seq_len: ${data.g_seq_len}
+  f_inout_dim: ${data.f_inout_dim}
+  g_in_dim: ${data.g_in_dim}
+  g_out_dim: ${data.g_out_dim}
+  random_seed: ${data.seed}
