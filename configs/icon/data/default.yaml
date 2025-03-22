@@ -1,0 +1,24 @@
+defaults:
+  - train:
+    - dummy_icon
+  - valid:
+    - dummy_icon
+_target_: src.data.datamodule_icon.IconDataModule
+
+data_folder: ${paths.data_dir}/icon_data
+batchsize: 8
+num_workers: 4
+infinite: True
+print_info: True
+pin_memory: True
+seed: 42
+
+demo_num: 5          
+demo_cond_size: [128, 128]  
+demo_qoi_size: [128, 128]   
+quest_cond_size: [128, 128] 
+quest_qoi_size: [128, 128] 
+demo_cond_dim: 3     
+demo_qoi_dim: 3      
+quest_cond_dim: 3    
+quest_qoi_dim: 3     

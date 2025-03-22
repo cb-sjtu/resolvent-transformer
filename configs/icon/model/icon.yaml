@@ -1,0 +1,19 @@
+ff: True
+_target_: src.models.icon_lit_module.IconLitModule
+
+patch_resolution: 16      
+patch_num_in: 8            
+patch_num_out: 8            
+demo_num: ${data.demo_num} 
+
+transformer:
+  dim_channel: 3          
+  dim_token: 256          
+  n_layers: 6            
+  n_heads: 8             
+  widening_factor: 4     
+  dropout: 0.1           
+  max_seq_len: 5000 
+  model_dim: 256     
+
+compile: true             

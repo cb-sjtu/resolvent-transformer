@@ -1,0 +1,19 @@
+dummy_icon:
+  name: "dummy_icon"
+  description: "Icon train dummy data"
+  batch_size_per_process: ${data.batchsize}
+  num_workers: ${data.num_workers}
+  infinite: ${data.infinite}
+  print_info: ${data.print_info}
+  pin_memory: ${data.pin_memory}
+  
+  demo_num: ${data.demo_num}
+  demo_cond_dim: ${data.demo_cond_dim}
+  demo_qoi_dim: ${data.demo_qoi_dim}
+  quest_cond_dim: ${data.quest_cond_dim}
+  quest_qoi_dim: ${data.quest_qoi_dim}
+  demo_cond_size: ${data.demo_cond_size}
+  demo_qoi_size: ${data.demo_qoi_size}
+  quest_cond_size: ${data.quest_cond_size}
+  quest_qoi_size: ${data.quest_qoi_size}
+  random_seed: ${data.seed}
