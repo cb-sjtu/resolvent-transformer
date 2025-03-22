@@ -9,7 +9,7 @@ from torchmetrics import MeanMetric, MetricCollection
 import src.data.data_utils as du
 from src.operator_model.model import OperatorTransformer
 from src.opt import WarmupCosineDecayScheduler
-from src.operator_model.data import OperatorData, OperatorDataBatch
+from src.operator_model.data import OperatorData
 
 
 class OperatorLitModule(L.LightningModule):
@@ -70,11 +70,6 @@ class OperatorLitModule(L.LightningModule):
             f_samples = batch.f_samples
             g_inputs = batch.g_inputs
             g_targets = batch.g_targets
-        elif isinstance(batch, OperatorDataBatch):
-            data = du.concat_data(batch.samples)
-            f_samples = data.f_samples
-            g_inputs = data.g_inputs
-            g_targets = data.g_targets
         else:
             raise ValueError(f"unsupported batch type: {type(batch)}")
         
@@ -91,10 +86,6 @@ class OperatorLitModule(L.LightningModule):
         elif isinstance(batch, OperatorData):
             f_samples = batch.f_samples
             g_inputs = batch.g_inputs
-        elif isinstance(batch, OperatorDataBatch):
-            data = du.concat_data(batch.samples)
-            f_samples = data.f_samples
-            g_inputs = data.g_inputs
         else:
             raise ValueError(f"unsupported batch type: {type(batch)}")
         
@@ -107,9 +98,6 @@ class OperatorLitModule(L.LightningModule):
             g_targets = batch['g_targets']
         elif isinstance(batch, OperatorData):
             g_targets = batch.g_targets
-        elif isinstance(batch, OperatorDataBatch):
-            data = du.concat_data(batch.samples)
-            g_targets = data.g_targets
         else:
             raise ValueError(f"unsupported batch type: {type(batch)}")
         

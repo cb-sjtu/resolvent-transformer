@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import hydra
 import lightning as L
@@ -11,7 +11,7 @@ from lightning.pytorch.loggers import Logger, CSVLogger
 from omegaconf import DictConfig, OmegaConf
 
 from src.operator_model.operator_lit_module import OperatorLitModule
-from src.operator_model.data import OperatorDataModule, OperatorData
+from src.operator_model.data import OperatorDataModule
 from src.utils import ( 
     RankedLogger,
     extras,
@@ -33,48 +33,16 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     if cfg.get("seed"):
         L.seed_everything(cfg.seed, workers=True)
     
-    #dummy data
+    # Dummy data module setup
     #########################################################
-    log.info("loading data...")
-    if cfg.get("generate_synthetic_data", False):
-        num_functions = 1000
-        f_seq_len = cfg.model.get("f_seq_len", 100)
-        g_seq_len = cfg.model.get("g_seq_len", 50)
-        f_input_dim = cfg.model.f_input_dim
-        g_input_dim = cfg.model.g_input_dim
-        g_output_dim = cfg.model.g_output_dim
-        
-        train_data = []
-        for _ in range(num_functions):
-            train_data.append(
-                OperatorData(
-                    f_samples=torch.randn(1, f_seq_len, f_input_dim),
-                    g_inputs=torch.randn(1, g_seq_len, g_input_dim),
-                    g_targets=torch.randn(1, g_seq_len, g_output_dim)
-                )
-            )
-        
-        val_data = []
-        for _ in range(num_functions//5):
-            val_data.append(
-                OperatorData(
-                    f_samples=torch.randn(1, f_seq_len, f_input_dim),
-                    g_inputs=torch.randn(1, g_seq_len, g_input_dim),
-                    g_targets=torch.randn(1, g_seq_len, g_output_dim)
-                )
-            )
-        
-        datamodule = OperatorDataModule(
-            cfg=cfg,
-            train_data=train_data,
-            val_data=val_data
-        )
-    else:
-        log.warning("loading data from file, set generate_synthetic_data=True.")
-        datamodule = None
+    log.info("Preparing data module...")
+    log.info("Using dummy data generated")
+    
+    # Create data module with default random data generation
+    datamodule = OperatorDataModule(cfg=cfg)
     #########################################################
 
-    log.info("creating model...")
+    log.info("Creating model...")
     model = OperatorLitModule(cfg=cfg, compile=cfg.get("compile", False))
     
     log.info("Instantiating callbacks...")
@@ -98,18 +66,6 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
 
-    # trainer = L.Trainer(
-    #     accelerator=cfg.trainer.get("accelerator", "auto"),
-    #     devices=cfg.trainer.get("devices", "auto"),
-    #     precision=cfg.trainer.get("precision", 32),
-    #     max_epochs=cfg.trainer.get("max_epochs", 100),
-    #     max_steps=cfg.trainer.get("max_steps", -1),
-    #     log_every_n_steps=cfg.trainer.get("log_every_n_steps", 10),
-    #     callbacks=callbacks,
-    #     logger=logger,
-    #     deterministic=cfg.get("deterministic", False),
-    # )
-    
     object_dict = {
         "cfg": cfg,
         "datamodule": datamodule,

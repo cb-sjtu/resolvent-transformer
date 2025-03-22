@@ -11,12 +11,14 @@ conda activate sg # activate the environment sg
 
 ## Format code
 
-In the activated environment, run `conda install pre-commit -y && pre-commit install` in the root directory of the project to install the pre-commit hook. This will check the code format when committing. The commit will be rejected if the code format check fails. The code will then be auto-formatted, so you can add the change and commit again. 
+In the activated environment, run `conda install pre-commit -y && pre-commit install` and `conda install -c conda-forge ruff -y` in the root directory of the project to install the pre-commit hook. This will check the code format when committing. The commit will be rejected if the code format check fails. The code will then be auto-formatted, so you can add the change and commit again. 
 
 Note that you need to run `pre-commit install` for each project.
 
-Mannual format before commit: `ruff format & ruff check --fix`
+Mannual format before commit: `ruff format && ruff check --fix`
 
+If you staged only one file but had other unstaged changes in your working directory. When the pre‑commit hook ran, it tried to auto‑fix those unstaged changes, conflicted with them, and rolled everything back.
+Commit just the staged file without running hooks: `git commit --no-verify -m "Your commit message"`
 
 ## run
 
