@@ -1,2 +1,0 @@
-viz_node:
-  _target_: src.callbacks.VizNode

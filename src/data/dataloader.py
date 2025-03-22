@@ -4,8 +4,12 @@ from torch.utils.data import DataLoader
 
 class DataLooper:
     def __init__(self, dataset, cfg: DictConfig, batch_size: int, collate_fn=None):
+        """
+        cfg: num_workers, infinite, print_info, pin_memory
+        explicitly pass batch_size, since the batch_size passed into model can be different from the one in dataloader
+        """
         self.dataset = dataset
-        self.cfg = cfg  # cfg.num_workers, cfg.infinite, cfg.print_info
+        self.cfg = cfg
         self.collate_fn = collate_fn
         self.batch_size = batch_size
         self.data_loader = self.get_dataloader()
@@ -20,7 +24,7 @@ class DataLooper:
             shuffle=True,  # Ensure reshuffling occurs when creating each new dataloader
             drop_last=drop_last,
             num_workers=self.cfg.num_workers,
-            pin_memory=self.cfg.get("pin_memory", False),
+            pin_memory=self.cfg.pin_memory,
             collate_fn=self.collate_fn,
         )
 

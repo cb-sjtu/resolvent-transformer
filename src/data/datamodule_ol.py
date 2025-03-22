@@ -1,9 +1,10 @@
+import hydra
 from lightning import LightningDataModule
 from omegaconf import DictConfig
 
 import src.data.data_utils as du
 from src.data.dataloader import CycleDataLooper, DataLooper
-from src.data.datasets.dummy_operator import OperatorData, OperatorDataset
+from src.data.datasets.dummy_operator import OperatorData
 
 
 class OperatorDataModule(LightningDataModule):
@@ -28,7 +29,10 @@ class OperatorDataModule(LightningDataModule):
             data = du.concat_data(data_list)
             return data
 
-        trainset = OperatorDataset(cfg=cfg)
+        # use instantiate to get the dataset, since different config may use different Dataset class
+        # you can also explicitly import the Dataset class and define it here to get more flexibility and readability
+        trainset = hydra.utils.instantiate(cfg.dataset)
+
         return DataLooper(trainset, cfg, batch_size=cfg.batch_size_per_process, collate_fn=collate_fn)
 
     def train_dataloader(self):
@@ -57,9 +61,6 @@ class OperatorDataModule(LightningDataModule):
 
     def test_dataloader(self):
         pass
-
-    def _collate_fn(self, batch: list[OperatorData]):
-        return du.concat_data(batch)
 
     def teardown(self, stage=None):
         pass
