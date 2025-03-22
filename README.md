@@ -17,8 +17,6 @@ Note that you need to run `pre-commit install` for each project.
 
 Mannual format before commit: `ruff format && ruff check --fix`
 
-If you staged only one file but had other unstaged changes in your working directory. When the pre‑commit hook ran, it tried to auto‑fix those unstaged changes, conflicted with them, and rolled everything back.
-Commit just the staged file without running hooks: `git commit --no-verify -m "Your commit message"`
 
 ## run
 
