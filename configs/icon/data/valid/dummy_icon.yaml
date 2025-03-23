@@ -14,9 +14,3 @@ dummy_icon:
     quest_qoi_size: ${data.quest_qoi_size}
     
   batch_size_per_process: ${data.batchsize}
-  num_workers: ${data.num_workers}
-  infinite: false
-  print_info: ${data.print_info}
-  pin_memory: ${data.pin_memory}
-  
-  random_seed: ${data.seed}

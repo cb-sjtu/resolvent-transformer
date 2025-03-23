@@ -13,6 +13,9 @@ class IconData(du.BaseData):
 
 
 class IconDataset(Dataset):
+    # name is used for logging
+    name: str = "dummy_icon_dataset"
+
     def __init__(
         self,
         demo_num: int,

@@ -5,6 +5,9 @@ from src.data.data_utils import OperatorData
 
 
 class DummyOperatorDataset(Dataset):
+    # name is used for logging
+    name: str = "dummy_operator_dataset"
+
     def __init__(self, f_seq_len: int, g_seq_len: int, f_inout_dim: int, g_in_dim: int, g_out_dim: int):
         self.f_seq_len = f_seq_len
         self.g_seq_len = g_seq_len

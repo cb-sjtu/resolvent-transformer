@@ -10,18 +10,6 @@ from lightning import Callback, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 
-from src.data.datamodule_icon import IconDataModule
-from src.models.icon_lit_module import IconLitModule
-from src.utils import (  # noqa: E402
-    RankedLogger,
-    extras,
-    get_metric_value,
-    instantiate_callbacks,
-    instantiate_loggers,
-    log_hyperparameters,
-    task_wrapper,
-)
-
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
 # the setup_root above is equivalent to:
@@ -39,6 +27,18 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 #
 # more info: https://github.com/ashleve/rootutils
 # ------------------------------------------------------------------------------------ #
+
+from src.data.datamodule_icon import IconDataModule  # noqa: E402
+from src.models.icon_lit_module import IconLitModule  # noqa: E402
+from src.utils import (  # noqa: E402
+    RankedLogger,
+    extras,
+    get_metric_value,
+    instantiate_callbacks,
+    instantiate_loggers,
+    log_hyperparameters,
+    task_wrapper,
+)
 
 log = RankedLogger(__name__, rank_zero_only=True)
 

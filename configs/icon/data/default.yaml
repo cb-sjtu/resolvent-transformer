@@ -6,11 +6,6 @@ defaults:
 
 data_folder: ${paths.data_dir}/icon_data
 batchsize: 8
-num_workers: 4
-infinite: True
-print_info: True
-pin_memory: True
-seed: 42
 
 demo_num: 5          
 demo_cond_size: [128, 128]  
