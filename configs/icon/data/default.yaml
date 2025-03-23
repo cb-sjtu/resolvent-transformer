@@ -1,0 +1,12 @@
+defaults:
+  - train:
+    - dummy_icon
+  - valid:
+    - dummy_icon
+
+data_folder: ${paths.data_dir}/icon_data
+batchsize: 8
+
+demo_num: 5   
+cond_shape: [3, 128, 128]  
+qoi_shape: [3, 128, 128]   

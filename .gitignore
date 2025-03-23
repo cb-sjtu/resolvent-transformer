@@ -171,13 +171,10 @@ output/*
 scratch/*
 scratch
 
-scratch_yl/*
-scratch_yl
-
 data/*
 logs/*
 
-configs/train_custom.yaml
-configs/test_custom.yaml
+**/train_custom.yaml
+**/test_custom.yaml
 
 *.slurm
