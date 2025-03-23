@@ -8,10 +8,8 @@ import src.data.data_utils as du
 
 @dataclass
 class IconData(du.DataBase):
-    demo_cond_features: torch.Tensor = None
-    demo_qoi_features: torch.Tensor = None
-    quest_cond_features: torch.Tensor = None
-    quest_qoi_features: torch.Tensor = None
+    cond_features: torch.Tensor = None
+    qoi_features: torch.Tensor = None
 
 
 class IconDataset(Dataset):
@@ -49,9 +47,14 @@ class IconDataset(Dataset):
         )
         quest_cond_features = torch.randn(1, 1, self.quest_cond_dim, self.quest_cond_size[0], self.quest_cond_size[1])
         quest_qoi_features = torch.randn(1, 1, self.quest_qoi_dim, self.quest_qoi_size[0], self.quest_qoi_size[1])
+
+        cond_features = torch.cat(
+            (demo_cond_features, quest_cond_features), dim=1
+        )  # (1, demo_num + 1, cond_dim, cond_h, cond_w)
+        qoi_features = torch.cat(
+            (demo_qoi_features, quest_qoi_features), dim=1
+        )  # (1, demo_num + 1, qoi_dim, qoi_h, qoi_w)
         return IconData(
-            demo_cond_features=demo_cond_features,
-            demo_qoi_features=demo_qoi_features,
-            quest_cond_features=quest_cond_features,
-            quest_qoi_features=quest_qoi_features,
+            cond_features=cond_features,
+            qoi_features=qoi_features,
         )

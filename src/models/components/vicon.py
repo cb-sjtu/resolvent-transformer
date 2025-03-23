@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 from omegaconf import DictConfig
 
-from .transformer import get_transformer
-from .vicon_utils import build_alternating_block_lowtri_mask, depatchify, patchify
+from src.models.components.transformer import get_transformer
+from src.models.components.vicon_utils import build_alternating_block_lowtri_mask, depatchify, patchify
 
 
 class Vicon(nn.Module):
@@ -11,6 +11,7 @@ class Vicon(nn.Module):
         super().__init__()
 
         self.cfg = cfg
+        self.demo_num = cfg["demo_num"] + 1  # 1 for quest
 
         self.pre_proj = nn.Linear(
             in_features=cfg["transformer"]["dim_channel"] * cfg["patch_resolution"] ** 2,
@@ -24,30 +25,32 @@ class Vicon(nn.Module):
         self.patch_pos_encoding = nn.Parameter(
             torch.randn(cfg["patch_num_in"] * cfg["patch_num_in"], cfg["transformer"]["dim_token"])
         )
-        self.func_pos_encoding = nn.Parameter(torch.randn(cfg["demo_num"] * 2, cfg["transformer"]["dim_token"]))
+        self.func_pos_encoding = nn.Parameter(torch.randn(self.demo_num * 2, cfg["transformer"]["dim_token"]))
 
         self.transformer = get_transformer(cfg["transformer"], mode="encoder")
 
         mask = (
             1
             - build_alternating_block_lowtri_mask(
-                cfg["demo_num"], cfg["patch_num_in"] * cfg["patch_num_in"], cfg["patch_num_out"] * cfg["patch_num_out"]
+                self.demo_num, cfg["patch_num_in"] * cfg["patch_num_in"], cfg["patch_num_out"] * cfg["patch_num_out"]
             )
         ).bool()
         self.register_buffer("mask", mask)
 
-    def forward(self, x_tuple):
-        """
-        x: tuple((bs, pairs, c0, h_init, w_init), (bs, pairs, c0, h_end, w_end), c_mask:(bs, c_i))
-        pairs is no larger then cfg.demo_num
-        """
-        init, end, c_mask = x_tuple
-        x = torch.cat((init[:, :, None, :, :, :], end[:, :, None, :, :, :]), dim=2)  # (bs, pairs, 2, c, h, w)
+    def forward(self, x):
+        cond_features = x.cond_features
+        qoi_features = x.qoi_features
+
         p = self.cfg["patch_num_in"]
         d = self.cfg["transformer"]["dim_token"]
-        bs, pairs, _, c, h, w = x.shape  # _ = 2
-        feature = x.view(-1, *x.shape[-3:])  # (bs * pairs * 2, c, h, w)
 
+        # Prepare the pairs (cond, qoi)
+        x = torch.cat(
+            (cond_features[:, :, None, :, :], qoi_features[:, :, None, :, :]), dim=2
+        )  # (bs, pairs, 2, c, h, w)
+        bs, pairs, _, c, h, w = x.shape
+
+        feature = x.view(-1, *x.shape[-3:])  # (bs * pairs * 2, c, h, w)
         c, ph, pw = feature.shape[-3:]
         h = ph // p
         w = pw // p
@@ -66,7 +69,7 @@ class Vicon(nn.Module):
         mask = self.mask[: pairs * 2 * p * p, : pairs * 2 * p * p]  # (pairs * 2 * p * p, pairs * 2 * p * p)
         feature = self.transformer(feature, mask=mask)  # (bs, pairs * 2 * p * p, d_model)
         feature = feature.view(bs, pairs, 2, p * p, d)  # (bs, pairs, 2, p * p, d_model)
-        feature = feature[:, :, 0, :, :]  # (bs, pairs, p * p, d_model)
+        feature = feature[:, :, 0, :, :]  # (bs, pairs, p * p, d_model) the predicted QoI
 
         feature = self.post_proj(feature)  # (bs, pairs, p * p, c * h * w)
 
