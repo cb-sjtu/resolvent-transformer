@@ -1,5 +1,5 @@
 dummy_icon:
-  name: "dummy_icon"
+  name: dummy_icon
   description: "Icon train dummy data"
   dataset:
     _target_: src.data.datasets.dummy_icon.IconDataset
