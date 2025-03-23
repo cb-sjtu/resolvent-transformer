@@ -33,7 +33,7 @@ class OperatorDataModule(LightningDataModule):
         # you can also explicitly import the Dataset class and define it here to get more flexibility and readability
         trainset = hydra.utils.instantiate(cfg.dataset)
 
-        return DataLooper(trainset, cfg, batch_size=cfg.batch_size_per_process, collate_fn=collate_fn)
+        return DataLooper(trainset, cfg, batch_size=cfg.batch_size_per_gpu, collate_fn=collate_fn)
 
     def train_dataloader(self):
         # cycle through the dataloaders of the different splits
