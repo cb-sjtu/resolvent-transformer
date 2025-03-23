@@ -13,6 +13,8 @@ class IconData(du.DataBase):
 
 
 class IconDataset(Dataset):
+    name = "dummy_icon"
+
     def __init__(
         self,
         demo_num: int,
