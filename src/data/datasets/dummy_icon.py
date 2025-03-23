@@ -7,14 +7,12 @@ import src.data.data_utils as du
 
 
 @dataclass
-class IconData(du.DataBase):
+class IconData(du.BaseData):
     cond_features: torch.Tensor = None
     qoi_features: torch.Tensor = None
 
 
 class IconDataset(Dataset):
-    name = "dummy_icon"
-
     def __init__(
         self,
         demo_num: int,
