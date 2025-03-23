@@ -144,6 +144,8 @@ def concat_data(datas: Sequence[BaseData], to_tensor=True) -> BaseData:
             setattr(data, attr, sum([getattr(d, attr) for d in datas], []))
         elif isinstance(value, tuple):
             setattr(data, attr, tuple(sum([getattr(d, attr) for d in datas], [])))
+        elif isinstance(value, str):
+            setattr(data, attr, "".join([getattr(d, attr) for d in datas]))
         else:  # just put them in a list
             setattr(data, attr, [getattr(d, attr) for d in datas])
     data = data.to_tensor() if to_tensor else data
