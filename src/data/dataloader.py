@@ -23,8 +23,8 @@ class DataLooper:
             batch_size=self.batch_size,
             shuffle=True,  # Ensure reshuffling occurs when creating each new dataloader
             drop_last=drop_last,
-            num_workers=self.cfg.num_workers,
-            pin_memory=self.cfg.pin_memory,
+            num_workers=self.cfg.get("num_workers", 2),
+            pin_memory=self.cfg.get("pin_memory", True),
             collate_fn=self.collate_fn,
         )
 
@@ -35,9 +35,9 @@ class DataLooper:
         try:
             out = next(self.data_iter)
         except StopIteration:
-            if not self.cfg.infinite:
+            if not self.cfg.get("infinite", True):
                 raise StopIteration  # Stop the iteration  # noqa: B904
-            if self.cfg.print_info:
+            if self.cfg.get("print_info", False):
                 print(f"{self.dataset.name} reached end of data loader, restart {self.data_iter_num}")
             self.data_loader = self.get_dataloader()
             self.data_iter = iter(self.data_loader)

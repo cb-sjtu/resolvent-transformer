@@ -10,9 +10,5 @@ dummy_ol:
     g_in_dim: 1
     g_out_dim: 1
 
-  batch_size_per_process: ${data.batchsize}
-  num_workers: ${data.num_workers}
-  infinite: ${data.infinite}
-  print_info: ${data.print_info}
-  pin_memory: ${data.pin_memory}
+  batch_size_per_gpu: ${data.batch_size_per_gpu}
 

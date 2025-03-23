@@ -9,8 +9,4 @@ defaults:
 
 data_folder: ${paths.data_dir}/placeholder
 
-batchsize: 16
-num_workers: 2
-infinite: True
-print_info: False
-pin_memory: False
+batch_size_per_gpu: 16
