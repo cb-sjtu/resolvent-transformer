@@ -61,9 +61,10 @@ class IconLitModule(L.LightningModule):
     def network_inference(self, data):
         if isinstance(data, IconData):
             dummy_label = torch.zeros_like(data.qoi_features[:, -1, :, :, :])
-            data.qoi_features = torch.cat((data.qoi_features, dummy_label), dim=1)
+            qoi_features = torch.cat((data.qoi_features, dummy_label), dim=1)
 
-        outputs = self._model_forward(data.cond_features, data.qoi_features)
+        # add prompt engineering here
+        outputs = self._model_forward(data.cond_features, qoi_features)
         return outputs
 
     def _get_ground_truth_all(self, data: IconData, label):
