@@ -58,6 +58,14 @@ class IconLitModule(L.LightningModule):
 
             return outputs  # dict: demo_pred, quest_pred
 
+    def network_inference(self, data):
+        if isinstance(data, IconData):
+            dummy_label = torch.zeros_like(data.qoi_features[:, -1, :, :, :])
+            data.qoi_features = torch.cat((data.qoi_features, dummy_label), dim=1)
+
+        outputs = self._model_forward(data.cond_features, data.qoi_features)
+        return outputs
+
     def _get_ground_truth_all(self, data: IconData, label):
         qoi_features = data.qoi_features
         qoi_features[:, -1, :, :, :] = label
@@ -80,7 +88,7 @@ class IconLitModule(L.LightningModule):
         # used for training
         data = batch["data"]
         label = batch["label"]
-        outputs = self._model_forward(data.cond_features, data.qoi_features)
+        outputs = self.network_inference(data)
         all_pred = self._get_pred_all(outputs)
         all_ground_truth = self._get_ground_truth_all(data, label)
         loss = self._loss_function(all_pred, all_ground_truth)
@@ -90,7 +98,7 @@ class IconLitModule(L.LightningModule):
     def _error_all(self, batch: dict, short_num_min=1) -> torch.Tensor:
         data = batch["data"]
         label = batch["label"]
-        outputs = self._model_forward(data.cond_features, data.qoi_features)
+        outputs = self.network_inference(data)
         all_pred = self._get_pred_all(outputs)
         all_ground_truth = self._get_ground_truth_all(data, label)
         error = all_pred - all_ground_truth
@@ -99,7 +107,7 @@ class IconLitModule(L.LightningModule):
     def _loss_quest(self, batch: dict, short_num_min=1) -> torch.Tensor:
         data = batch["data"]
         label = batch["label"]
-        outputs = self._model_forward(data.cond_features, data.qoi_features)
+        outputs = self.network_inference(data)
         quest_pred = self._get_pred_quest(outputs)
         loss = self._loss_function(quest_pred, label)
         return loss
@@ -107,7 +115,7 @@ class IconLitModule(L.LightningModule):
     def _error_quest(self, batch: dict, short_num_min=1) -> torch.Tensor:
         data = batch["data"]
         label = batch["label"]
-        outputs = self._model_forward(data.cond_features, data.qoi_features)
+        outputs = self.network_inference(data)
         quest_pred = self._get_pred_quest(outputs)
         error = quest_pred - label
         return error
