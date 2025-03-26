@@ -77,4 +77,6 @@ class Vicon(nn.Module):
         feature = depatchify(feature, patch_num=p, c=c, h=h, w=w)  # (bs * pairs, c, ph, pw)
         feature = feature.view(bs, pairs, *feature.shape[-3:])  # (bs, pairs, c, ph, pw)
 
-        return feature
+        demo_pred = feature[:, :-1, :, :, :]
+        quest_pred = feature[:, -1, :, :, :]
+        return {"demo_pred": demo_pred, "quest_pred": quest_pred}
