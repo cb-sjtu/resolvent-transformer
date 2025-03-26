@@ -3,8 +3,8 @@ from lightning import LightningDataModule
 from omegaconf import DictConfig
 
 import src.data.data_utils as du
+from src.data.data_utils import IconData
 from src.data.dataloader import CycleDataLooper, DataLooper
-from src.data.datasets.dummy_icon import IconData
 
 
 class IconDataModule(LightningDataModule):

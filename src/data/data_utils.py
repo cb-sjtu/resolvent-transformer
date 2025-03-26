@@ -154,6 +154,16 @@ def concat_data(datas: Sequence[BaseData], to_tensor=True) -> BaseData:
 
 @dataclass
 class OperatorData(BaseData):
-    f_samples: torch.Tensor = None
-    g_inputs: torch.Tensor = None
-    g_targets: torch.Tensor = None
+    f_samples: torch.Tensor = None  # (batch, f_seq_len, f_inout_dim)
+    g_inputs: torch.Tensor = None  # (batch, g_seq_len, g_in_dim)
+
+
+@dataclass
+class IconData(BaseData):
+    """
+    cond_features contains demo_cond_features and quest_cond_features (batch, demo_num + 1, cond_dim, cond_h, cond_w)
+    qoi_features contains demo_qoi_features and dummy_label (batch, demo_num + 1, qoi_dim, qoi_h, qoi_w)
+    """
+
+    cond_features: torch.Tensor = None
+    qoi_features: torch.Tensor = None
