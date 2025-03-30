@@ -160,11 +160,6 @@ class OperatorData(BaseData):
 
 @dataclass
 class IconData(BaseData):
-    """
-    cond_features contains demo_cond_features and quest_cond_features (batch, demo_num + 1, cond_dim, cond_h, cond_w)
-    qoi_features contains demo_qoi_features and dummy_label (batch, demo_num + 1, qoi_dim, qoi_h, qoi_w)
-    """
-
     demo_cond_features: torch.Tensor = None
     quest_cond_features: torch.Tensor = None
     demo_qoi_features: torch.Tensor = None
