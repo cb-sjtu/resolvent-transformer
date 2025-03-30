@@ -6,12 +6,12 @@ from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchmetrics import MeanMetric, MetricCollection
 
-from src.data.datasets.dummy_icon import IconData
+from src.data.datasets.dummy_vicon import ViconData
 from src.models.components.vicon import Vicon
 from src.opt import WarmupCosineDecayScheduler
 
 
-class IconLitModule(L.LightningModule):
+class ViconLitModule(L.LightningModule):
     def __init__(
         self,
         cfg: DictConfig,
@@ -50,24 +50,24 @@ class IconLitModule(L.LightningModule):
             ]
         )
 
-    def _model_forward(self, cond_features, qoi_features):
+    def _model_forward(self, cond, qoi):
         with sdpa_kernel(self.sdpa_backends):
-            outputs = self.net(cond_features, qoi_features)
+            outputs = self.net(cond, qoi)
 
             return outputs  # dict: demo_pred, quest_pred
 
     def network_inference(self, data):
-        dummy_label = torch.zeros_like(data.demo_qoi_features[:, -1:, :, :, :])
-        qoi_features = torch.cat((data.demo_qoi_features, dummy_label), dim=1)
-        cond_features = torch.cat((data.demo_cond_features, data.quest_cond_features), dim=1)
+        dummy_label = torch.zeros_like(data.demo_qoi[:, -1:, :, :, :])
+        qoi = torch.cat((data.demo_qoi, dummy_label), dim=1)
+        cond = torch.cat((data.demo_cond, data.quest_cond), dim=1)
 
         # add prompt engineering here
-        outputs = self._model_forward(cond_features, qoi_features)
+        outputs = self._model_forward(cond, qoi)
         return outputs
 
-    def _get_ground_truth_all(self, data: IconData, label):
-        qoi_features = data.demo_qoi_features
-        ground_truth = torch.cat((qoi_features, label), dim=1)
+    def _get_ground_truth_all(self, data: ViconData, label):
+        qoi = data.demo_qoi
+        ground_truth = torch.cat((qoi, label), dim=1)
         return ground_truth
 
     def _get_pred_all(self, outputs: dict):

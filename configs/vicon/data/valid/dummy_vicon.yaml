@@ -1,10 +1,10 @@
-dummy_icon:
-  name: dummy_icon
-  description: "Icon train dummy data"
+dummy_vicon:
+  name: dummy_vicon_valid
+  description: "Vicon valid dummy data"
   dataset:
-    _target_: src.data.datasets.dummy_icon.IconDataset
+    _target_: src.data.datasets.dummy_vicon.ViconDataset
     demo_num: ${data.demo_num}
     cond_shape: ${data.cond_shape}
     qoi_shape: ${data.qoi_shape}
-  
+    
   batch_size_per_process: ${data.batchsize}

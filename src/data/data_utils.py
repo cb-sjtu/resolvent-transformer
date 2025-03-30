@@ -159,7 +159,7 @@ class OperatorData(BaseData):
 
 
 @dataclass
-class IconData(BaseData):
-    demo_cond_features: torch.Tensor = None
-    quest_cond_features: torch.Tensor = None
-    demo_qoi_features: torch.Tensor = None
+class ViconData(BaseData):
+    demo_cond: torch.Tensor = None
+    quest_cond: torch.Tensor = None
+    demo_qoi: torch.Tensor = None

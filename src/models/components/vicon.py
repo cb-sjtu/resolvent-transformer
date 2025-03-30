@@ -37,14 +37,12 @@ class Vicon(nn.Module):
         ).bool()
         self.register_buffer("mask", mask)
 
-    def forward(self, cond_features, qoi_features):
+    def forward(self, cond, qoi):
         p = self.cfg["patch_num_in"]
         d = self.cfg["transformer"]["dim_token"]
 
         # Prepare the pairs (cond, qoi)
-        x = torch.cat(
-            (cond_features[:, :, None, :, :], qoi_features[:, :, None, :, :]), dim=2
-        )  # (bs, pairs, 2, c, h, w)
+        x = torch.cat((cond[:, :, None, :, :], qoi[:, :, None, :, :]), dim=2)  # (bs, pairs, 2, c, h, w)
         bs, pairs, _, c, h, w = x.shape
 
         feature = x.view(-1, *x.shape[-3:])  # (bs * pairs * 2, c, h, w)

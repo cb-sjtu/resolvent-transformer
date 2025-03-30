@@ -1,10 +1,10 @@
 defaults:
   - train:
-    - dummy_icon
+    - dummy_vicon
   - valid:
-    - dummy_icon
+    - dummy_vicon
 
-data_folder: ${paths.data_dir}/icon_data
+data_folder: ${paths.data_dir}/vicon_data
 batchsize: 8
 
 demo_num: 5   
