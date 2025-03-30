@@ -22,13 +22,10 @@ class IconDataset(Dataset):
         quest_cond_features = torch.randn(1, 1, self.cond_shape[0], self.cond_shape[1], self.cond_shape[2])
         quest_qoi_features = torch.randn(1, 1, self.qoi_shape[0], self.qoi_shape[1], self.qoi_shape[2])
 
-        cond_features = torch.cat(
-            (demo_cond_features, quest_cond_features), dim=1
-        )  # (1, demo_num + 1, cond_dim, cond_h, cond_w)
-        qoi_features = demo_qoi_features  # (1, demo_num, qoi_dim, qoi_h, qoi_w)
         data = IconData(
-            cond_features=cond_features,
-            qoi_features=qoi_features,
+            demo_cond_features=demo_cond_features,
+            demo_qoi_features=demo_qoi_features,
+            quest_cond_features=quest_cond_features,
         )
 
         label = quest_qoi_features

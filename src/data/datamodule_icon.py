@@ -1,9 +1,9 @@
 import hydra
+import torch
 from lightning import LightningDataModule
 from omegaconf import DictConfig
 
 import src.data.data_utils as du
-from src.data.data_utils import IconData
 from src.data.dataloader import CycleDataLooper, DataLooper
 
 
@@ -25,9 +25,14 @@ class IconDataModule(LightningDataModule):
         return: datalooper.
         """
 
-        def collate_fn(data_list: list[IconData]):
-            data = du.concat_data(data_list)
-            return data
+        def collate_fn(data_list: list[dict]):
+            icon_data_list = [item["data"] for item in data_list]
+            labels = [item["label"] for item in data_list]
+
+            combined_data = du.concat_data(icon_data_list)
+            combined_labels = torch.cat(labels, dim=0)
+
+            return {"data": combined_data, "label": combined_labels}
 
         trainset = hydra.utils.instantiate(cfg.dataset)
         return DataLooper(trainset, cfg, batch_size=cfg.batch_size_per_process, collate_fn=collate_fn)

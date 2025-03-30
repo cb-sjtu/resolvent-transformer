@@ -52,25 +52,23 @@ class IconLitModule(L.LightningModule):
 
     def _model_forward(self, cond_features, qoi_features):
         with sdpa_kernel(self.sdpa_backends):
-            model_input = IconData(cond_features=cond_features, qoi_features=qoi_features)
-
-            outputs = self.net(model_input)
+            outputs = self.net(cond_features, qoi_features)
 
             return outputs  # dict: demo_pred, quest_pred
 
     def network_inference(self, data):
-        if isinstance(data, IconData):
-            dummy_label = torch.zeros_like(data.qoi_features[:, -1, :, :, :])
-            qoi_features = torch.cat((data.qoi_features, dummy_label), dim=1)
+        dummy_label = torch.zeros_like(data.demo_qoi_features[:, -1:, :, :, :])
+        qoi_features = torch.cat((data.demo_qoi_features, dummy_label), dim=1)
+        cond_features = torch.cat((data.demo_cond_features, data.quest_cond_features), dim=1)
 
         # add prompt engineering here
-        outputs = self._model_forward(data.cond_features, qoi_features)
+        outputs = self._model_forward(cond_features, qoi_features)
         return outputs
 
     def _get_ground_truth_all(self, data: IconData, label):
-        qoi_features = data.qoi_features
-        qoi_features[:, -1, :, :, :] = label
-        return qoi_features
+        qoi_features = data.demo_qoi_features
+        ground_truth = torch.cat((qoi_features, label), dim=1)
+        return ground_truth
 
     def _get_pred_all(self, outputs: dict):
         demo_pred = outputs["demo_pred"]

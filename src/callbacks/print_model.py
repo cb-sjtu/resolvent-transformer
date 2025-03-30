@@ -24,6 +24,8 @@ class PrintModel(L.Callback):
 
     def on_train_batch_start(self, trainer: L.Trainer, pl_module: L.LightningModule, batch, batch_idx):
         cfg = pl_module.cfg
+        if isinstance(batch, dict):
+            batch = batch["data"]
         if batch_idx < 20:
             pl_module.print(f"===== Train Data # {batch_idx} =====")
             pl_module.print("type of batch", type(batch))
@@ -33,6 +35,8 @@ class PrintModel(L.Callback):
         self, trainer: L.Trainer, pl_module: L.LightningModule, batch, batch_idx, dataloader_idx=0
     ):
         cfg = pl_module.cfg
+        if isinstance(batch, dict):
+            batch = batch["data"]
         if batch_idx < 20 and trainer.global_step < 100:
             pl_module.print(f"===== Valid Dataset # {dataloader_idx} - Batch {batch_idx} =====")
             pl_module.print("type of batch", type(batch))

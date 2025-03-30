@@ -165,5 +165,6 @@ class IconData(BaseData):
     qoi_features contains demo_qoi_features and dummy_label (batch, demo_num + 1, qoi_dim, qoi_h, qoi_w)
     """
 
-    cond_features: torch.Tensor = None
-    qoi_features: torch.Tensor = None
+    demo_cond_features: torch.Tensor = None
+    quest_cond_features: torch.Tensor = None
+    demo_qoi_features: torch.Tensor = None

@@ -37,10 +37,7 @@ class Vicon(nn.Module):
         ).bool()
         self.register_buffer("mask", mask)
 
-    def forward(self, x):
-        cond_features = x.cond_features
-        qoi_features = x.qoi_features
-
+    def forward(self, cond_features, qoi_features):
         p = self.cfg["patch_num_in"]
         d = self.cfg["transformer"]["dim_token"]
 
@@ -77,6 +74,6 @@ class Vicon(nn.Module):
         feature = depatchify(feature, patch_num=p, c=c, h=h, w=w)  # (bs * pairs, c, ph, pw)
         feature = feature.view(bs, pairs, *feature.shape[-3:])  # (bs, pairs, c, ph, pw)
 
-        demo_pred = feature[:, :-1, :, :, :]
-        quest_pred = feature[:, -1, :, :, :]
+        demo_pred = feature[:, :-1, :, :, :]  # (bs, demo_num, c, h, w)
+        quest_pred = feature[:, -1:, :, :, :]  # (bs, 1, c, h, w)
         return {"demo_pred": demo_pred, "quest_pred": quest_pred}
