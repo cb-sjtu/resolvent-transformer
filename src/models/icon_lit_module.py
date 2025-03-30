@@ -52,53 +52,71 @@ class IconLitModule(L.LightningModule):
 
     def _model_forward(self, cond_features, qoi_features):
         with sdpa_kernel(self.sdpa_backends):
-            model_input = IconData(cond_features=cond_features, qoi_features=qoi_features)
+            outputs = self.net(cond_features, qoi_features)
 
-            predicted_all_qoi = self.net(model_input)  # (bs, pairs, 3, 128, 128)
+            return outputs  # dict: demo_pred, quest_pred
 
-            return predicted_all_qoi
+    def network_inference(self, data):
+        dummy_label = torch.zeros_like(data.demo_qoi_features[:, -1:, :, :, :])
+        qoi_features = torch.cat((data.demo_qoi_features, dummy_label), dim=1)
+        cond_features = torch.cat((data.demo_cond_features, data.quest_cond_features), dim=1)
+
+        # add prompt engineering here
+        outputs = self._model_forward(cond_features, qoi_features)
+        return outputs
+
+    def _get_ground_truth_all(self, data: IconData, label):
+        qoi_features = data.demo_qoi_features
+        ground_truth = torch.cat((qoi_features, label), dim=1)
+        return ground_truth
+
+    def _get_pred_all(self, outputs: dict):
+        demo_pred = outputs["demo_pred"]
+        quest_pred = outputs["quest_pred"]
+        all_pred = torch.cat([demo_pred, quest_pred], dim=1)
+        return all_pred
+
+    def _get_pred_quest(self, outputs: dict):
+        quest_pred = outputs["quest_pred"]
+        return quest_pred
 
     def _loss_function(self, pred, target):
         return F.mse_loss(pred, target)
 
-    def _loss_vicon(self, batch: IconData, short_num_min=1) -> torch.Tensor:
+    def _loss_all(self, batch: dict, short_num_min=1) -> torch.Tensor:
         # used for training
-        cond_features = batch.cond_features
-        qoi_features = batch.qoi_features
-
-        predicted_all_qoi = self._model_forward(
-            cond_features=cond_features,
-            qoi_features=qoi_features,
-        )
-
-        loss = self._loss_function(
-            predicted_all_qoi[:, short_num_min:, :, :, :], qoi_features[:, short_num_min:, :, :, :]
-        )
+        data = batch["data"]
+        label = batch["label"]
+        outputs = self.network_inference(data)
+        all_pred = self._get_pred_all(outputs)
+        all_ground_truth = self._get_ground_truth_all(data, label)
+        loss = self._loss_function(all_pred, all_ground_truth)
 
         return loss
 
-    def get_pred(self, batch):
-        # used for inference
-        cond_features = batch.cond_features
-        qoi_features = batch.qoi_features
+    def _error_all(self, batch: dict, short_num_min=1) -> torch.Tensor:
+        data = batch["data"]
+        label = batch["label"]
+        outputs = self.network_inference(data)
+        all_pred = self._get_pred_all(outputs)
+        all_ground_truth = self._get_ground_truth_all(data, label)
+        error = all_pred - all_ground_truth
+        return error
 
-        predicted_all_qoi = self._model_forward(
-            cond_features=cond_features,
-            qoi_features=qoi_features,
-        )
+    def _loss_quest(self, batch: dict, short_num_min=1) -> torch.Tensor:
+        data = batch["data"]
+        label = batch["label"]
+        outputs = self.network_inference(data)
+        quest_pred = self._get_pred_quest(outputs)
+        loss = self._loss_function(quest_pred, label)
+        return loss
 
-        return predicted_all_qoi[:, -1, :, :, :]
-
-    def get_error(self, batch):
-        cond_features = batch.cond_features
-        qoi_features = batch.qoi_features
-
-        predicted_all_qoi = self._model_forward(
-            cond_features=cond_features,
-            qoi_features=qoi_features,
-        )
-
-        error = torch.abs(predicted_all_qoi[:, -1, :, :, :] - qoi_features[:, -1, :, :, :])
+    def _error_quest(self, batch: dict, short_num_min=1) -> torch.Tensor:
+        data = batch["data"]
+        label = batch["label"]
+        outputs = self.network_inference(data)
+        quest_pred = self._get_pred_quest(outputs)
+        error = quest_pred - label
         return error
 
     ############ training #############
@@ -108,7 +126,7 @@ class IconLitModule(L.LightningModule):
             metrics.reset()
 
     def training_step(self, batch, batch_idx) -> torch.Tensor:
-        loss = self._loss_vicon(batch)
+        loss = self._loss_all(batch)
 
         self.train_metrics(loss)
         self.log("train/loss", self.train_metrics, on_step=True, on_epoch=True)
@@ -117,10 +135,10 @@ class IconLitModule(L.LightningModule):
 
     ############ validation #############
     def validation_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
-        loss = self._loss_vicon(batch)
-        predict_loss = self.get_error(batch)
+        loss = self._loss_all(batch)
+        error = self._error_all(batch)
 
-        metrics = {"loss": loss.mean(), "error": predict_loss.mean()}
+        metrics = {"loss": loss.mean(), "error": error.mean()}
 
         for metric_name in self.metric_names:
             self.valid_metrics[dataloader_idx][metric_name].update(metrics[metric_name])
