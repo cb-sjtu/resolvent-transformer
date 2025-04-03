@@ -3,8 +3,8 @@ from lightning import LightningDataModule
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-import src.data.data_utils as du
-from src.data.dataloader import CycleLoader
+import src.datasets.data_utils as du
+from src.datamodules.dataloader import CycleLoader
 
 
 class BaseDataModule(LightningDataModule):

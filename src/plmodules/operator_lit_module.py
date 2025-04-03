@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from omegaconf import DictConfig
 from torchmetrics import MeanMetric, MetricCollection
 
-from src.data.data_utils import BaseLabelData, OperatorData
+from src.datasets.data_utils import BaseLabelData, OperatorData
 from src.models import EncoderDecoder
 from src.plmodules.base_lit_module import BaseLitModule
 

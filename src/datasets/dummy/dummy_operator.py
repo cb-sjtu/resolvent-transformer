@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 
-from src.data.data_utils import BaseLabelData, OperatorData
+from src.datasets.data_utils import BaseLabelData, OperatorData
 
 
 class DummyOperatorDataset(Dataset):

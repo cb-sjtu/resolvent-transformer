@@ -168,9 +168,11 @@ output/*
 **/*.o*
 
 
-scratch/*
-data/*
-logs/*
+/scratch/*
+/data/*
+/logs/*
+/outputs/*
+/analysis/*
 
 **/train_custom.yaml
 **/test_custom.yaml

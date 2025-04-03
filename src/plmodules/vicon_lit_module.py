@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from omegaconf import DictConfig
 from torchmetrics import MeanMetric, MetricCollection
 
-from src.data.data_utils import BaseLabelData, ViconData
+from src.datasets.data_utils import BaseLabelData, ViconData
 from src.models import Vicon
 from src.plmodules.base_lit_module import BaseLitModule
 
