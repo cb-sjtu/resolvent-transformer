@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 from omegaconf import DictConfig
 
-from src.models.components.transformer import get_transformer
-from src.models.components.vicon_utils import build_alternating_block_lowtri_mask, depatchify, patchify
+from .transformer import get_transformer
+from .vicon_utils import build_alternating_block_lowtri_mask, depatchify, patchify
 
 
 class Vicon(nn.Module):

@@ -6,12 +6,12 @@ from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchmetrics import MeanMetric, MetricCollection
 
-from src.data.data_utils import BaseLabelData, ViconData
-from src.models.components.vicon import Vicon
+from src.data.data_utils import BaseLabelData, OperatorData
+from src.models import EncoderDecoder
 from src.opt import WarmupCosineDecayScheduler
 
 
-class ViconLitModule(L.LightningModule):
+class OperatorLitModule(L.LightningModule):
     def __init__(
         self,
         cfg: DictConfig,
@@ -21,8 +21,9 @@ class ViconLitModule(L.LightningModule):
         self.save_hyperparameters(logger=False)
         self.cfg = cfg
 
-        # Initialize the Vicon model with the configuration
-        self.net = Vicon(cfg.model)
+        # self.net = hydra.utils.instantiate(cfg.model)
+
+        self.net = EncoderDecoder(cfg=cfg)
 
         sdpa_map = {
             "cudnn": SDPBackend.CUDNN_ATTENTION,
@@ -49,74 +50,24 @@ class ViconLitModule(L.LightningModule):
             ]
         )
 
-    def _model_forward(self, cond, qoi):
+    def _model_forward(self, *args, **kwargs):
         with sdpa_kernel(self.sdpa_backends):
-            outputs = self.net(cond, qoi)
+            return self.net(*args, **kwargs)
 
-            return outputs  # dict: demo_pred, quest_pred
-
-    def network_inference(self, data: ViconData):
-        dummy_label = torch.zeros_like(data.demo_qoi[:, -1:, :, :, :])
-        qoi = torch.cat((data.demo_qoi, dummy_label), dim=1)
-        cond = torch.cat((data.demo_cond, data.quest_cond), dim=1)
-
-        # add prompt engineering here
-        outputs = self._model_forward(cond, qoi)
+    def network_inference(self, data: OperatorData):
+        outputs = self._model_forward(memory=data.f_samples, query=data.g_inputs)
         return outputs
 
-    def _get_ground_truth_all(self, data: ViconData, label: BaseLabelData):
-        qoi = data.demo_qoi
-        ground_truth = torch.cat((qoi, label.label), dim=1)
-        return ground_truth
+    def _loss_function(self, data: OperatorData, label: BaseLabelData):
+        pred = self.network_inference(data)
+        return F.mse_loss(pred, label.label)
 
-    def _get_pred_all(self, outputs: dict):
-        demo_pred = outputs["demo_pred"]
-        quest_pred = outputs["quest_pred"]
-        all_pred = torch.cat([demo_pred, quest_pred], dim=1)
-        return all_pred
+    def get_pred(self, data: OperatorData) -> torch.Tensor:
+        return self.network_inference(data)
 
-    def _get_pred_quest(self, outputs: dict):
-        quest_pred = outputs["quest_pred"]
-        return quest_pred
-
-    def _loss_function(self, pred: torch.Tensor, target: torch.Tensor):
-        return F.mse_loss(pred, target)
-
-    def _loss_all(self, batch: dict, short_num_min=1) -> torch.Tensor:
-        # used for training
-        data = batch["data"]
-        label = batch["label"]
-        outputs = self.network_inference(data)
-        all_pred = self._get_pred_all(outputs)
-        all_ground_truth = self._get_ground_truth_all(data, label)
-        loss = self._loss_function(all_pred, all_ground_truth)
-
-        return loss
-
-    def _error_all(self, batch: dict, short_num_min=1) -> torch.Tensor:
-        data = batch["data"]
-        label = batch["label"]
-        outputs = self.network_inference(data)
-        all_pred = self._get_pred_all(outputs)
-        all_ground_truth = self._get_ground_truth_all(data, label)
-        error = all_pred - all_ground_truth
-        return error
-
-    def _loss_quest(self, batch: dict, short_num_min=1) -> torch.Tensor:
-        data = batch["data"]
-        label = batch["label"]
-        outputs = self.network_inference(data)
-        quest_pred = self._get_pred_quest(outputs)
-        loss = self._loss_function(quest_pred, label)
-        return loss
-
-    def _error_quest(self, batch: dict, short_num_min=1) -> torch.Tensor:
-        data = batch["data"]
-        label = batch["label"]
-        outputs = self.network_inference(data)
-        quest_pred = self._get_pred_quest(outputs)
-        error = quest_pred - label
-        return error
+    def get_error(self, data: OperatorData, label: BaseLabelData) -> torch.Tensor:
+        pred = self.get_pred(data)
+        return torch.abs(pred - label.label)
 
     ############ training #############
 
@@ -124,8 +75,9 @@ class ViconLitModule(L.LightningModule):
         for metrics in self.valid_metrics:
             metrics.reset()
 
-    def training_step(self, batch, batch_idx) -> torch.Tensor:
-        loss = self._loss_all(batch)
+    def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
+        data, label = batch["data"], batch["label"]
+        loss = self._loss_function(data, label)
 
         self.train_metrics(loss)
         self.log("train/loss", self.train_metrics, on_step=True, on_epoch=True)
@@ -133,9 +85,10 @@ class ViconLitModule(L.LightningModule):
         return loss
 
     ############ validation #############
-    def validation_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
-        loss = self._loss_all(batch)
-        error = self._error_all(batch)
+    def validation_step(self, batch: OperatorData, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+        data, label = batch["data"], batch["label"]
+        loss = self._loss_function(data, label)
+        error = self.get_error(data, label)
 
         metrics = {"loss": loss.mean(), "error": error.mean()}
 
@@ -161,7 +114,7 @@ class ViconLitModule(L.LightningModule):
     def restore_ckpt(self, ckpt_path: str) -> None:
         ckpt = torch.load(ckpt_path, weights_only=False)
         # print(ckpt['state_dict'].keys())
-        state_dict = {k[4:]: v for k, v in ckpt["state_dict"].items() if k.startswith("net.")}  # 移除键中前缀 'net.'
+        state_dict = {k[4:]: v for k, v in ckpt["state_dict"].items() if k.startswith("net.")}
         self.net.load_state_dict(state_dict)
 
     def setup(self, stage: str) -> None:
