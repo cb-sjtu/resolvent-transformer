@@ -1,3 +1,0 @@
-print_model:
-  _target_: src.callbacks.PrintModel
-  

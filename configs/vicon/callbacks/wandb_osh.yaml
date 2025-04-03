@@ -1,3 +1,0 @@
-wandb_osh:
-  _target_: wandb_osh.lightning_hooks.TriggerWandbSyncLightningCallback
-  

@@ -1,4 +1,0 @@
-restore_ckpt:
-  _target_: src.callbacks.RestoreCheckpoint
-  ckpt_root: null
-  filename_fmt: "step_{step:08d}.ckpt"
