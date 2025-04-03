@@ -1,4 +1,6 @@
-# Testbed
+# Testbed 
+
+** Please delete this section in the new repository **
 
 This repository is a private repository shared inside our group as a template. It's actively maintained. 
 
@@ -47,28 +49,19 @@ python src/train_operator.py # logger=[csv,wandb] data.batchsize=32
 ```
 
 ## Custom training
-You can create a yaml file in `configs/train_custom.yaml`, and add the following content:
+You can create a yaml file in `configs/train_custom.yaml`, and add contents like the following:
 
 ```yaml
 defaults:
   - train
   - _self_
-# your custom configurations here, for example:
-# paths.log_dir: ${paths.root_dir}/scratch/logs/material/
-# paths.data_dir: ${paths.root_dir}/scratch/data/material/
+
+# your custom configurations here
+paths:
+  data_dir: /scratch/projects/CFP01/CFP01-SF-009/data/material/
+  log_dir: /scratch/projects/CFP01/CFP01-SF-009/YOURID/logs/material/
+  analysis_dir: /scratch/projects/CFP01/CFP01-SF-009/2501_ICE/analysis/yangliu
+
 ```
 You can add your own configurations in the file. This file will be ignored by git, so that they are only effective on your machine and won't affect others.
 If this file does not exist, `train.yaml` configuration will be used.
-
-## ckpt
-To log the checkpoints, please add the callback `ckpt_every_k_steps` in the configs. Currently, the ckpt is saved every `${trainer.val_check_interval}` by default. 
-
-## testing
-Testing mode currently under development. I intend to go through all the checkpoints and test them.
-Here is the intended usage for testing with multiple validation datasets:
-```sh
-python src/train.py mode=test \
-callbacks.restore_ckpt.ckpt_root="logs/train/runs/${datetime}/checkpoints" \ # required
-val_check_interval=${ckpt_interval} # optional
-```
-Be careful that the `val_check_interval` should be set as the interval of the ckpt. If you set the saving interval as default during training, then you do not need to specify the `val_check_interval` during testing.

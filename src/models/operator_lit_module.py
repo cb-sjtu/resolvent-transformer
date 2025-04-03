@@ -7,7 +7,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchmetrics import MeanMetric, MetricCollection
 
 from src.data.data_utils import OperatorData
-from src.models.components.enc_dec_ol import EncDecOL
+from src.models.components.encoder_decoder import EncoderDecoder
 from src.opt import WarmupCosineDecayScheduler
 
 
@@ -15,7 +15,6 @@ class OperatorLitModule(L.LightningModule):
     def __init__(
         self,
         cfg: DictConfig,
-        compile: bool,
     ) -> None:
         super().__init__()
 
@@ -24,7 +23,7 @@ class OperatorLitModule(L.LightningModule):
 
         # self.net = hydra.utils.instantiate(cfg.model)
 
-        self.net = EncDecOL(cfg=cfg)
+        self.net = EncoderDecoder(cfg=cfg)
 
         sdpa_map = {
             "cudnn": SDPBackend.CUDNN_ATTENTION,
@@ -51,25 +50,24 @@ class OperatorLitModule(L.LightningModule):
             ]
         )
 
-    def _model_forward(self, data: OperatorData):
+    def _model_forward(self, *args, **kwargs):
         with sdpa_kernel(self.sdpa_backends):
-            return self.net(data)
+            return self.net(*args, **kwargs)
 
-    def _loss_function(self, data: OperatorData):
-        pred = self._model_forward(data)
-        target = data.g_targets
-        return F.mse_loss(pred, target)
+    def network_inference(self, data: OperatorData):
+        outputs = self._model_forward(memory=data.f_samples, query=data.g_inputs)
+        return outputs
 
-    def _loss_operator(self, data: OperatorData) -> torch.Tensor:
-        loss = self._loss_function(data)
-        return loss
+    def _loss_function(self, data: OperatorData, label: torch.Tensor):
+        pred = self.network_inference(data)
+        return F.mse_loss(pred, label)
 
     def get_pred(self, data: OperatorData) -> torch.Tensor:
-        return self._model_forward(data)
+        return self.network_inference(data)
 
-    def get_error(self, data: OperatorData) -> torch.Tensor:
+    def get_error(self, data: OperatorData, label: torch.Tensor) -> torch.Tensor:
         pred = self.get_pred(data)
-        return torch.abs(pred - data.g_targets)
+        return torch.abs(pred - label)
 
     ############ training #############
 
@@ -77,8 +75,9 @@ class OperatorLitModule(L.LightningModule):
         for metrics in self.valid_metrics:
             metrics.reset()
 
-    def training_step(self, batch: OperatorData, batch_idx: int) -> torch.Tensor:
-        loss = self._loss_operator(batch)
+    def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
+        data, label = batch["data"], batch["label"]
+        loss = self._loss_function(data, label)
 
         self.train_metrics(loss)
         self.log("train/loss", self.train_metrics, on_step=True, on_epoch=True)
@@ -87,8 +86,9 @@ class OperatorLitModule(L.LightningModule):
 
     ############ validation #############
     def validation_step(self, batch: OperatorData, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
-        loss = self._loss_operator(batch)
-        error = self.get_error(batch)
+        data, label = batch["data"], batch["label"]
+        loss = self._loss_function(data, label)
+        error = self.get_error(data, label)
 
         metrics = {"loss": loss.mean(), "error": error.mean()}
 
@@ -114,11 +114,11 @@ class OperatorLitModule(L.LightningModule):
     def restore_ckpt(self, ckpt_path: str) -> None:
         ckpt = torch.load(ckpt_path, weights_only=False)
         # print(ckpt['state_dict'].keys())
-        state_dict = {k[4:]: v for k, v in ckpt["state_dict"].items() if k.startswith("net.")}  # 移除键中前缀 'net.'
+        state_dict = {k[4:]: v for k, v in ckpt["state_dict"].items() if k.startswith("net.")}
         self.net.load_state_dict(state_dict)
 
     def setup(self, stage: str) -> None:
-        if self.hparams.compile and stage == "fit" and torch.__version__ >= "2.0.0":
+        if self.cfg.model.compile and stage == "fit" and torch.__version__ >= "2.0.0":
             self.net = torch.compile(self.net)
 
     def configure_optimizers(self):

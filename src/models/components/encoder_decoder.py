@@ -1,12 +1,10 @@
 from omegaconf import DictConfig
 from torch import nn
 
-from src.data.data_utils import OperatorData
-
 from .transformer import get_transformer
 
 
-class EncDecOL(nn.Module):
+class EncoderDecoder(nn.Module):
     def __init__(self, cfg: DictConfig):
         super().__init__()
         self.cfg = cfg
@@ -16,12 +14,10 @@ class EncDecOL(nn.Module):
         self.decoder = get_transformer(cfg.model.decoder, mode="decoder")
         self.out_proj = nn.Linear(cfg.model.decoder.model_dim, 1)
 
-    def forward(self, x: OperatorData):
-        f_samples = x.f_samples
-        g_inputs = x.g_inputs
-        f_samples = self.encoder_in_proj(f_samples)
-        g_inputs = self.decoder_in_proj(g_inputs)
-        x = self.encoder(f_samples)
-        x = self.decoder(g_inputs, x)
+    def forward(self, memory, query):
+        memory = self.encoder_in_proj(memory)
+        query = self.decoder_in_proj(query)
+        x = self.encoder(memory)
+        x = self.decoder(query, x)
         x = self.out_proj(x)
         return x

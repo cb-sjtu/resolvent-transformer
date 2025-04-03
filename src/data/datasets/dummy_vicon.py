@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 from src.data.data_utils import ViconData
 
 
-class ViconDataset(Dataset):
+class DummyViconDataset(Dataset):
     # name is used for logging
     name: str = "dummy_vicon_dataset"
 
