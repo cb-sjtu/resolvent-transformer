@@ -15,7 +15,6 @@ class ViconLitModule(L.LightningModule):
     def __init__(
         self,
         cfg: DictConfig,
-        compile: bool,
     ) -> None:
         super().__init__()
 
@@ -166,7 +165,7 @@ class ViconLitModule(L.LightningModule):
         self.net.load_state_dict(state_dict)
 
     def setup(self, stage: str) -> None:
-        if self.hparams.compile and stage == "fit" and torch.__version__ >= "2.0.0":
+        if self.cfg.model.compile and stage == "fit" and torch.__version__ >= "2.0.0":
             self.net = torch.compile(self.net)
 
     def configure_optimizers(self):

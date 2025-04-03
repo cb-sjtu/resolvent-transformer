@@ -2,9 +2,9 @@ dummy_vicon:
   name: dummy_vicon_valid
   description: "Vicon valid dummy data"
   dataset:
-    _target_: src.data.datasets.dummy_vicon.ViconDataset
+    _target_: src.data.datasets.dummy_vicon.DummyViconDataset
     demo_num: ${data.demo_num}
     cond_shape: ${data.cond_shape}
     qoi_shape: ${data.qoi_shape}
     
-  batch_size_per_process: ${data.batchsize}
+  batch_size_per_gpu: ${data.batchsize}

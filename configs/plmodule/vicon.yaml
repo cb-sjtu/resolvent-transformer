@@ -1,0 +1,3 @@
+_target_: src.models.vicon_lit_module.ViconLitModule
+_partial_: true
+

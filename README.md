@@ -45,15 +45,15 @@ Mannual format before commit: `ruff format && ruff check --fix`
 ## run
 
 ```bash
-python src/train_operator.py # logger=[csv,wandb] data.batchsize=32
+python src/train.py --config-name=train_operator # logger=[csv,wandb] data.batchsize=32
 ```
 
-## Custom training
-You can create a yaml file in `configs/train_custom.yaml`, and add contents like the following:
+## Machine-specific custom configurations
+Some configurations are machine-specific. For example, the data directory, log directory, and analysis directory. You can create a yaml file in `configs/train_custom.yaml`, and add contents like the following:
 
 ```yaml
 defaults:
-  - train
+  - train_operator # replace with the name of the training configuration you want to use
   - _self_
 
 # your custom configurations here
@@ -63,5 +63,6 @@ paths:
   analysis_dir: /scratch/projects/CFP01/CFP01-SF-009/2501_ICE/analysis/yangliu
 
 ```
-You can add your own configurations in the file. This file will be ignored by git, so that they are only effective on your machine and won't affect others.
-If this file does not exist, `train.yaml` configuration will be used.
+This file will be ignored by git, so that they are only effective on your machine and won't affect others.
+
+

@@ -106,7 +106,9 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     return metric_dict, object_dict
 
 
-@hydra.main(version_base="1.3", config_path="../configs/", config_name="train_operator.yaml")
+# set the default config file
+# @hydra.main(version_base="1.3", config_path="../configs/", config_name="train_custom.yaml")
+@hydra.main(version_base="1.3", config_path="../configs/")  # no default config file, specify in command line
 def main(cfg: DictConfig) -> float | None:
     """Main entry point for training.
 

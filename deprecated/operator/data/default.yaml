@@ -1,8 +1,0 @@
-# @package _global_
-
-# Data parameters
-data:
-  batch_size: 32        # Batch size
-  num_workers: 4        # Number of worker processes for data loader
-  pin_memory: true      # Whether to use memory pinning (improves GPU loading speed)
-  valid: {}             # Validation dataset configuration 

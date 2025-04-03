@@ -6,6 +6,8 @@ defaults:
   - _self_
   - data: default
   - model: vicon
+  - plmodule: vicon
+  - datamodule: base
   - loss: vicon
   - opt: default
   - callbacks: default
