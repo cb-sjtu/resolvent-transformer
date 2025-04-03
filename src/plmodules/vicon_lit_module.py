@@ -1,37 +1,22 @@
-import lightning as L
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
-from torch import optim
-from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchmetrics import MeanMetric, MetricCollection
 
 from src.data.data_utils import BaseLabelData, ViconData
 from src.models import Vicon
-from src.opt import WarmupCosineDecayScheduler
+from src.plmodules.base_lit_module import BaseLitModule
 
 
-class ViconLitModule(L.LightningModule):
-    def __init__(
-        self,
-        cfg: DictConfig,
-    ) -> None:
-        super().__init__()
+class ViconLitModule(BaseLitModule):
+    def __init__(self, cfg: DictConfig) -> None:
+        super().__init__(cfg)
 
         self.save_hyperparameters(logger=False)
         self.cfg = cfg
 
         # Initialize the Vicon model with the configuration
         self.net = Vicon(cfg.model)
-
-        sdpa_map = {
-            "cudnn": SDPBackend.CUDNN_ATTENTION,
-            "math": SDPBackend.MATH,
-            "efficient": SDPBackend.EFFICIENT_ATTENTION,
-            "flash": SDPBackend.FLASH_ATTENTION,
-        }
-
-        self.sdpa_backends = [sdpa_map[backend] for backend in self.cfg.sdpa]
 
         self.train_metrics = MeanMetric()
 
@@ -48,12 +33,6 @@ class ViconLitModule(L.LightningModule):
                 for _ in range(len(self.cfg.data.valid))  # initialize metrics for each valid_loader
             ]
         )
-
-    def _model_forward(self, cond, qoi):
-        with sdpa_kernel(self.sdpa_backends):
-            outputs = self.net(cond, qoi)
-
-            return outputs  # dict: demo_pred, quest_pred
 
     def network_inference(self, data: ViconData):
         dummy_label = torch.zeros_like(data.demo_qoi[:, -1:, :, :, :])
@@ -157,35 +136,3 @@ class ViconLitModule(L.LightningModule):
 
     def test_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         pass
-
-    def restore_ckpt(self, ckpt_path: str) -> None:
-        ckpt = torch.load(ckpt_path, weights_only=False)
-        # print(ckpt['state_dict'].keys())
-        state_dict = {k[4:]: v for k, v in ckpt["state_dict"].items() if k.startswith("net.")}  # 移除键中前缀 'net.'
-        self.net.load_state_dict(state_dict)
-
-    def setup(self, stage: str) -> None:
-        if self.cfg.model.compile and stage == "fit" and torch.__version__ >= "2.0.0":
-            self.net = torch.compile(self.net)
-
-    def configure_optimizers(self):
-        optimizer = optim.AdamW(
-            filter(lambda p: p.requires_grad, self.net.parameters()),
-            lr=float(self.cfg.opt.peak_lr),
-            weight_decay=float(self.cfg.opt.weight_decay),
-        )
-
-        scheduler = WarmupCosineDecayScheduler(
-            optimizer=optimizer,
-            warmup=int(self.cfg.opt.warmup_percent * self.cfg.trainer.max_steps // 100),
-            max_iters=int(self.cfg.opt.decay_percent * self.cfg.trainer.max_steps // 100),
-        )
-
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "step",
-                "frequency": 1,
-            },
-        }
