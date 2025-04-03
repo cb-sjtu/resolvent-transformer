@@ -101,7 +101,7 @@ class BaseData:
         return dict_to_namedtuple(data_shape)
 
     def get_print_info(self, print_lv: int = 1) -> str:
-        doc = "=" * 20 + "\n"
+        doc = "-" * 40 + "\n"
 
         for attr, value in self.__dict__.items():
             if isinstance(value, torch.Tensor):
@@ -125,7 +125,7 @@ class BaseData:
                         doc += str(value[i]) + "\n"
             else:
                 doc += f"{attr}: type={type(value)}\t value={str(value)}\n"
-        doc += "=" * 20 + "\n"
+        doc += "-" * 40 + "\n"
         return doc
 
 
@@ -152,14 +152,26 @@ def concat_data(datas: Sequence[BaseData], to_tensor=True) -> BaseData:
     return data
 
 
+# -------Input Data-------
 @dataclass
 class OperatorData(BaseData):
+    description: list[str] = None
     f_samples: torch.Tensor = None  # (batch, f_seq_len, f_inout_dim)
     g_inputs: torch.Tensor = None  # (batch, g_seq_len, g_in_dim)
 
 
 @dataclass
 class ViconData(BaseData):
+    description: list[str] = None
     demo_cond: torch.Tensor = None
     quest_cond: torch.Tensor = None
     demo_qoi: torch.Tensor = None
+
+
+# -------Label Data-------
+# split from Input Data to avoid accidental use of label
+# also wrap into BaseData for flexible operations
+@dataclass
+class BaseLabelData(BaseData):
+    description: list[str] = None
+    label: torch.Tensor = None

@@ -6,7 +6,7 @@ from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchmetrics import MeanMetric, MetricCollection
 
-from src.data.data_utils import ViconData
+from src.data.data_utils import BaseLabelData, ViconData
 from src.models.components.vicon import Vicon
 from src.opt import WarmupCosineDecayScheduler
 
@@ -55,7 +55,7 @@ class ViconLitModule(L.LightningModule):
 
             return outputs  # dict: demo_pred, quest_pred
 
-    def network_inference(self, data):
+    def network_inference(self, data: ViconData):
         dummy_label = torch.zeros_like(data.demo_qoi[:, -1:, :, :, :])
         qoi = torch.cat((data.demo_qoi, dummy_label), dim=1)
         cond = torch.cat((data.demo_cond, data.quest_cond), dim=1)
@@ -64,9 +64,9 @@ class ViconLitModule(L.LightningModule):
         outputs = self._model_forward(cond, qoi)
         return outputs
 
-    def _get_ground_truth_all(self, data: ViconData, label):
+    def _get_ground_truth_all(self, data: ViconData, label: BaseLabelData):
         qoi = data.demo_qoi
-        ground_truth = torch.cat((qoi, label), dim=1)
+        ground_truth = torch.cat((qoi, label.label), dim=1)
         return ground_truth
 
     def _get_pred_all(self, outputs: dict):
@@ -79,7 +79,7 @@ class ViconLitModule(L.LightningModule):
         quest_pred = outputs["quest_pred"]
         return quest_pred
 
-    def _loss_function(self, pred, target):
+    def _loss_function(self, pred: torch.Tensor, target: torch.Tensor):
         return F.mse_loss(pred, target)
 
     def _loss_all(self, batch: dict, short_num_min=1) -> torch.Tensor:

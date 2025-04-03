@@ -6,7 +6,7 @@ from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchmetrics import MeanMetric, MetricCollection
 
-from src.data.data_utils import OperatorData
+from src.data.data_utils import BaseLabelData, OperatorData
 from src.models.components.encoder_decoder import EncoderDecoder
 from src.opt import WarmupCosineDecayScheduler
 
@@ -58,16 +58,16 @@ class OperatorLitModule(L.LightningModule):
         outputs = self._model_forward(memory=data.f_samples, query=data.g_inputs)
         return outputs
 
-    def _loss_function(self, data: OperatorData, label: torch.Tensor):
+    def _loss_function(self, data: OperatorData, label: BaseLabelData):
         pred = self.network_inference(data)
-        return F.mse_loss(pred, label)
+        return F.mse_loss(pred, label.label)
 
     def get_pred(self, data: OperatorData) -> torch.Tensor:
         return self.network_inference(data)
 
-    def get_error(self, data: OperatorData, label: torch.Tensor) -> torch.Tensor:
+    def get_error(self, data: OperatorData, label: BaseLabelData) -> torch.Tensor:
         pred = self.get_pred(data)
-        return torch.abs(pred - label)
+        return torch.abs(pred - label.label)
 
     ############ training #############
 

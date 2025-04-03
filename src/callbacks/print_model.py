@@ -24,20 +24,24 @@ class PrintModel(L.Callback):
 
     def on_train_batch_start(self, trainer: L.Trainer, pl_module: L.LightningModule, batch, batch_idx):
         cfg = pl_module.cfg
-        if isinstance(batch, dict):
-            batch = batch["data"]
+        data, label = batch["data"], batch["label"]
         if batch_idx < 20:
-            pl_module.print(f"===== Train Data # {batch_idx} =====")
-            pl_module.print("type of batch", type(batch))
-            pl_module.print(batch.get_print_info(print_lv=cfg.print_lv))
+            pl_module.print("=" * 40 + f"Train Data # {batch_idx}" + "=" * 40)
+            pl_module.print("Input data", type(data))
+            pl_module.print(data.get_print_info(print_lv=cfg.print_lv))
+            pl_module.print("Label data", type(label))
+            pl_module.print(label.get_print_info(print_lv=cfg.print_lv))
+            pl_module.print("=" * 100)
 
     def on_validation_batch_start(
         self, trainer: L.Trainer, pl_module: L.LightningModule, batch, batch_idx, dataloader_idx=0
     ):
         cfg = pl_module.cfg
-        if isinstance(batch, dict):
-            batch = batch["data"]
+        data, label = batch["data"], batch["label"]
         if batch_idx < 20 and trainer.global_step < 100:
-            pl_module.print(f"===== Valid Dataset # {dataloader_idx} - Batch {batch_idx} =====")
-            pl_module.print("type of batch", type(batch))
-            pl_module.print(batch.get_print_info(print_lv=cfg.print_lv))
+            pl_module.print("=" * 40 + f"Valid Dataset # {dataloader_idx} - Batch {batch_idx}" + "=" * 40)
+            pl_module.print("Input data", type(data))
+            pl_module.print(data.get_print_info(print_lv=cfg.print_lv))
+            pl_module.print("Label data", type(label))
+            pl_module.print(label.get_print_info(print_lv=cfg.print_lv))
+            pl_module.print("=" * 100)

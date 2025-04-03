@@ -1,5 +1,4 @@
 import hydra
-import torch
 from lightning import LightningDataModule
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
@@ -53,10 +52,10 @@ class BaseDataModule(LightningDataModule):
 
         def collate_fn(raw_list: list[dict]):
             data_list = [item["data"] for item in raw_list]
-            labels = [item["label"] for item in raw_list]
+            label_list = [item["label"] for item in raw_list]
 
             combined_data = du.concat_data(data_list)
-            combined_labels = torch.cat(labels, dim=0)
+            combined_labels = du.concat_data(label_list)
 
             return {"data": combined_data, "label": combined_labels}
 
