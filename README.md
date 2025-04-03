@@ -1,5 +1,6 @@
 # Testbed 
 
+## Use this repository as a template
 ** Please delete this section in the new repository **
 
 This repository is a private repository shared inside our group as a template. It's actively maintained. 
@@ -26,7 +27,14 @@ If you want to do some experiments, you should:
 
 We will consider open source this repository when it's stable and useful for others.
 
-## environment
+## Code Structure
+
+This repository is based on the template: https://github.com/ashleve/lightning-hydra-template. But we modified it to be more suitable for our research.
+
+TODO: add the code structure here.
+
+
+## Environment
 
 ```bash
 conda env create -f env.yaml # create the environment named vicon
@@ -42,7 +50,7 @@ Note that you need to run `pre-commit install` for each project.
 Mannual format before commit: `ruff format && ruff check --fix`
 
 
-## run
+## Run
 
 ```bash
 python src/train.py --config-name=train_operator # logger=[csv,wandb] data.batchsize=32
