@@ -37,8 +37,8 @@ TODO: add the code structure here.
 ## Environment
 
 ```bash
-conda env create -f env.yaml # create the environment named vicon
-conda activate vicon # activate the environment vicon
+conda env create -f env.yaml # create the environment named icon
+conda activate icon # activate the environment icon
 ```
 
 ## Format code
@@ -64,11 +64,11 @@ defaults:
   - train_operator # replace with the name of the training configuration you want to use
   - _self_
 
-# your custom configurations here
+# your custom configurations here, here is an example
 paths:
   data_dir: /scratch/projects/CFP01/CFP01-SF-009/data/material/
   log_dir: /scratch/projects/CFP01/CFP01-SF-009/YOURID/logs/material/
-  analysis_dir: /scratch/projects/CFP01/CFP01-SF-009/2501_ICE/analysis/yangliu
+  analysis_dir: /scratch/projects/CFP01/CFP01-SF-009/2501_ICE/analysis/material/YOURID/
 
 ```
 This file will be ignored by git, so that they are only effective on your machine and won't affect others.
