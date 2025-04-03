@@ -2,7 +2,7 @@ dummy_vicon:
   name: dummy_vicon
   description: "Vicon train dummy data"
   dataset:
-    _target_: src.data.datasets.dummy_vicon.DummyViconDataset
+    _target_: src.datasets.dummy.DummyViconDataset
     demo_num: ${data.demo_num}
     cond_shape: ${data.cond_shape}
     qoi_shape: ${data.qoi_shape}

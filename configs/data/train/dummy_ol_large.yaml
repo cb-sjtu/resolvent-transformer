@@ -3,7 +3,7 @@ dummy_ol_large:
   description: "Operator Learning dummy data, larger size"
 
   dataset:
-    _target_: src.data.datasets.dummy_operator.DummyOperatorDataset
+    _target_: src.datasets.dummy.DummyOperatorDataset
     f_seq_len: 200
     g_seq_len: 100
     f_inout_dim: 2
