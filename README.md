@@ -17,21 +17,23 @@ It should not include:
 - Ongoing research that are not ready for publication
 - Codes that breaks anonymity. There are some exceptions: 
   - `configs/logger/wandb.yaml` group_name
-  - `configs/paths/default.yaml` data_dir
   - TODO: improve the anonymity and list all the exceptions.
 
 If you want to do some experiments, you should:
-- Create a new repository based on this template. This template will contain some parts that you do not need. Feel free to remove them for clarity.
-- When you publish your code, please replace this `README.md` with your own one. Remember to remove the personal information discussed above for anonymity. Try to remove the parts that are not related to your project for clarity.
-- If you has something worth being included in this template, add them and create a pull request.
+- Create a new repository based on this template (https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template). Make sure you set the owner as "scaling-group". 
+- This template contains some parts that you do not need. You are strongly encouraged to remove them in the new repository for clarity, at least before publishing.
+- When you publish your code, please replace this `README.md` with your own one. Remember to remove the personal information discussed above for anonymity.
+- If you have something worth being included in this template, add them and create a pull request. Don't commit to the main branch.
 
 We will consider open source this repository when it's stable and useful for others.
 
 ## Code Structure
 
-This repository is based on the template: https://github.com/ashleve/lightning-hydra-template. But we modified it to be more suitable for our research.
+This repository is based on the template: https://github.com/ashleve/lightning-hydra-template. But we modified it to be more suitable for our research. Please refer to that repository for reference.
 
-TODO: add the code structure here.
+The main changes are:
+- split `datamodules` and `datasets` into different folders and config files. `datamodules` controls the data loading, and `datasets` controls the dataset.
+- split `models` and `plmodules` into different folders and config files. `plmodules` controls the training loops, and `models` controls the model architecture.
 
 
 ## Environment
