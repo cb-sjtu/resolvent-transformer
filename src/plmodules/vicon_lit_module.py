@@ -53,9 +53,10 @@ class ViconLitModule(BaseLitModule):
 
     def network_inference(self, data: ViconData):
         dummy_label = torch.zeros_like(data.demo_qoi[:, -1:, :, :, :])
-        qoi = torch.cat((data.demo_qoi, dummy_label), dim=1)
+        qoi = data.demo_qoi
         cond = torch.cat((data.demo_cond, data.quest_cond), dim=1)
         cond_norm, qoi_norm, mean, std = self._prompt_engineering(cond, qoi)
+        qoi_norm = torch.cat((qoi_norm, dummy_label), dim=1)
 
         outputs = self._model_forward(cond_norm, qoi_norm)
 
