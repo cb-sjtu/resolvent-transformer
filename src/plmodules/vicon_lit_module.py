@@ -34,14 +34,39 @@ class ViconLitModule(BaseLitModule):
             ]
         )
 
+    def _prompt_engineering(self, cond: torch.Tensor, qoi: torch.Tensor):
+        cond_len = cond.shape[1]
+        x = torch.cat((cond, qoi), dim=1)
+        batch_size, seq_len, dim, H, W = x.shape
+        x_reshaped = x.view(batch_size * seq_len, dim, H, W)
+
+        mean = x_reshaped.mean(dim=(0, 2, 3), keepdim=True)  # Mean across batch, H, W -> (1, dim, 1, 1)
+        std = x_reshaped.std(dim=(0, 2, 3), keepdim=True) + 1e-5  # Std across batch, H, W -> (1, dim, 1, 1)
+
+        x_normalized = (x_reshaped - mean) / std
+        x_normalized = x_normalized.view(batch_size, seq_len, dim, H, W)
+
+        cond_normalized = x_normalized[:, :cond_len, :, :, :]
+        qoi_normalized = x_normalized[:, cond_len:, :, :, :]
+
+        return cond_normalized, qoi_normalized, mean, std
+
     def network_inference(self, data: ViconData):
         dummy_label = torch.zeros_like(data.demo_qoi[:, -1:, :, :, :])
         qoi = torch.cat((data.demo_qoi, dummy_label), dim=1)
         cond = torch.cat((data.demo_cond, data.quest_cond), dim=1)
+        cond_norm, qoi_norm, mean, std = self._prompt_engineering(cond, qoi)
 
-        # add prompt engineering here
-        outputs = self._model_forward(cond, qoi)
-        return outputs
+        outputs = self._model_forward(cond_norm, qoi_norm)
+
+        denormalized_outputs = {}
+        for key, tensor in outputs.items():
+            batch_size, seq_len, dim, H, W = tensor.shape
+            mean_broadcast = mean.view(1, 1, dim, 1, 1)
+            std_broadcast = std.view(1, 1, dim, 1, 1)
+            denormalized_outputs[key] = tensor * std_broadcast + mean_broadcast
+
+        return denormalized_outputs
 
     def _get_ground_truth_all(self, data: ViconData, label: BaseLabelData):
         qoi = data.demo_qoi
