@@ -1,45 +1,58 @@
 import torch
 import torch.nn as nn
-from omegaconf import DictConfig
 
-from .transformer import get_transformer
 from .vicon_utils import build_alternating_block_lowtri_mask, depatchify, patchify
 
 
 class Vicon(nn.Module):
-    def __init__(self, cfg: DictConfig):
+    def __init__(
+        self,
+        transformer: nn.Module,
+        patch_resolution,
+        patch_num_in,
+        patch_num_out,
+        demo_num,
+        short_num_min,
+        dim_channel,
+        dim_token,
+        *args,
+        **kwargs,
+    ):
         super().__init__()
 
-        self.cfg = cfg
-        self.demo_num = cfg["demo_num"] + 1  # 1 for quest
+        self.patch_resolution = patch_resolution
+        self.patch_num_in = patch_num_in
+        self.patch_num_out = patch_num_out
+        self.demo_num = demo_num + 1  # 1 for quest
+        self.short_num_min = short_num_min
+        self.dim_channel = dim_channel
+        self.dim_token = dim_token
 
         self.pre_proj = nn.Linear(
-            in_features=cfg["transformer"]["dim_channel"] * cfg["patch_resolution"] ** 2,
-            out_features=cfg["transformer"]["dim_token"],
+            in_features=self.dim_channel * self.patch_resolution**2,
+            out_features=self.dim_token,
         )
         self.post_proj = nn.Linear(
-            in_features=cfg["transformer"]["dim_token"],
-            out_features=cfg["transformer"]["dim_channel"] * cfg["patch_resolution"] ** 2,
+            in_features=self.dim_token,
+            out_features=self.dim_channel * self.patch_resolution**2,
         )
 
-        self.patch_pos_encoding = nn.Parameter(
-            torch.randn(cfg["patch_num_in"] * cfg["patch_num_in"], cfg["transformer"]["dim_token"])
-        )
-        self.func_pos_encoding = nn.Parameter(torch.randn(self.demo_num * 2, cfg["transformer"]["dim_token"]))
+        self.patch_pos_encoding = nn.Parameter(torch.randn(self.patch_num_in * self.patch_num_in, self.dim_token))
+        self.func_pos_encoding = nn.Parameter(torch.randn(self.demo_num * 2, self.dim_token))
 
-        self.transformer = get_transformer(cfg["transformer"], mode="encoder")
+        self.transformer = transformer
 
         mask = (
             1
             - build_alternating_block_lowtri_mask(
-                self.demo_num, cfg["patch_num_in"] * cfg["patch_num_in"], cfg["patch_num_out"] * cfg["patch_num_out"]
+                self.demo_num, self.patch_num_in * self.patch_num_in, self.patch_num_out * self.patch_num_out
             )
         ).bool()
         self.register_buffer("mask", mask)
 
     def forward(self, cond, qoi):
-        p = self.cfg["patch_num_in"]
-        d = self.cfg["transformer"]["dim_token"]
+        p = self.patch_num_in
+        d = self.dim_token
 
         # Prepare the pairs (cond, qoi)
         x = torch.cat((cond[:, :, None, :, :], qoi[:, :, None, :, :]), dim=2)  # (bs, pairs, 2, c, h, w)

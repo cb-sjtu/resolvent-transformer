@@ -1,23 +1,45 @@
-ff: True
+_target_: src.models.encoder_decoder.EncoderDecoder
 
-model_dim: 128
-f_input_dim: 2
-g_input_dim: 1
-g_output_dim: 1
-dropout: 0.0
+encoder_in_proj:
+  _target_: torch.nn.Linear
+  in_features: ${model.f_input_dim} 
+  out_features: ${model.encoder.layer.d_model}
+
+decoder_in_proj:
+  _target_: torch.nn.Linear
+  in_features: ${model.g_input_dim}
+  out_features: ${model.decoder.layer.d_model}
 
 encoder:
-  n_layers: 6
-  n_heads: 4
-  model_dim: ${model.model_dim}
-  widening_factor: 4
-  dropout: ${model.dropout}
+  _target_: src.models.transformer.TransformerEncoder
+  layer:
+    _target_: src.models.transformer.TransformerEncoderLayer
+    d_model: 128
+    nhead: 4
+    dim_feedforward: 512  # 128 * 4
+    dropout: ${model.dropout}
+    mha: "built-in"
+  num_layers: 6
 
 decoder:
-  n_layers: 4
-  n_heads: 4
-  model_dim: ${model.model_dim}
-  widening_factor: 4
-  dropout: ${model.dropout}
+  _target_: src.models.transformer.TransformerDecoder
+  layer:
+    _target_: src.models.transformer.TransformerDecoderLayer
+    d_model: 128
+    nhead: 4
+    dim_feedforward: 512  # 128 * 4
+    dropout: ${model.dropout}
+    mha: "built-in"
+  num_layers: 6
+  
 
+out_proj:
+  _target_: torch.nn.Linear
+  in_features: ${model.decoder.layer.d_model}
+  out_features: 1
+
+f_input_dim: 2
+g_input_dim: 1
+widening_factor: 4
+dropout: 0.0
 compile: true

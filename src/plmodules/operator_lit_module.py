@@ -1,10 +1,10 @@
+import hydra
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 from torchmetrics import MeanMetric, MetricCollection
 
 from src.datasets.data_utils import BaseLabelData, OperatorData
-from src.models import EncoderDecoder
 from src.plmodules.base_lit_module import BaseLitModule
 
 
@@ -15,9 +15,7 @@ class OperatorLitModule(BaseLitModule):
         self.save_hyperparameters(logger=False)
         self.cfg = cfg
 
-        # self.net = hydra.utils.instantiate(cfg.model)
-
-        self.net = EncoderDecoder(cfg=cfg)
+        self.net = hydra.utils.instantiate(cfg.model)
 
         self.train_metrics = MeanMetric()
 

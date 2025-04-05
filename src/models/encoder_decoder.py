@@ -1,18 +1,23 @@
-from omegaconf import DictConfig
 from torch import nn
-
-from .transformer import get_transformer
 
 
 class EncoderDecoder(nn.Module):
-    def __init__(self, cfg: DictConfig):
+    def __init__(
+        self,
+        encoder_in_proj: nn.Module,
+        decoder_in_proj: nn.Module,
+        encoder: nn.Module,
+        decoder: nn.Module,
+        out_proj: nn.Module,
+        *args,
+        **kwargs,
+    ):
         super().__init__()
-        self.cfg = cfg
-        self.encoder_in_proj = nn.Linear(cfg.model.f_input_dim, cfg.model.encoder.model_dim)
-        self.decoder_in_proj = nn.Linear(cfg.model.g_input_dim, cfg.model.decoder.model_dim)
-        self.encoder = get_transformer(cfg.model.encoder, mode="encoder")
-        self.decoder = get_transformer(cfg.model.decoder, mode="decoder")
-        self.out_proj = nn.Linear(cfg.model.decoder.model_dim, 1)
+        self.encoder_in_proj = encoder_in_proj
+        self.decoder_in_proj = decoder_in_proj
+        self.encoder = encoder
+        self.decoder = decoder
+        self.out_proj = out_proj
 
     def forward(self, memory, query):
         memory = self.encoder_in_proj(memory)

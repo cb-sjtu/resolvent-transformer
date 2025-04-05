@@ -1,10 +1,10 @@
+import hydra
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 from torchmetrics import MeanMetric, MetricCollection
 
 from src.datasets.data_utils import BaseLabelData, ViconData
-from src.models import Vicon
 from src.plmodules.base_lit_module import BaseLitModule
 
 
@@ -15,8 +15,7 @@ class ViconLitModule(BaseLitModule):
         self.save_hyperparameters(logger=False)
         self.cfg = cfg
 
-        # Initialize the Vicon model with the configuration
-        self.net = Vicon(cfg.model)
+        self.net = hydra.utils.instantiate(cfg.model)
 
         self.train_metrics = MeanMetric()
 
