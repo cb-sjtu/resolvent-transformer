@@ -182,7 +182,7 @@ class TransformerDecoder(nn.Module):
         return x
 
 
-def get_transformer(transformer_cfg, mode):
+def get_transformer(model_dim, n_heads, widening_factor, n_layers, mode, dropout):
     if mode not in ["encoder", "decoder"]:
         raise ValueError(f"Unknown mode: {mode}")
 
@@ -190,13 +190,13 @@ def get_transformer(transformer_cfg, mode):
     transformer_class = TransformerEncoder if mode == "encoder" else TransformerDecoder
 
     layer = layer_class(
-        d_model=transformer_cfg["model_dim"],
-        nhead=transformer_cfg["n_heads"],
-        dim_feedforward=transformer_cfg["model_dim"] * transformer_cfg["widening_factor"],
-        dropout=0.0,
+        d_model=model_dim,
+        nhead=n_heads,
+        dim_feedforward=model_dim * widening_factor,
+        dropout=dropout,
     )
 
-    return transformer_class(layer, num_layers=transformer_cfg["n_layers"])
+    return transformer_class(layer, num_layers=n_layers)
 
 
 def test():
