@@ -1,4 +1,4 @@
-ff: True
+_target_: src.models.vicon.Vicon
 
 patch_resolution: 16      
 patch_num_in: 8            
@@ -6,7 +6,7 @@ patch_num_out: 8
 demo_num: ${data.demo_num} 
 short_num_min: 1
 
-transformer:
+transformer_config:
   dim_channel: 3          
   dim_token: 256          
   n_layers: 6            
@@ -15,4 +15,15 @@ transformer:
   dropout: 0.1           
   model_dim: 256     
 
+transformer:
+  _target_: src.models.transformer.TransformerEncoder
+  self_attn_layer:
+    _target_: src.models.transformer.TransformerEncoderLayer
+    d_model: ${model.transformer_config.dim_token}
+    nhead: ${model.transformer_config.n_heads}
+    dim_feedforward: 1024  # 256 * 4
+    dropout: ${model.transformer_config.dropout}
+  num_layers: ${model.transformer_config.n_layers}
+
+ff: True
 compile: true             
