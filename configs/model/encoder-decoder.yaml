@@ -3,37 +3,39 @@ _target_: src.models.encoder_decoder.EncoderDecoder
 encoder_in_proj:
   _target_: torch.nn.Linear
   in_features: ${model.f_input_dim} 
-  out_features: ${model.encoder.self_attn_layer.d_model}
+  out_features: ${model.encoder.layer.d_model}
 
 decoder_in_proj:
   _target_: torch.nn.Linear
   in_features: ${model.g_input_dim}
-  out_features: ${model.decoder.decoder_layer.d_model}
+  out_features: ${model.decoder.layer.d_model}
 
 encoder:
   _target_: src.models.transformer.TransformerEncoder
-  self_attn_layer:
+  layer:
     _target_: src.models.transformer.TransformerEncoderLayer
     d_model: 128
     nhead: 4
     dim_feedforward: 512  # 128 * 4
     dropout: ${model.dropout}
+    mha: "built-in"
   num_layers: 6
 
 decoder:
   _target_: src.models.transformer.TransformerDecoder
-  decoder_layer:
+  layer:
     _target_: src.models.transformer.TransformerDecoderLayer
     d_model: 128
     nhead: 4
     dim_feedforward: 512  # 128 * 4
     dropout: ${model.dropout}
+    mha: "built-in"
   num_layers: 6
   
 
 out_proj:
   _target_: torch.nn.Linear
-  in_features: ${model.decoder.decoder_layer.d_model}
+  in_features: ${model.decoder.layer.d_model}
   out_features: 1
 
 f_input_dim: 2

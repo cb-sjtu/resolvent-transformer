@@ -17,12 +17,13 @@ transformer_config:
 
 transformer:
   _target_: src.models.transformer.TransformerEncoder
-  self_attn_layer:
+  layer:
     _target_: src.models.transformer.TransformerEncoderLayer
     d_model: ${model.transformer_config.dim_token}
     nhead: ${model.transformer_config.n_heads}
     dim_feedforward: 1024  # 256 * 4
     dropout: ${model.transformer_config.dropout}
+    mha: "built-in"
   num_layers: ${model.transformer_config.n_layers}
 
 ff: True
