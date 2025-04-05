@@ -9,11 +9,6 @@ class EncoderDecoder(nn.Module):
         encoder: nn.Module,
         decoder: nn.Module,
         out_proj: nn.Module,
-        f_input_dim: int = 2,
-        g_input_dim: int = 1,
-        widening_factor: int = 4,
-        dropout: float = 0.0,
-        compile: bool = True,
         *args,
         **kwargs,
     ):
@@ -23,12 +18,6 @@ class EncoderDecoder(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
         self.out_proj = out_proj
-
-        self.f_input_dim = f_input_dim
-        self.g_input_dim = g_input_dim
-        self.widening_factor = widening_factor
-        self.dropout = dropout
-        self.compile = compile
 
     def forward(self, memory, query):
         memory = self.encoder_in_proj(memory)

@@ -5,10 +5,10 @@ patch_num_in: 8
 patch_num_out: 8            
 demo_num: ${data.demo_num} 
 short_num_min: 1
+dim_channel: 3          
+dim_token: 256          
 
 transformer_config:
-  dim_channel: 3          
-  dim_token: 256          
   n_layers: 6            
   n_heads: 8             
   widening_factor: 4     
@@ -19,7 +19,7 @@ transformer:
   _target_: src.models.transformer.TransformerEncoder
   layer:
     _target_: src.models.transformer.TransformerEncoderLayer
-    d_model: ${model.transformer_config.dim_token}
+    d_model: ${model.dim_token}
     nhead: ${model.transformer_config.n_heads}
     dim_feedforward: 1024  # 256 * 4
     dropout: ${model.transformer_config.dropout}
@@ -28,3 +28,4 @@ transformer:
 
 ff: True
 compile: true             
+

@@ -12,10 +12,10 @@ class Vicon(nn.Module):
         patch_num_in: int = 8,
         patch_num_out: int = 8,
         demo_num: int = 3,
-        transformer_config: dict = None,
-        ff: bool = True,
-        compile: bool = True,
         short_num_min: int = 1,
+        dim_channel: int = 3,
+        dim_token: int = 256,
+        *args,
         **kwargs,
     ):
         super().__init__()
@@ -24,25 +24,21 @@ class Vicon(nn.Module):
         self.patch_num_in = patch_num_in
         self.patch_num_out = patch_num_out
         self.demo_num = demo_num + 1  # 1 for quest
-        self.transformer_config = transformer_config or {}
-        self.ff = ff
-        self.compile = compile
         self.short_num_min = short_num_min
-
-        dim_channel = self.transformer_config.get("dim_channel", 3)
-        dim_token = self.transformer_config.get("dim_token", 256)
+        self.dim_channel = dim_channel
+        self.dim_token = dim_token
 
         self.pre_proj = nn.Linear(
-            in_features=dim_channel * self.patch_resolution**2,
-            out_features=dim_token,
+            in_features=self.dim_channel * self.patch_resolution**2,
+            out_features=self.dim_token,
         )
         self.post_proj = nn.Linear(
-            in_features=dim_token,
-            out_features=dim_channel * self.patch_resolution**2,
+            in_features=self.dim_token,
+            out_features=self.dim_channel * self.patch_resolution**2,
         )
 
-        self.patch_pos_encoding = nn.Parameter(torch.randn(self.patch_num_in * self.patch_num_in, dim_token))
-        self.func_pos_encoding = nn.Parameter(torch.randn(self.demo_num * 2, dim_token))
+        self.patch_pos_encoding = nn.Parameter(torch.randn(self.patch_num_in * self.patch_num_in, self.dim_token))
+        self.func_pos_encoding = nn.Parameter(torch.randn(self.demo_num * 2, self.dim_token))
 
         self.transformer = transformer
 
@@ -56,7 +52,7 @@ class Vicon(nn.Module):
 
     def forward(self, cond, qoi):
         p = self.patch_num_in
-        d = self.transformer_config.get("dim_token", 256)
+        d = self.dim_token
 
         # Prepare the pairs (cond, qoi)
         x = torch.cat((cond[:, :, None, :, :], qoi[:, :, None, :, :]), dim=2)  # (bs, pairs, 2, c, h, w)
