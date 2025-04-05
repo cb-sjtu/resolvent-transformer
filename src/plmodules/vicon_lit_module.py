@@ -34,14 +34,29 @@ class ViconLitModule(BaseLitModule):
             ]
         )
 
+    def _prompt_normalization(self, x: torch.Tensor):
+        mean = x.mean(dim=(1, 3, 4), keepdim=True)  # Mean across seq, H, W -> (batch_size, 1, dim, 1, 1)
+        std = x.std(dim=(1, 3, 4), keepdim=True) + 1e-5  # Std across seq, H, W -> (batch_size, 1, dim, 1, 1)
+
+        x_normalized = (x - mean) / std
+
+        return x_normalized, mean, std
+
     def network_inference(self, data: ViconData):
         dummy_label = torch.zeros_like(data.demo_qoi[:, -1:, :, :, :])
-        qoi = torch.cat((data.demo_qoi, dummy_label), dim=1)
+        qoi = data.demo_qoi
         cond = torch.cat((data.demo_cond, data.quest_cond), dim=1)
+        cond_norm, cond_mean, cond_std = self._prompt_normalization(cond)
+        qoi_norm, qoi_mean, qoi_std = self._prompt_normalization(qoi)
+        qoi_norm = torch.cat((qoi_norm, dummy_label), dim=1)
 
-        # add prompt engineering here
-        outputs = self._model_forward(cond, qoi)
-        return outputs
+        outputs = self._model_forward(cond_norm, qoi_norm)
+        # denormalize the predicted QoI using the mean and std of the QoI
+        denormalized_outputs = {}
+        for key, tensor in outputs.items():
+            denormalized_outputs[key] = tensor * qoi_std + qoi_mean
+
+        return denormalized_outputs
 
     def _get_ground_truth_all(self, data: ViconData, label: BaseLabelData):
         qoi = data.demo_qoi
