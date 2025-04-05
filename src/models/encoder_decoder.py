@@ -1,16 +1,21 @@
 from torch import nn
 
-from .transformer import get_transformer
-
 
 class EncoderDecoder(nn.Module):
     def __init__(
         self,
-        encoder_in_proj: nn.Linear,
-        decoder_in_proj: nn.Linear,
+        encoder_in_proj: nn.Module,
+        decoder_in_proj: nn.Module,
         encoder: nn.Module,
         decoder: nn.Module,
-        out_proj: nn.Linear,
+        out_proj: nn.Module,
+        f_input_dim: int = 2,
+        g_input_dim: int = 1,
+        widening_factor: int = 4,
+        dropout: float = 0.0,
+        compile: bool = True,
+        *args,
+        **kwargs,
     ):
         super().__init__()
         self.encoder_in_proj = encoder_in_proj
@@ -19,20 +24,11 @@ class EncoderDecoder(nn.Module):
         self.decoder = decoder
         self.out_proj = out_proj
 
-    def encoder_in_proj(self, f_input_dim, model_dim):
-        self.encoder_in_proj = nn.Linear(f_input_dim, model_dim)
-
-    def decoder_in_proj(self, g_input_dim, model_dim):
-        self.decoder_in_proj = nn.Linear(g_input_dim, model_dim)
-
-    def encoder(self, model_dim, n_heads, widening_factor, n_layers):
-        self.encoder = get_transformer(model_dim, n_heads, widening_factor, n_layers, mode="encoder")
-
-    def decoder(self, model_dim, n_heads, widening_factor, n_layers):
-        self.decoder = get_transformer(model_dim, n_heads, widening_factor, n_layers, mode="decoder")
-
-    def out_proj(self, model_dim):
-        self.out_proj = nn.Linear(model_dim, 1)
+        self.f_input_dim = f_input_dim
+        self.g_input_dim = g_input_dim
+        self.widening_factor = widening_factor
+        self.dropout = dropout
+        self.compile = compile
 
     def forward(self, memory, query):
         memory = self.encoder_in_proj(memory)

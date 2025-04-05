@@ -15,10 +15,7 @@ class OperatorLitModule(BaseLitModule):
         self.save_hyperparameters(logger=False)
         self.cfg = cfg
 
-        if cfg.model.get("encoder-decoder"):
-            self.net = hydra.utils.instantiate(cfg.model)
-        else:
-            raise ValueError("EncoderDecoder not found in config")
+        self.net = hydra.utils.instantiate(cfg.model)
 
         self.train_metrics = MeanMetric()
 
