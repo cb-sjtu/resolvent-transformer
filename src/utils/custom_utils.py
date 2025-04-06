@@ -1,6 +1,6 @@
 """
 this file contains custom utils not included in the original template
-but useful for our projects
+but useful for our research. For project-specific utils, see project_utils.py
 """
 
 from omegaconf import DictConfig
