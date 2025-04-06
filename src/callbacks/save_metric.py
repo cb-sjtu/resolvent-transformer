@@ -35,14 +35,24 @@ class SaveMetric(L.Callback):
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
         if dataset_name not in self.valid_outputs:
             self.valid_outputs[dataset_name] = []
-        self.valid_outputs[dataset_name].append(outputs["metrics"])
+        self.valid_outputs[dataset_name].append(
+            {
+                "description": cu.get_batch_description(batch),  # [str] * bs
+                "metrics": outputs["metrics"],  # dict {str: tensor[bs,...]}
+            }
+        )
 
     def on_test_batch_end(self, trainer, pl_module, outputs: dict, batch, batch_idx, dataloader_idx=0):
         """Cache test batch outputs. Only save metrics since they are smaller than preds and errors."""
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
         if dataset_name not in self.test_outputs:
             self.test_outputs[dataset_name] = []
-        self.test_outputs[dataset_name].append(outputs["metrics"])
+        self.test_outputs[dataset_name].append(
+            {
+                "description": cu.get_batch_description(batch),  # [str] * bs
+                "metrics": outputs["metrics"],  # dict {str: tensor[bs,...]}
+            }
+        )
 
     def on_validation_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
         """Save valid outputs for each process."""
@@ -61,13 +71,23 @@ class SaveMetric(L.Callback):
     def _save_outputs(self, dirpath: Path, outputs: list[dict], rank: int) -> None:
         if len(outputs) == 0:
             return  # in case of no valid_step or test_step
+
         # save the outputs for each process
-        for key in outputs[0]:
+
+        # save descriptions
+        full_path = dirpath / f"description_rank{rank}.txt"
+        with open(full_path, "w") as f:
+            for out in outputs:
+                for desc in out["description"]:
+                    f.write(desc + "\n")
+
+        # save metrics
+        for key in outputs[0]["metrics"]:
             file_key = key.replace("/", "_")
             full_path = dirpath / f"{file_key}_rank{rank}.txt"
             with open(full_path, "w") as f:
                 for out in outputs:
-                    tensor = out[key].detach().cpu().numpy()
+                    tensor = out["metrics"][key].detach().cpu().numpy()
                     if tensor.ndim == 0:  # scalar, sometimes metrics are not sample-wise
                         f.write(str(tensor) + "\n")
                     else:  # (bs, ...)
