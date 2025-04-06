@@ -7,7 +7,7 @@ import torch
 import src.utils.custom_utils as cu
 
 
-class PrintData(L.Callback):
+class SaveData(L.Callback):
     def __init__(
         self,
         dirpath: str,

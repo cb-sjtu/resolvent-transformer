@@ -1,5 +1,5 @@
-print_data:
-  _target_: src.callbacks.PrintData
+save_data:
+  _target_: src.callbacks.SaveData
   dirpath: ${paths.output_dir}/data
   print_lv_local: 2
   print_lv_log: 1

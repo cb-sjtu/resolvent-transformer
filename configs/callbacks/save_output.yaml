@@ -1,3 +1,0 @@
-save_output:
-  _target_: src.callbacks.SaveOutput
-  dirpath: ${paths.output_dir}/output

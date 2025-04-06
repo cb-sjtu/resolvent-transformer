@@ -6,7 +6,7 @@ import lightning as L
 import src.utils.custom_utils as cu
 
 
-class SaveOutput(L.Callback):
+class SaveMetric(L.Callback):
     def __init__(
         self,
         dirpath: str,
