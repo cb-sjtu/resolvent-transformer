@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from omegaconf import DictConfig
 from torchmetrics import MeanMetric, MetricCollection
 
+import src.utils.custom_utils as cu
 from src.datasets.data_utils import BaseLabelData, OperatorData
 from src.plmodules.base_lit_module import BaseLitModule
 
@@ -67,15 +68,16 @@ class OperatorLitModule(BaseLitModule):
     def validation_step(self, batch: OperatorData, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         data, label = batch["data"], batch["label"]
         loss = self._loss_function(data, label)
-        error = self.get_error(data, label)
+        errors = self.get_error(data, label)
+        preds = self.get_pred(data)
 
-        metrics = {"loss": loss.mean(), "error": error.mean()}
+        # TODO: suggest using sample-wise metrics, i.e. each of shape (batch, ...)
+        metrics = {"loss": loss.mean(), "error": errors.mean()}
 
         for metric_name in self.metric_names:
             self.valid_metrics[dataloader_idx][metric_name].update(metrics[metric_name])
 
-        valid_key = list(self.cfg.data.valid.keys())[dataloader_idx]
-        valid_name = self.cfg.data.valid[valid_key].name
+        valid_name = cu.get_dataset_name(self.cfg.data.valid, dataloader_idx)
 
         for metric_name in self.metric_names:
             self.log(
@@ -85,7 +87,7 @@ class OperatorLitModule(BaseLitModule):
                 on_epoch=True,
                 add_dataloader_idx=False,
             )
-        return metrics
+        return {"preds": preds, "errors": errors, "metrics": metrics}
 
     def test_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         pass

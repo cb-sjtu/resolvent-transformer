@@ -4,7 +4,10 @@ defaults:
   - model_summary
   - rich_progress_bar
   - print_model
+  - print_data
   - save_ckpt
+  - save_output
+  # - viz
   # - _self_
 
 # model_checkpoint:

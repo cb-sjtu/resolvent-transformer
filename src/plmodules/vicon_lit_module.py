@@ -93,7 +93,7 @@ class ViconLitModule(BaseLitModule):
         all_pred = self._get_pred_all(outputs)
         all_ground_truth = self._get_ground_truth_all(data, label)
         error = all_pred - all_ground_truth
-        return error
+        return all_pred, error
 
     def _loss_quest(self, batch: dict, short_num_min=1) -> torch.Tensor:
         data = batch["data"]
@@ -128,9 +128,9 @@ class ViconLitModule(BaseLitModule):
     ############ validation #############
     def validation_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         loss = self._loss_all(batch)
-        error = self._error_all(batch)
+        preds, errors = self._error_all(batch)
 
-        metrics = {"loss": loss.mean(), "error": error.mean()}
+        metrics = {"loss": loss.mean(), "error": errors.mean()}
 
         for metric_name in self.metric_names:
             self.valid_metrics[dataloader_idx][metric_name].update(metrics[metric_name])
@@ -146,7 +146,7 @@ class ViconLitModule(BaseLitModule):
                 on_epoch=True,
                 add_dataloader_idx=False,
             )
-        return metrics
+        return {"preds": preds, "errors": errors, "metrics": metrics}
 
     def test_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         pass
