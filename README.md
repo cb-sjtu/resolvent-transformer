@@ -59,7 +59,7 @@ python src/train.py --config-name=train_operator # logger=[csv,wandb] data.batch
 ```
 
 ## Machine-specific custom configurations
-Some configurations are machine-specific. For example, the data directory, log directory, and analysis directory. You can create a yaml file in `configs/train_custom.yaml`, and add contents like the following:
+Some configurations are machine-specific. For example, the data directory and log directory. You can create a yaml file in `configs/train_custom.yaml`, and add contents like the following:
 
 ```yaml
 defaults:
@@ -70,7 +70,6 @@ defaults:
 paths:
   data_dir: /scratch/projects/CFP01/CFP01-SF-009/data/material/
   log_dir: /scratch/projects/CFP01/CFP01-SF-009/YOURID/logs/material/
-  analysis_dir: /scratch/projects/CFP01/CFP01-SF-009/2501_ICE/analysis/material/YOURID/
 
 ```
 This file will be ignored by git, so that they are only effective on your machine and won't affect others.
