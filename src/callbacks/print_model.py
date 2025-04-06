@@ -20,7 +20,7 @@ class PrintModel(L.Callback):
         pl_module.print(f"Trainable Parameters: {trainable_params:,}")
 
         pl_module.print(f"SDPA backends: {pl_module.sdpa_backends}")
-        print_config_tree(pl_module.cfg)
+        print_config_tree(pl_module.cfg, resolve=True)
 
     def on_train_batch_start(self, trainer: L.Trainer, pl_module: L.LightningModule, batch, batch_idx):
         cfg = pl_module.cfg

@@ -1,2 +1,6 @@
 viz_node:
   _target_: src.callbacks.Viz
+  valid_max_batches_local: 1
+  valid_max_batches_log: 1
+  test_max_batches_local: 1
+  test_max_batches_log: 1

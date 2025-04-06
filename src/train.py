@@ -2,6 +2,7 @@ from typing import Any
 
 import hydra
 import lightning as L
+import rich
 import rootutils
 import torch
 import torch._dynamo
@@ -115,6 +116,9 @@ def main(cfg: DictConfig) -> float | None:
     :param cfg: DictConfig configuration composed by Hydra.
     :return: Optional[float] with optimized metric value.
     """
+
+    rich.console.Console.width = 200  # Disable wrapping globally
+
     # apply extra utilities
     # (e.g. ask for tags if none are provided in cfg, print cfg tree, etc.)
     extras(cfg)
