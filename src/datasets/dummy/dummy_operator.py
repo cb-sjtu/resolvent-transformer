@@ -23,7 +23,11 @@ class DummyOperatorDataset(Dataset):
         g_inputs = torch.randn(1, self.g_seq_len, self.g_in_dim)
         g_targets = torch.randn(1, self.g_seq_len, self.g_out_dim)
 
-        data = OperatorData(description=[f"data from {self.name}"], f_samples=f_samples, g_inputs=g_inputs)
+        data = OperatorData(
+            description=[f"data from {self.name}, idx: {idx}, random state: {torch.randn(1).item()}"],
+            f_samples=f_samples,
+            g_inputs=g_inputs,
+        )
         label = BaseLabelData(description=[f"label from {self.name}"], label=g_targets)
 
         return {"data": data, "label": label}

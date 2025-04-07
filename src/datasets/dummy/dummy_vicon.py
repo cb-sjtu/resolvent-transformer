@@ -23,7 +23,7 @@ class DummyViconDataset(Dataset):
         quest_qoi = torch.randn(1, 1, self.qoi_shape[0], self.qoi_shape[1], self.qoi_shape[2])
 
         data = ViconData(
-            description=[f"data from {self.name}"],
+            description=[f"data from {self.name}, idx: {idx}, random state: {torch.randn(1).item()}"],
             demo_cond=demo_cond,
             demo_qoi=demo_qoi,
             quest_cond=quest_cond,
