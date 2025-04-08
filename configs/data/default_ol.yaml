@@ -1,12 +1,11 @@
 defaults:
+  - dataloader
   - train:
     - dummy_ol
     - dummy_ol_large
   - valid:
     - dummy_ol
     - dummy_ol_large
-
+  - _self_
 
 data_folder: ${paths.data_dir}/placeholder
-
-batch_size_per_gpu: 16

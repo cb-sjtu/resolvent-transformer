@@ -6,5 +6,8 @@ dummy_vicon:
     demo_num: ${data.demo_num}
     cond_shape: ${data.cond_shape}
     qoi_shape: ${data.qoi_shape}
-  
-  batch_size_per_gpu: ${data.batchsize}
+
+  num_workers: ${data.num_workers}
+  pin_memory: ${data.pin_memory}
+  batch_size_per_device: ${data.batch_size_per_device}
+  random_across_devices: ${data.random_across_devices}
