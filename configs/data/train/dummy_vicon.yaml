@@ -1,6 +1,5 @@
 dummy_vicon:
-  name: dummy_vicon
-  description: "Vicon train dummy data"
+  name: train_dummy_vicon
   dataset:
     _target_: src.datasets.dummy.DummyViconDataset
     demo_num: ${data.demo_num}

@@ -1,7 +1,5 @@
 dummy_ol_large:
-  name: dummy_ol_large
-  description: "Operator Learning dummy data, larger size"
-
+  name: valid_dummy_ol_large
   dataset:
     _target_: src.datasets.dummy.DummyOperatorDataset
     f_seq_len: 200

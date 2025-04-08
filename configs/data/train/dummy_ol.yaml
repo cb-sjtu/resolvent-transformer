@@ -1,7 +1,5 @@
 dummy_ol:
-  name: dummy_ol
-  description: "Operator Learning dummy data"
-
+  name: train_dummy_ol
   dataset:
     _target_: src.datasets.dummy.DummyOperatorDataset
     f_seq_len: 100
