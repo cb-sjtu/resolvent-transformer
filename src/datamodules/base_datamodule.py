@@ -33,13 +33,7 @@ def custom_worker_seed_fn(worker_id: int, rank: int, base_seed: int | None, data
             validation/testing dataset should be deterministic in general, but some cases require RNG within the dataset
             if RNG is used, validation/testing results will not be reproducible if batches or the num_workers is changed
     """
-    if print_seed:
-        print(
-            f"dataset: {dataset_name}, rank: {rank}, worker_id: {worker_id}, "
-            f"original initial_seed: {torch.initial_seed()}",
-            flush=True,
-        )
-
+    original_seed = torch.initial_seed()
     # worker_seed should include the base_seed and the worker_id
     worker_seed = torch.initial_seed() if base_seed is None else (base_seed + worker_id)
     seed = (rank * 1000 + worker_seed) % 0xFFFF_FFFF_FFFF_FFFF
@@ -49,6 +43,7 @@ def custom_worker_seed_fn(worker_id: int, rank: int, base_seed: int | None, data
     if print_seed:
         print(
             f"dataset: {dataset_name}, rank: {rank}, worker_id: {worker_id}, "
+            f"original initial_seed: {original_seed}, "
             f"updated initial_seed: {torch.initial_seed()}",
             flush=True,
         )
