@@ -18,7 +18,17 @@ conda activate sg
 
 python3 src/train.py --config-name=train_operator trainer.max_steps=100 \
             trainer.val_check_interval=50 trainer.limit_val_batches=50 \
-            data.num_workers=2 callbacks=[rich_progress_bar] print_lv=2 \
+            data.num_workers=2 callbacks=[rich_progress_bar,save_data] print_lv=2 \
+            callbacks.save_data.train_max_batches_log=0 \
+            callbacks.save_data.valid_max_batches_log=0 \
+            callbacks.save_data.test_max_batches_log=0
+
+python3 src/train.py --config-name=train_operator trainer=gpu trainer.max_steps=100 \
+            trainer.val_check_interval=50 trainer.limit_val_batches=50 \
+            data.num_workers=2 callbacks=[rich_progress_bar,save_data] print_lv=2 \
+            callbacks.save_data.train_max_batches_log=0 \
+            callbacks.save_data.valid_max_batches_log=0 \
+            callbacks.save_data.test_max_batches_log=0
 
 
 echo "Done"

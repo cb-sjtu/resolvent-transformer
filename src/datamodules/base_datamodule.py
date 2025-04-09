@@ -70,8 +70,6 @@ class BaseDataModule(LightningDataModule):
         self.save_hyperparameters(logger=False)
         self.cfg = cfg
 
-        self.need_distributed = cfg.trainer.get("strategy") is not None and "ddp" in cfg.trainer.strategy
-
     def prepare_data(self) -> None:
         """Download data if needed. Lightning ensures that `self.prepare_data()` is called only
         within a single process on CPU, so you can safely add your downloading logic within. In
@@ -129,21 +127,21 @@ class BaseDataModule(LightningDataModule):
             print_seed=self.cfg.print_lv >= 2,
         )
 
-        # if not distributed, a plain DataLoader is enough
-        if not self.need_distributed:
+        if torch.distributed.is_initialized():
+            # if distributed, use DistributedSampler
+            # we will wrap the dataloader in CycleLoader,
+            # therefore lightning cannot automatically handle DistributedSampler
+            return DataLoader(
+                dataset=dataset,
+                sampler=DistributedSampler(dataset=dataset, shuffle=True, drop_last=True),
+                worker_init_fn=worker_init_fn,
+                **common_kwargs,
+            )
+        else:
+            # if not distributed, a plain DataLoader is enough
             return DataLoader(
                 dataset=dataset, shuffle=True, drop_last=True, worker_init_fn=worker_init_fn, **common_kwargs
             )
-
-        # if distributed, use DistributedSampler
-        # we will wrap the dataloader in CycleLoader,
-        # therefore lightning cannot automatically handle DistributedSampler
-        return DataLoader(
-            dataset=dataset,
-            sampler=DistributedSampler(dataset=dataset, shuffle=True, drop_last=True),
-            worker_init_fn=worker_init_fn,
-            **common_kwargs,
-        )
 
     def valid_test_dataloader_from_cfg(self, cfg):
         """
