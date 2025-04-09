@@ -1,62 +1,12 @@
-import random
 from functools import partial
 
 import hydra
-import numpy as np
 import torch
 from lightning import LightningDataModule
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, DistributedSampler
 
-import src.datasets.data_utils as du
-from src.datamodules.dataloader import CycleLoader
-
-
-def custom_worker_seed_fn(worker_id: int, rank: int, base_seed: int | None, dataset_name: str, print_seed: bool):
-    """
-    custom seed for each worker
-    seeds ALWAYS vary across different workers on the same device
-    case 0: base_seed is None, rank = 0
-            seeds vary across different calls of this function, but are shared across different devices
-            essentially doing nothing, i.e. worker_init_fn = None (except for numpy and random seeding and printing)
-            this is usually for training, but we want to keep the same seed across different devices
-            so that the (random) reshape can be synchronized across different devices (for acceleration)
-    case 1: base_seed is None, rank = global_rank
-            seeds vary across different calls of this function, and vary across different devices
-            this is usually for training with full randomness
-    case 3: base_seed is not None, rank = 0
-            seeds are fixed across different calls of this function and different devices
-            this is not common
-    case 4: base_seed is not None, rank = global_rank
-            seeds are fixed across different calls of this function, but vary across different devices
-            this is usually for validation/testing, so different epochs can be fairly compared
-            validation/testing dataset should be deterministic in general, but some cases require RNG within the dataset
-            if RNG is used, validation/testing results will not be reproducible if batches or the num_workers is changed
-    """
-    original_seed = torch.initial_seed()
-    # worker_seed should include the base_seed and the worker_id
-    worker_seed = torch.initial_seed() if base_seed is None else (base_seed + worker_id)
-    seed = (rank * 1000 + worker_seed) % 0xFFFF_FFFF_FFFF_FFFF
-    torch.manual_seed(seed)
-    np.random.seed(seed % 0xFFFF_FFFF)
-    random.seed(seed % 0xFFFF_FFFF)
-    if print_seed:
-        print(
-            f"dataset: {dataset_name}, rank: {rank}, worker_id: {worker_id}, "
-            f"original initial_seed: {original_seed}, "
-            f"updated initial_seed: {torch.initial_seed()}",
-            flush=True,
-        )
-
-
-def collate_fn(raw_list: list[dict]):
-    data_list = [item["data"] for item in raw_list]
-    label_list = [item["label"] for item in raw_list]
-
-    combined_data = du.concat_data(data_list)
-    combined_labels = du.concat_data(label_list)
-
-    return {"data": combined_data, "label": combined_labels}
+from src.datamodules.dataloader_utils import CycleLoader, collate_fn, custom_worker_seed_fn
 
 
 class BaseDataModule(LightningDataModule):
@@ -164,7 +114,7 @@ class BaseDataModule(LightningDataModule):
         # Since we're not using CycleLoader here, we can rely on Lightning's built-in handling of DistributedSampler
         return DataLoader(
             dataset=dataset,
-            shuffle=False,
+            shuffle=False,  # careful: different from train_dataloader
             drop_last=False,  # careful: different from train_dataloader
             worker_init_fn=worker_init_fn,
             **common_kwargs,
