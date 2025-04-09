@@ -38,7 +38,8 @@ class Viz(L.Callback):
                 dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
                 dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
                 os.makedirs(dirpath, exist_ok=True)
-        torch.distributed.barrier()  # wait for all processes to finish
+        if torch.distributed.is_initialized():  # only for distributed training
+            torch.distributed.barrier()  # wait for all processes to finish
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         if batch_idx >= self.valid_max_batches_local:
@@ -65,7 +66,8 @@ class Viz(L.Callback):
                 dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
                 dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
                 os.makedirs(dirpath, exist_ok=True)
-        torch.distributed.barrier()  # wait for all processes to finish
+        if torch.distributed.is_initialized():  # only for distributed training
+            torch.distributed.barrier()  # wait for all processes to finish
 
     def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         if batch_idx >= self.test_max_batches_local:

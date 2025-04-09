@@ -12,3 +12,4 @@ dummy_ol_large:
   pin_memory: ${data.pin_memory}
   batch_size_per_device: ${data.batch_size_per_device}
   random_across_devices: ${data.random_across_devices}
+  base_seed: ${data.valid_base_seed}
