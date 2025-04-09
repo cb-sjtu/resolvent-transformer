@@ -2,3 +2,5 @@ num_workers: 4
 pin_memory: true
 batch_size_per_device: 8
 random_across_devices: true
+valid_base_seed: 42
+test_base_seed: 22
