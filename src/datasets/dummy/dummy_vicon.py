@@ -11,7 +11,7 @@ class DummyViconDataset(Dataset):
         self.qoi_shape = qoi_shape  # (qoi_dim, qoi_h, qoi_w)
 
     def __len__(self):
-        return 1000
+        return 500
 
     def __getitem__(self, idx):
         demo_cond = torch.randn(1, self.demo_num, self.cond_shape[0], self.cond_shape[1], self.cond_shape[2])

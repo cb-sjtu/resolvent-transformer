@@ -13,7 +13,7 @@ class DummyOperatorDataset(Dataset):
         self.g_out_dim = g_out_dim
 
     def __len__(self):
-        return 1000
+        return 500
 
     def __getitem__(self, idx):
         f_samples = torch.randn(1, self.f_seq_len, self.f_inout_dim)
