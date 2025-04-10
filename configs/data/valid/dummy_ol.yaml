@@ -11,5 +11,5 @@ dummy_ol:
   num_workers: ${data.num_workers}
   pin_memory: ${data.pin_memory}
   batch_size_per_device: ${data.batch_size_per_device}
-  random_across_devices: ${data.random_across_devices}
+  enable_device_seed: false
   base_seed: ${data.valid_base_seed}
