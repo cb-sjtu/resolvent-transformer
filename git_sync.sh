@@ -15,11 +15,13 @@ fi
 
 # Check if upstream remote exists
 if git remote | grep -q upstream; then
+    echo "----------------------------------------------------------------------------------"
     echo "Detected upstream repository, syncing upstream/main to origin/main..."
     git fetch upstream main
     git checkout main
     git merge upstream/main
     git push origin main
+    echo "----------------------------------------------------------------------------------"
 else
     echo "----------------------------------------------------------------------------------"
     echo "No upstream repository detected, skipping upstream/main sync"
