@@ -1,9 +1,8 @@
 # Testbed 
 
-## Use this repository as a template
-** Please delete this section in the new repository **
+## Use this repository as a upstream
 
-This repository is a private repository shared inside our group as a template. It's actively maintained. 
+This repository is a private repository shared inside our group as the core repository. It's actively maintained. 
 
 Although it's a private repository, we may start from this repository for new projects and publish the code. Sometimes we have to publish anonymous code for peer review. So this repository is **ready to be published anonymously any time**.
 
@@ -20,10 +19,8 @@ It should not include:
   - TODO: improve the anonymity and list all the exceptions.
 
 If you want to do some experiments, you should:
-- Create a new repository based on this template (https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template). Make sure you set the owner as "scaling-group". 
-- This template contains some parts that you do not need. You are strongly encouraged to remove them in the new repository for clarity, at least before publishing.
-- When you publish your code, please replace this `README.md` with your own one. Remember to remove the personal information discussed above for anonymity.
-- If you have something worth being included in this template, add them and create a pull request. Don't commit to the main branch.
+- Fork this repository. Make sure you set the owner of the forked repository as "scaling-group". 
+- Don't modify the files in this repository. Add new files in your forked repository instead.
 
 We will consider open source this repository when it's stable and useful for others.
 
