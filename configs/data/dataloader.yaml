@@ -1,6 +1,8 @@
 num_workers: 4
 pin_memory: true
 batch_size_per_device: 8
-random_across_devices: true
+train_enable_device_seed: true
+valid_enable_device_seed: true
+test_enable_device_seed: true
 valid_base_seed: 42
 test_base_seed: 22

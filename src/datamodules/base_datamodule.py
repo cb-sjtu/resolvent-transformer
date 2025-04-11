@@ -1,12 +1,10 @@
-from functools import partial
-
 import hydra
 import torch
 from lightning import LightningDataModule
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, DistributedSampler
 
-from src.datamodules.dataloader_utils import CycleLoader, collate_fn, custom_worker_seed_fn
+from src.datamodules.dataloader_utils import CycleLoader, collate_fn, get_worker_seed_fn
 
 
 class BaseDataModule(LightningDataModule):
@@ -60,16 +58,16 @@ class BaseDataModule(LightningDataModule):
             "collate_fn": collate_fn,
         }
 
-        # if random_across_devices: seeds vary across different devices
+        # if enable_device_seed: seeds vary across different devices
         # it's safe to use global_rank even if not distributed
-        # if not random_across_devices: seeds are shared across different devices (with worker-specific variations)
+        # if not enable_device_seed: seeds are shared across different devices (with worker-specific variations)
         # essentially doing nothing
-        worker_init_fn = partial(
-            custom_worker_seed_fn,
-            rank=self.trainer.global_rank if cfg.random_across_devices else 0,
+        worker_init_fn = get_worker_seed_fn(
             base_seed=None,
-            dataset_name=cfg.name,
-            print_seed=self.cfg.print_lv >= 2,
+            rank=self.trainer.global_rank,
+            enable_device_seed=cfg.enable_device_seed,
+            print_info=cfg.name,
+            print_lv=self.cfg.print_lv,
         )
 
         if torch.distributed.is_initialized():
@@ -103,12 +101,12 @@ class BaseDataModule(LightningDataModule):
         }
 
         # always use global_rank
-        worker_init_fn = partial(
-            custom_worker_seed_fn,
-            rank=self.trainer.global_rank,
+        worker_init_fn = get_worker_seed_fn(
             base_seed=cfg.base_seed,
-            dataset_name=cfg.name,
-            print_seed=self.cfg.print_lv >= 2,
+            rank=self.trainer.global_rank,
+            enable_device_seed=cfg.enable_device_seed,
+            print_info=cfg.name,
+            print_lv=self.cfg.print_lv,
         )
 
         # Since we're not using CycleLoader here, we can rely on Lightning's built-in handling of DistributedSampler

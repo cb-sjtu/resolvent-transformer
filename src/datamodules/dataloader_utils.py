@@ -6,48 +6,83 @@ import torch
 import src.datasets.data_utils as du
 
 
-def custom_worker_seed_fn(worker_id: int, rank: int, base_seed: int | None, dataset_name: str, print_seed: bool):
+def get_worker_seed_fn(
+    base_seed: int | None, rank: int, enable_device_seed: bool, print_info: str, print_lv: int = 0
+) -> callable:
     """
-    custom seed for each worker, use as worker_init_fn in DataLoader
-    This function is called for each worker every time when it is initialized
+    Custom seed function for each worker (used as `worker_init_fn` in a DataLoader).
 
-    seeds ALWAYS vary across different workers on the same device
-    case 0: base_seed is None, rank = 0
-            seeds vary across different calls of this function, but are shared across different devices
-            essentially doing nothing, i.e. worker_init_fn = None (except for numpy and random seeding and printing)
-            this is usually for training, but we want to keep the same seed across different devices
-            so that the (random) reshape can be synchronized across different devices (for acceleration)
-    case 1: base_seed is None, rank = global_rank
-            seeds vary across different calls of this function, and vary across different devices
-            this is usually for training with full randomness
-    case 3: base_seed is not None, rank = 0
-            seeds are fixed across different calls of this function and different devices
-            this is not common
-    case 4: base_seed is not None, rank = global_rank
-            seeds are fixed across different calls of this function, but vary across different devices
-            this is usually for validation/testing, so different epochs can be fairly compared
-            validation/testing dataset should be deterministic in general, but some cases require RNG within the dataset
-            if RNG is used, validation/testing results will not be reproducible if batches or the num_workers is changed
+    This function is called every time a worker is initialized. **Seeds always vary**
+    across different workers on the same device.
+
+    Args:
+        worker_id (int): ID of the worker process.
+        rank (int): Global rank (0-based index) of the process.
+        base_seed (int | None): Base seed to initialize the random generator.
+            If `None`, a dynamic seed is used.
+        print_info (str, optional): Optional string to print for debugging or
+            informational purposes.
+        print_lv (int, optional): Optional integer to control the verbosity of
+            the print statement. Print only when `print_lv >= 2`.
+
+    The function behaves differently depending on the combination of `base_seed`
+    and `rank`, identified by the following cases:
+
+    **case 0**:
+        - base_seed is `None`, `enable_device_seed = False`
+        - seeds vary across different calls of this function, but are shared across different devices
+        essentially doing nothing, i.e. `worker_init_fn = None` (except for numpy and random seeding and printing)
+        this is usually for training, but we want to keep the same seed across different devices
+        so that the (random) reshape can be synchronized across different devices (for acceleration)
+
+    **case 1**:
+        - base_seed is `None`, `enable_device_seed = True`
+        - seeds vary across different calls of this function, and vary across different devices
+        this is usually for training with full randomness
+
+    **case 2**:
+        - base_seed is not `None`, `enable_device_seed = False`
+        - seeds are fixed across different calls of this function and different devices
+        this is not common
+
+    **case 3**:
+        - base_seed is not `None`, `enable_device_seed = True`
+        - seeds are fixed across different calls of this function, but vary across different devices
+        this is usually for validation/testing, so different epochs can be fairly compared
+        validation/testing dataset should be deterministic in general, but some cases require RNG within the dataset
+        if RNG is used, validation/testing results will not be reproducible if batches or the num_workers is changed
     """
     # in pytorch, torch.initial_seed() = base_seed + worker_id
+    # see https://github.com/pytorch/pytorch/blob/a6933a1c423261de4e0c47387b6b83869f869aa1/torch/utils/data/dataloader.py#L1147
     # base_seed varies in different calls, but is shared across different devices by default
     # when Dataloader is created, it gets a RNG derived from the main process (or you can manually pass one into it)
     # this RNG is shared across devices by default (if not manually set with rank)
     # then every time when __iter__() is called, Dataloader use this RNG to generate (new) base_seed for each worker
-    original_seed = torch.initial_seed()
-    # worker_seed = base_seed + worker_id
-    worker_seed = torch.initial_seed() if base_seed is None else (base_seed + worker_id)
-    seed = (rank * 1000 + worker_seed) % 0xFFFF_FFFF_FFFF_FFFF
-    torch.manual_seed(seed)
-    np.random.seed(seed % 0xFFFF_FFFF)
-    random.seed(seed % 0xFFFF_FFFF)
-    if print_seed:
-        print(
-            f"dataset: {dataset_name}, rank: {rank}, worker_id: {worker_id}, "
-            f"original initial_seed: {original_seed}, "
-            f"updated initial_seed: {torch.initial_seed()}",
-            flush=True,
-        )
+
+    def worker_init_fn(worker_id: int) -> None:
+        original_seed = torch.initial_seed()  # = base_seed + worker_id
+        # worker_seed = base_seed + worker_id
+        seed_suffix = (original_seed - worker_id) % 0x1_0000_0000 if base_seed is None else base_seed % 0x1_0000_0000
+        seed = (
+            seed_suffix * 0x1_0000_0000 + (rank if enable_device_seed else 0xFFFF) * 0x1_0000 + worker_id
+        )  # {original_seed_suffix}_{rank}_{worker_id}
+        torch.manual_seed(seed)
+        random.seed(seed)
+
+        np_seed = torch.randint(0, 0xFFFF_FFFF, (1,), dtype=torch.int64).item()
+        # alternatively, we may use `seed` and `worker_id` to re-generate a random seed
+        # https://github.com/pytorch/pytorch/blob/a6933a1c423261de4e0c47387b6b83869f869aa1/torch/utils/data/_utils/worker.py#L176
+        np.random.seed(np_seed)
+
+        if print_lv >= 2:
+            print(
+                f"r/w=[0x{rank:04x}/0x{worker_id:04x}]\t"
+                f"original: 0x{original_seed:016x}\t"
+                f"updated: 0x{seed:016x} ({print_info})",
+                flush=True,
+            )
+
+    return worker_init_fn
 
 
 def collate_fn(raw_list: list[dict]):
