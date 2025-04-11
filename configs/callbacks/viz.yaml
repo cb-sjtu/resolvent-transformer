@@ -1,5 +1,5 @@
 viz:
-  _target_: src.callbacks.Viz
+  _target_: src.callbacks.viz.Viz
   dirpath: ${paths.output_dir}/viz
   valid_max_batches_local: 1
   valid_max_batches_log: 1

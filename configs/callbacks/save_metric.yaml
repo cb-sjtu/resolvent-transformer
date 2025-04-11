@@ -1,3 +1,3 @@
 save_metric:
-  _target_: src.callbacks.SaveMetric
+  _target_: src.callbacks.save_metric.SaveMetric
   dirpath: ${paths.output_dir}/metric

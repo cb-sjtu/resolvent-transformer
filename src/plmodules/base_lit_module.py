@@ -4,7 +4,7 @@ from omegaconf import DictConfig
 from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from src.opt import WarmupCosineDecayScheduler
+from src.opt.warmup_cosine_decay_scheduler import WarmupCosineDecayScheduler
 
 
 class BaseLitModule(L.LightningModule):
