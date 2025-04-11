@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 import hydra
@@ -107,9 +108,11 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     return metric_dict, object_dict
 
 
-# set the default config file
-# @hydra.main(version_base="1.3", config_path="../configs/", config_name="train_custom.yaml")
-@hydra.main(version_base="1.3", config_path="../configs/")  # no default config file, specify in command line
+# if train_custom.yaml exists, use it as default config file
+# otherwise, need to specify config file in command line
+config_file_name = "train_custom.yaml" if os.path.exists("./configs/train_custom.yaml") else None
+
+@hydra.main(version_base="1.3", config_path="../configs/", config_name = config_file_name)
 def main(cfg: DictConfig) -> float | None:
     """Main entry point for training.
 

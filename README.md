@@ -57,6 +57,10 @@ Mannual format before commit: `ruff format && ruff check --fix`
 ```bash
 python src/train.py --config-name=train_operator # logger=[csv,wandb] data.batchsize=32
 ```
+If you have created `configs/train_custom.yaml` (see below), you can run:
+```bash
+python src/train.py # logger=[csv,wandb] data.batchsize=32
+```
 
 ## Machine-specific custom configurations
 Some configurations are machine-specific. For example, the data directory and log directory. You can create a yaml file in `configs/train_custom.yaml`, and add contents like the following:
@@ -68,8 +72,8 @@ defaults:
 
 # your custom configurations here, here is an example
 paths:
-  data_dir: /scratch/projects/CFP01/CFP01-SF-009/data/material/
-  log_dir: /scratch/projects/CFP01/CFP01-SF-009/YOURID/logs/material/
+  data_dir: /scratch/projects/CFP01/CFP01-SF-009/data/
+  log_dir: /scratch/$(whoami)/logs/
 
 ```
 This file will be ignored by git, so that they are only effective on your machine and won't affect others.
