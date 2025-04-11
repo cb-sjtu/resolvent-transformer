@@ -129,7 +129,7 @@ class BaseData:
         print_lv = 2: print all
         '''
         if print_lv == 0:
-            if not hasattr(self, "description"):
+            if not hasattr(self, "description") or self.description is None:
                 doc = ""
             elif isinstance(self.description, list | tuple):
                 doc = self.get_print_info_seq("description", self.description, print_lv=print_lv)
