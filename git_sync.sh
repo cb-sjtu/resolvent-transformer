@@ -19,7 +19,7 @@ if git remote | grep -q upstream; then
     echo "Detected upstream repository, syncing upstream/main to origin/main..."
     git fetch upstream main
     git checkout main
-    git merge upstream/main
+    git merge upstream/main --no-edit
     git push origin main
     echo "----------------------------------------------------------------------------------"
 else
@@ -33,7 +33,7 @@ fi
 # Pull latest code from origin/main
 echo "Pulling latest code from origin/main..."
 git checkout main
-git pull origin main
+git pull origin main --no-edit
 
 # Switch back to original branch
 echo "Switching back to original branch $current_branch..."
@@ -41,7 +41,7 @@ git checkout "$current_branch"
 
 # Merge changes from main branch
 echo "Merging changes from main branch..."
-git merge main
+git merge main --no-edit
 
 # If there was a stash, attempt to pop it
 if [ -z "$stash_skipped" ]; then
