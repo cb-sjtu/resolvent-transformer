@@ -100,32 +100,54 @@ class BaseData:
                     data_shape[attr] = tuple(value.shape)
         return dict_to_namedtuple(data_shape)
 
-    def get_print_info(self, print_lv: int = 1) -> str:
-        doc = "-" * 40 + "\n"
+    def _get_print_info_seq(self, attr: str, value: list | tuple, print_lv: int = 1) -> str:
+        '''
+        print the sequence of data
+        '''
+        doc = ""
+        doc += f"{attr}: length={len(value)}, {type(value).__name__} of {type(value[0]).__name__}\n"
+        if print_lv == 0 or print_lv == 1:  # print the first 2 and the last 2
+            if len(value) <= 4:
+                for i in range(len(value)):
+                    doc += str(value[i]) + "\n"
+            else:
+                for i in range(2):
+                    doc += str(value[i]) + "\n"
+                doc += "...\n"
+                doc += str(value[-2]) + "\n"
+                doc += str(value[-1]) + "\n"
+        if print_lv == 2:  # print all
+            for i in range(len(value)):
+                doc += str(value[i]) + "\n"
+        return doc
 
+    def get_print_info(self, print_lv: int = 1) -> str:
+        '''
+        print the information of the data
+        print_lv = 0: only print the first 2 and the last 2 of description list, ignore other attributes
+        print_lv = 1: print the first 2 and the last 2 of sequence attributes, and all other attributes
+        print_lv = 2: print all
+        '''
+        if print_lv == 0:
+            if not hasattr(self, "description"):
+                doc = ""
+            elif isinstance(self.description, list | tuple):
+                doc = self.get_print_info_seq("description", self.description, print_lv=print_lv)
+            else:
+                raise ValueError(f"Unknown type: {type(self.description)}")
+            return doc
+
+        doc = "-" * 20 + "\n"
         for attr, value in self.__dict__.items():
             if isinstance(value, torch.Tensor):
                 doc += f"{attr}: type={type(value)}\tshape={value.shape}\tdtype={value.dtype}\tdevice={value.device}\n"
             elif isinstance(value, np.ndarray):
                 doc += f"{attr}: type={type(value)}\tshape={value.shape}\tdtype={value.dtype}\n"
             elif isinstance(value, tuple | list):
-                doc += f"{attr}: length={len(value)}, {type(value).__name__} of {type(value[0]).__name__}\n"
-                if print_lv == 1:
-                    if len(value) <= 4:
-                        for i in range(len(value)):
-                            doc += str(value[i]) + "\n"
-                    else:
-                        for i in range(2):
-                            doc += str(value[i]) + "\n"
-                        doc += "...\n"
-                        doc += str(value[-2]) + "\n"
-                        doc += str(value[-1]) + "\n"
-                if print_lv == 2:
-                    for i in range(len(value)):
-                        doc += str(value[i]) + "\n"
+                doc += self._get_print_info_seq(attr, value, print_lv=print_lv)
             else:
                 doc += f"{attr}: type={type(value)}\t value={str(value)}\n"
-        doc += "-" * 40 + "\n"
+        doc += "-" * 20 + "\n"
         return doc
 
 
