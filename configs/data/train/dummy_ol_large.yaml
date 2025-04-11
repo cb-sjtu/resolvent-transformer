@@ -11,4 +11,4 @@ dummy_ol_large:
   num_workers: ${data.num_workers}
   pin_memory: ${data.pin_memory}
   batch_size_per_device: ${data.batch_size_per_device}
-  enable_device_seed: ${data.enable_device_seed}
+  enable_device_seed: ${data.train_enable_device_seed}

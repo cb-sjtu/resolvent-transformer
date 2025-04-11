@@ -9,5 +9,5 @@ dummy_vicon:
   num_workers: ${data.num_workers}
   pin_memory: ${data.pin_memory}
   batch_size_per_device: ${data.batch_size_per_device}
-  enable_device_seed: false
+  enable_device_seed: ${data.valid_enable_device_seed}
   base_seed: ${data.valid_base_seed}
