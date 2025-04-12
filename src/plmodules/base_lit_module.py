@@ -21,7 +21,7 @@ class BaseLitModule(L.LightningModule):
             "flash": SDPBackend.FLASH_ATTENTION,
         }
 
-        self.sdpa_backends = [sdpa_map[backend] for backend in self.cfg.sdpa]
+        self.sdpa_backends = [sdpa_map[backend] for backend in self.cfg.model.sdpa]
 
     def _model_forward(self, *args, **kwargs):
         with sdpa_kernel(self.sdpa_backends):

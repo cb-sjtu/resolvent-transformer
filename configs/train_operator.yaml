@@ -55,5 +55,3 @@ seed: 42
 dynamo_cache_size_limit: 0
 
 print_lv: 1
-
-sdpa: ["cudnn", "efficient", "flash", "math"] # may move to model in the future
