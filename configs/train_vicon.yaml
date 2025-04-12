@@ -8,7 +8,7 @@ defaults:
   - model: vicon
   - plmodule: vicon
   - datamodule: base
-  - loss: vicon
+  - loss: none
   - opt: default
   - callbacks: default
   - logger: many_loggers # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
