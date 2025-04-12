@@ -102,7 +102,7 @@ class BaseData:
 
     def _get_print_info_seq(self, attr: str, value: list | tuple, print_lv: int = 1) -> str:
         """
-        print the sequence of data
+        print the sequence of data, end with a newline
         """
         doc = ""
         doc += f"{attr}: length={len(value)}, {type(value).__name__} of {type(value[0]).__name__}\n"
@@ -121,33 +121,77 @@ class BaseData:
                 doc += str(value[i]) + "\n"
         return doc
 
-    def get_print_info(self, print_lv: int = 1) -> str:
+    def _get_print_info_lv0(self) -> str:
         """
-        print the information of the data
+        print data level 0, end with a newline
+        """
+        doc = ""
+        if not hasattr(self, "description") or self.description is None:
+            doc += "no description\n"
+        elif isinstance(self.description, list | tuple):
+            doc += self._get_print_info_seq("description", self.description, print_lv=0)
+        else:
+            raise ValueError(f"Unknown type: {type(self.description)}")
+        return doc
+
+    def _get_print_info_lv1(self) -> str:
+        """
+        print data level 1, end with a newline
+        """
+        doc = ""
+
+        # First print all sequences with print_lv=1
+        for attr, value in self.__dict__.items():
+            if isinstance(value, tuple | list):
+                doc += self._get_print_info_seq(attr, value, print_lv=1)
+
+        # Then print all strings (if any)
+        for attr, value in self.__dict__.items():
+            if isinstance(value, str):
+                doc += f"{attr}: {type(value)} {str(value)}\n"
+
+        # Finally print all tensors/arrays in one line
+        for attr, value in self.__dict__.items():
+            if isinstance(value, torch.Tensor | np.ndarray):
+                doc += f"{attr}: {value.shape} {value.dtype} | "
+        doc += "\n"
+        return doc
+
+    def _get_print_info_lv2(self) -> str:
+        """
+        print data level 2, end with a newline
+        """
+        doc = ""
+        for attr, value in self.__dict__.items():
+            if isinstance(value, torch.Tensor):
+                doc += f"{attr}: {value.shape} {value.dtype} {value.device}\n"
+            elif isinstance(value, np.ndarray):
+                doc += f"{attr}: {value.shape} {value.dtype}\n"
+            elif isinstance(value, tuple | list):
+                doc += self._get_print_info_seq(attr, value, print_lv=2)
+            else:
+                doc += f"{attr}: type={type(value)} value={str(value)}\n"
+        return doc
+
+    def get_print_info(self, print_lv: int = 1, info: str = None) -> str:
+        """
+        print the information of the data, no newline in the end
         print_lv = 0: only print the first 2 and the last 2 of description list, ignore other attributes
         print_lv = 1: print the first 2 and the last 2 of sequence attributes, and all other attributes
         print_lv = 2: print all
         """
-        if print_lv == 0:
-            if not hasattr(self, "description") or self.description is None:
-                doc = ""
-            elif isinstance(self.description, list | tuple):
-                doc = self._get_print_info_seq("description", self.description, print_lv=print_lv)
-            else:
-                raise ValueError(f"Unknown type: {type(self.description)}")
-            return doc
+        doc = "-" * 10 + f"begin {info + ', ' if info is not None else ''}{self.__class__.__name__} " + "-" * 10 + "\n"
 
-        doc = "-" * 20 + "\n"
-        for attr, value in self.__dict__.items():
-            if isinstance(value, torch.Tensor):
-                doc += f"{attr}: type={type(value)}\tshape={value.shape}\tdtype={value.dtype}\tdevice={value.device}\n"
-            elif isinstance(value, np.ndarray):
-                doc += f"{attr}: type={type(value)}\tshape={value.shape}\tdtype={value.dtype}\n"
-            elif isinstance(value, tuple | list):
-                doc += self._get_print_info_seq(attr, value, print_lv=print_lv)
-            else:
-                doc += f"{attr}: type={type(value)}\t value={str(value)}\n"
-        doc += "-" * 20 + "\n"
+        if print_lv == 0:
+            doc += self._get_print_info_lv0()
+        elif print_lv == 1:
+            doc += self._get_print_info_lv1()
+        elif print_lv == 2:
+            doc += self._get_print_info_lv2()
+        else:
+            raise ValueError(f"Unknown print_lv: {print_lv}")
+
+        doc += "-" * 10 + f"end {info + ', ' if info is not None else ''}{self.__class__.__name__} " + "-" * 10
         return doc
 
 

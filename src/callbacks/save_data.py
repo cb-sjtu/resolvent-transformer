@@ -56,66 +56,63 @@ class SaveData(L.Callback):
             torch.distributed.barrier()  # wait for all processes to finish
 
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
-        data, label = batch["data"], batch["label"]
         if batch_idx < self.train_max_batches_log:
             pl_module.print(f"===== Train Batch # {batch_idx} =====")
-            pl_module.print(data.get_print_info(print_lv=self.print_lv_log))
-            pl_module.print(label.get_print_info(print_lv=self.print_lv_log))
+            for key, value in batch.items():
+                pl_module.print(value.get_print_info(print_lv=self.print_lv_log, info=key))
+            pl_module.print("", flush=True)  # add a newline after each batch
 
         if batch_idx < self.train_max_batches_local:
-            # save to file, append to file end
-            with open(Path(self.dirpath) / "train" / f"rank_{trainer.local_rank}.txt", "a") as f:
+            filename = Path(self.dirpath) / "train" / f"rank_{trainer.local_rank}.txt"
+            with open(filename, "a") as f:  # save to file, append to file end
                 f.write(f"===== Train Batch # {batch_idx} =====\n")
-                f.write(data.get_print_info(print_lv=self.print_lv_local))
-                f.write(label.get_print_info(print_lv=self.print_lv_local))
-                f.write("\n")
+                for key, value in batch.items():
+                    f.write(value.get_print_info(print_lv=self.print_lv_local, info=key))
+                    f.write("\n")
+                f.write("\n")  # add a newline after each batch
 
     def on_validation_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
-        data, label = batch["data"], batch["label"]
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
         if batch_idx < self.valid_max_batches_log:
             pl_module.print(f"===== Valid Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx} =====")
-            pl_module.print(data.get_print_info(print_lv=self.print_lv_log))
-            pl_module.print(label.get_print_info(print_lv=self.print_lv_log))
+            for key, value in batch.items():
+                pl_module.print(value.get_print_info(print_lv=self.print_lv_log, info=key))
+            pl_module.print("", flush=True)  # add a newline after each batch
 
         if batch_idx < self.valid_max_batches_local:
-            # save to file, append to file end
-            with open(
-                (
-                    Path(self.dirpath)
-                    / "valid"
-                    / f"step_{trainer.global_step}"
-                    / dataset_name
-                    / f"rank_{trainer.local_rank}.txt"
-                ),
-                "a",
-            ) as f:
+            filename = (
+                Path(self.dirpath)
+                / "valid"
+                / f"step_{trainer.global_step}"
+                / dataset_name
+                / f"rank_{trainer.local_rank}.txt"
+            )
+            with open(filename, "a") as f:  # save to file, append to file end
                 f.write(f"===== Valid Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx} =====\n")
-                f.write(data.get_print_info(print_lv=self.print_lv_local))
-                f.write(label.get_print_info(print_lv=self.print_lv_local))
-                f.write("\n")
+                for key, value in batch.items():
+                    f.write(value.get_print_info(print_lv=self.print_lv_local, info=key))
+                    f.write("\n")
+                f.write("\n")  # add a newline after each batch
 
     def on_test_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
-        data, label = batch["data"], batch["label"]
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
         if batch_idx < self.test_max_batches_log:
             pl_module.print(f"===== Test Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx} =====")
-            pl_module.print(data.get_print_info(print_lv=self.print_lv_log))
-            pl_module.print(label.get_print_info(print_lv=self.print_lv_log))
+            for key, value in batch.items():
+                pl_module.print(value.get_print_info(print_lv=self.print_lv_log, info=key))
+            pl_module.print("", flush=True)  # add a newline after each batch
 
         if batch_idx < self.test_max_batches_local:
-            # save to file, append to file end
-            with open(
-                (
-                    Path(self.dirpath)
-                    / "test"
-                    / f"step_{trainer.global_step}"
-                    / dataset_name
-                    / f"rank_{trainer.local_rank}.txt"
-                ),
-                "a",
-            ) as f:
+            filename = (
+                Path(self.dirpath)
+                / "test"
+                / f"step_{trainer.global_step}"
+                / dataset_name
+                / f"rank_{trainer.local_rank}.txt"
+            )
+            with open(filename, "a") as f:  # save to file, append to file end
                 f.write(f"===== Test Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx} =====\n")
-                f.write(data.get_print_info(print_lv=self.print_lv_local))
-                f.write(label.get_print_info(print_lv=self.print_lv_local))
-                f.write("\n")
+                for key, value in batch.items():
+                    f.write(value.get_print_info(print_lv=self.print_lv_local, info=key))
+                    f.write("\n")
+                f.write("\n")  # add a newline after each batch
