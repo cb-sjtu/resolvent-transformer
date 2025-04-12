@@ -65,7 +65,7 @@ class OperatorLitModule(BaseLitModule):
         return loss
 
     ############ validation #############
-    def validation_step(self, batch: OperatorData, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+    def validation_step(self, batch: dict, batch_idx: int, dataloader_idx: int = 0) -> dict:
         data, label = batch["data"], batch["label"]
         loss = self._loss_function(data, label)
         errors = self.get_error(data, label)
@@ -89,5 +89,5 @@ class OperatorLitModule(BaseLitModule):
             )
         return {"preds": preds, "errors": errors, "metrics": metrics}
 
-    def test_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+    def test_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
         pass

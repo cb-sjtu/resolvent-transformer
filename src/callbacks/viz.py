@@ -27,7 +27,7 @@ class Viz(L.Callback):
         self.test_max_batches_local = test_max_batches_local
         self.test_max_batches_log = test_max_batches_log
 
-    def get_image(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0) -> Image:
+    def get_image(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0) -> Image.Image:
         img = vu.merge_images([[None]])  # merge a list of list of matplotlib plots or PIL images
         plt.close("all")
         return img  # PIL image

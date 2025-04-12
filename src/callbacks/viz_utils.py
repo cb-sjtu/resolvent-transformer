@@ -1,8 +1,8 @@
 import io
 
-import matplotlib
 import matplotlib.pyplot as plt
 import wandb
+from matplotlib.figure import Figure
 from PIL import Image
 
 
@@ -17,7 +17,7 @@ def fig_to_wandb(fig, cfg=None):
     if cfg is None:
         cfg = {}
 
-    if isinstance(fig, matplotlib.figure.Figure):
+    if isinstance(fig, Figure):
         buf = io.BytesIO()
         fig.savefig(buf, format="png")
         buf.seek(0)
@@ -51,7 +51,7 @@ def merge_images(figs_2d, spacing=0):
         bufs = []
         # Convert each item to PIL image if it's a Matplotlib figure
         for item in figs_row:
-            if isinstance(item, matplotlib.figure.Figure):
+            if isinstance(item, Figure):
                 buf = io.BytesIO()
                 bufs.append(buf)
                 item.savefig(buf, format="png", bbox_inches="tight")
@@ -80,7 +80,7 @@ def merge_images(figs_2d, spacing=0):
             buf.close()
         # Close the Matplotlib figures if they exist.
         for item in figs_row:
-            if isinstance(item, matplotlib.figure.Figure):
+            if isinstance(item, Figure):
                 plt.close(item)
 
     # Determine the total height for the final merged image.

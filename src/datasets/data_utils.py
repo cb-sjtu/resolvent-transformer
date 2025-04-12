@@ -132,7 +132,7 @@ class BaseData:
             if not hasattr(self, "description") or self.description is None:
                 doc = ""
             elif isinstance(self.description, list | tuple):
-                doc = self.get_print_info_seq("description", self.description, print_lv=print_lv)
+                doc = self._get_print_info_seq("description", self.description, print_lv=print_lv)
             else:
                 raise ValueError(f"Unknown type: {type(self.description)}")
             return doc

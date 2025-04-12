@@ -1,4 +1,5 @@
 import random
+from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -7,12 +8,8 @@ import src.datasets.data_utils as du
 
 
 def get_worker_seed_fn(
-    base_seed: int | None,
-    rank: int,
-    enable_device_seed: bool,
-    print_info: str,
-    print_lv: int = 0,
-) -> callable:
+    base_seed: int | None, rank: int, enable_device_seed: bool, print_info: str, print_lv: int = 0
+) -> Callable:
     """
     Custom seed function for each worker (used as `worker_init_fn` in a DataLoader).
 
