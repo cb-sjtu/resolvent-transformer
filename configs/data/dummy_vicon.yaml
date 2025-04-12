@@ -6,7 +6,8 @@ defaults:
     - dummy_vicon
   - _self_
 
-data_folder: ${paths.data_dir}/vicon_data
+data_folder: ${paths.data_dir}/dummy
+batch_size_per_device: 8
 
 demo_num: 5
 cond_shape: [3, 128, 128]

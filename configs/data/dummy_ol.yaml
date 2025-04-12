@@ -8,4 +8,6 @@ defaults:
     - dummy_ol_large
   - _self_
 
-data_folder: ${paths.data_dir}/placeholder
+data_folder: ${paths.data_dir}/dummy
+batch_size_per_device: 8
+
