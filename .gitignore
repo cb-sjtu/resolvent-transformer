@@ -161,26 +161,39 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+
+# ------------------------------------------------------------------------------------------------
+# The following are not from the original template, but added by the group.
+# These are configs shared in all projects.
+
 # VSCode
 .vscode/
 
 # Cursor
 .cursor/
 
+# for macOS
 **/.DS_Store
-**/*.png
-**/wandb
-output/*
-**/*.o*
 
-
+# put your scratch here
 /scratch/*
+
+# put your data here (if you don't have a better place)
 /data/*
+
+# put your job logs here (if you don't have a better place)
 /logs/*
-/outputs/*
+
+# put important analysis results here (if you don't have a better place)
 /analysis/*
 
+# See README.md for more details
 **/train_custom.yaml
-**/test_custom.yaml
 
+# for job logs on clusters
+**/*.o*
 *.slurm
+
+
+# ------------------------------------------------------------------------------------------------
+# The following are for project-specific configs
