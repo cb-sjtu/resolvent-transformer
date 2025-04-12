@@ -6,7 +6,7 @@ from matplotlib.figure import Figure
 from PIL import Image
 
 
-def fig_to_wandb(fig, cfg=None):
+def fig_to_wandb(fig: Figure | Image.Image, cfg=None):
     """
     Converts a Matplotlib figure or a PIL image to a wandb.Image object
     Parameters:

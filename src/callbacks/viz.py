@@ -4,6 +4,7 @@ from pathlib import Path
 import lightning as L
 import matplotlib.pyplot as plt
 import torch
+from lightning.pytorch import loggers
 from PIL import Image
 
 import src.utils.custom_utils as cu
@@ -53,12 +54,7 @@ class Viz(L.Callback):
         if batch_idx >= self.valid_max_batches_log:
             return
 
-        img = vu.fig_to_wandb(img)
-        for logger in trainer.loggers:
-            try:  # noqa: SIM105
-                logger.log_image(key=f"{dataset_name}", images=[img], step=trainer.global_step)
-            except:  # noqa: E722
-                pass
+        self.log_image(trainer, img, key=f"{dataset_name}")
 
     def on_test_start(self, trainer, pl_module):
         if trainer.is_global_zero:
@@ -81,9 +77,33 @@ class Viz(L.Callback):
         if batch_idx >= self.valid_max_batches_log:
             return
 
-        img = vu.fig_to_wandb(img)
+        self.log_image(trainer, img, key=f"{dataset_name}")
+
+    def log_image(
+        self,
+        trainer: L.Trainer,
+        img: Image.Image,
+        key: str,
+        artifact_file: str = None,
+    ):
         for logger in trainer.loggers:
-            try:  # noqa: SIM105
-                logger.log_image(key=f"{dataset_name}", images=[img], step=trainer.global_step)
-            except:  # noqa: E722
+            if isinstance(logger, loggers.WandbLogger):
+                logger.log_image(key=key, images=[img], step=trainer.global_step)
+            elif isinstance(logger, loggers.TensorBoardLogger):
+                # do whatever the tensorboard logger supports
+                pass
+            elif isinstance(logger, loggers.MLFlowLogger):
+                # do whatever the mlflow logger supports
+                # Note that the mlflow_logger is essentially an instance of mlflow.Client
+                # https://github.com/Lightning-AI/pytorch-lightning/issues/3964#issuecomment-705348121
+                # See https://mlflow.org/docs/latest/api_reference/python_api/mlflow.client.html#mlflow.client.MlflowClient.log_image
+                # for API
+                # example usage:
+                # logger.experiment.log_image(
+                #     run_id=logger.run_id,
+                #     image=img,
+                #     key=key,
+                #     artifact_file=artifact_file,
+                #     step=trainer.global_step,
+                # )
                 pass
