@@ -153,11 +153,10 @@ class TransformerEncoderLayer(nn.Module):
 
     def forward(self, src: torch.Tensor, src_mask=None, src_key_padding_mask=None, need_weights=False):
         x = src
+        # fmt: off
         if need_weights:
             attn_out, weight = self.self_attn(
-                x,
-                x,
-                x,
+                x, x, x,
                 attn_mask=src_mask,
                 key_padding_mask=src_key_padding_mask,
                 need_weights=True,
@@ -165,8 +164,12 @@ class TransformerEncoderLayer(nn.Module):
             )
         else:
             attn_out = self.self_attn(
-                x, x, x, attn_mask=src_mask, key_padding_mask=src_key_padding_mask, need_weights=False
+                x, x, x,
+                attn_mask=src_mask,
+                key_padding_mask=src_key_padding_mask,
+                need_weights=False,
             )[0]
+        # fmt: on
 
         attn_out = self.dropout1(attn_out)
         x = self.norm1(x + attn_out)
@@ -232,7 +235,7 @@ class TransformerDecoderLayer(nn.Module):
     def forward(
         self,
         tgt: torch.Tensor,
-        memory,
+        memory: torch.Tensor,
         tgt_mask=None,
         memory_mask=None,
         tgt_key_padding_mask=None,
@@ -240,11 +243,10 @@ class TransformerDecoderLayer(nn.Module):
         need_weights=False,
     ):
         x = tgt
+        # fmt: off
         if need_weights:
             attn_out, weight = self.cross_attn(
-                x,
-                memory,
-                memory,
+                x, memory, memory,
                 attn_mask=memory_mask,
                 key_padding_mask=memory_key_padding_mask,
                 need_weights=True,
@@ -252,8 +254,12 @@ class TransformerDecoderLayer(nn.Module):
             )
         else:
             attn_out = self.cross_attn(
-                x, memory, memory, attn_mask=memory_mask, key_padding_mask=memory_key_padding_mask, need_weights=False
+                x, memory, memory,
+                attn_mask=memory_mask,
+                key_padding_mask=memory_key_padding_mask,
+                need_weights=False,
             )[0]
+        # fmt: on
 
         attn_out = self.dropout1(attn_out)
         x = self.norm1(x + attn_out)
@@ -291,15 +297,23 @@ class TransformerDecoder(nn.Module):
         x = tgt
         weights = []
         for i in range(self.num_layers):
+            # fmt: off
             if need_weights:
                 x, weight = self.layers[i](
-                    x, memory, tgt_mask, memory_mask, tgt_key_padding_mask, memory_key_padding_mask, need_weights=True
+                    x, memory,
+                    tgt_mask, memory_mask,
+                    tgt_key_padding_mask, memory_key_padding_mask,
+                    need_weights=True
                 )
                 weights.append(weight)
             else:
                 x = self.layers[i](
-                    x, memory, tgt_mask, memory_mask, tgt_key_padding_mask, memory_key_padding_mask, need_weights=False
+                    x, memory,
+                    tgt_mask, memory_mask,
+                    tgt_key_padding_mask, memory_key_padding_mask,
+                    need_weights=False
                 )
+            # fmt: on
         if need_weights:
             return x, weights
         return x

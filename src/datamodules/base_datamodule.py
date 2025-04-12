@@ -83,7 +83,11 @@ class BaseDataModule(LightningDataModule):
         else:
             # if not distributed, a plain DataLoader is enough
             return DataLoader(
-                dataset=dataset, shuffle=True, drop_last=True, worker_init_fn=worker_init_fn, **common_kwargs
+                dataset=dataset,
+                shuffle=True,
+                drop_last=True,
+                worker_init_fn=worker_init_fn,
+                **common_kwargs,
             )
 
     def valid_test_dataloader_from_cfg(self, cfg):

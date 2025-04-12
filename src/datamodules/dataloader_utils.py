@@ -7,7 +7,11 @@ import src.datasets.data_utils as du
 
 
 def get_worker_seed_fn(
-    base_seed: int | None, rank: int, enable_device_seed: bool, print_info: str, print_lv: int = 0
+    base_seed: int | None,
+    rank: int,
+    enable_device_seed: bool,
+    print_info: str,
+    print_lv: int = 0,
 ) -> callable:
     """
     Custom seed function for each worker (used as `worker_init_fn` in a DataLoader).
@@ -64,7 +68,9 @@ def get_worker_seed_fn(
         # worker_seed = base_seed + worker_id
         seed_suffix = (original_seed - worker_id) % 0x1_0000_0000 if base_seed is None else base_seed % 0x1_0000_0000
         seed = (
-            seed_suffix * 0x1_0000_0000 + (rank if enable_device_seed else 0xFFFF) * 0x1_0000 + worker_id
+            seed_suffix * 0x1_0000_0000  # ！
+            + (rank if enable_device_seed else 0xFFFF) * 0x1_0000  # ！
+            + worker_id
         )  # {original_seed_suffix}_{rank}_{worker_id}
         torch.manual_seed(seed)
         random.seed(seed)
