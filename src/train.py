@@ -112,7 +112,8 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
 # otherwise, need to specify config file in command line
 config_file_name = "train_custom.yaml" if os.path.exists("./configs/train_custom.yaml") else None
 
-@hydra.main(version_base="1.3", config_path="../configs/", config_name = config_file_name)
+
+@hydra.main(version_base="1.3", config_path="../configs/", config_name=config_file_name)
 def main(cfg: DictConfig) -> float | None:
     """Main entry point for training.
 

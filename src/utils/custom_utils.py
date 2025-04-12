@@ -1,5 +1,5 @@
 """
-this file contains custom utils not included in the original template but useful for our research. 
+this file contains custom utils not included in the original template but useful for our research.
 For project-specific utils, please create new files like xxx_project_utils.py
 """
 

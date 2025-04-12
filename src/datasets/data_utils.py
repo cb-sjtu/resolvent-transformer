@@ -101,9 +101,9 @@ class BaseData:
         return dict_to_namedtuple(data_shape)
 
     def _get_print_info_seq(self, attr: str, value: list | tuple, print_lv: int = 1) -> str:
-        '''
+        """
         print the sequence of data
-        '''
+        """
         doc = ""
         doc += f"{attr}: length={len(value)}, {type(value).__name__} of {type(value[0]).__name__}\n"
         if print_lv == 0 or print_lv == 1:  # print the first 2 and the last 2
@@ -122,12 +122,12 @@ class BaseData:
         return doc
 
     def get_print_info(self, print_lv: int = 1) -> str:
-        '''
+        """
         print the information of the data
         print_lv = 0: only print the first 2 and the last 2 of description list, ignore other attributes
         print_lv = 1: print the first 2 and the last 2 of sequence attributes, and all other attributes
         print_lv = 2: print all
-        '''
+        """
         if print_lv == 0:
             if not hasattr(self, "description") or self.description is None:
                 doc = ""
