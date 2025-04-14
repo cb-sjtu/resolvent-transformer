@@ -37,7 +37,7 @@ There are two ways to use this repository:
 
 - [<kbd>Use this template</kbd>](https://github.com/scaling-group/icon-core/generate) to create your own repository. This is essentially copying the files you need, and the generated repository is independent of this one. Of course, you can also create your own repository from scratch and manually copy the files you need.
 
-- [<kbd>Fork this repository</kbd>](https://github.com/scaling-group/icon-core/fork) and use it as an upstream for your own project, as we did inside our group. This makes it easier to sync up with the latest features. But the bad part is that the updates may break your code, even silently changing your training results. Moreover, forking makes the git workflow more complicated, so you need to make sure you are familiar with git and GitHub.
+- [<kbd>Fork this repository</kbd>](https://github.com/scaling-group/icon-core/fork) and use it as an upstream for your own project, as we did inside our group. This makes it easier to sync up with the latest features. However, the downside is that the updates may break your code, even silently changing your training results. Moreover, forking makes the git workflow more complicated, so you need to make sure you are familiar with git and GitHub.
 
 We didn't release this repository as a package, as we believe the current structure is more flexible for academic use.
 
@@ -100,7 +100,7 @@ In the activated environment, run `conda install pre-commit -y && pre-commit ins
 
 Note that you need to run `pre-commit install` before your first commit in each project.
 
-Mannual ruff format before commit: `ruff format && ruff check --fix`
+Manual ruff format before commit: `ruff format && ruff check --fix`.
 
 
 ## Acknowledgement
@@ -108,7 +108,7 @@ Mannual ruff format before commit: `ruff format && ruff check --fix`
 Please include the following acknowledgement in your code that uses this repository, or simply keep this `README-icon-core.md` file in your repository for clarity.
 
 
-This project uses the [ICON-CORE](https://github.com/scaling-group/icon-core), an open-source project lead by [Scientific Computing and Intelligence Group](https://scaling-group.github.io/) and contributed by many community [contributors](https://github.com/scaling-group/icon-core/graphs/contributors), under the supervision of Prof. Liu Yang.
+This project uses the [ICON-CORE](https://github.com/scaling-group/icon-core), an open-source project led by [Scientific Computing and Intelligence Group](https://scaling-group.github.io/) and contributed by many community [contributors](https://github.com/scaling-group/icon-core/graphs/contributors), under the supervision of Prof. Liu Yang.
 
 ICON-CORE is under the MIT license.
 
