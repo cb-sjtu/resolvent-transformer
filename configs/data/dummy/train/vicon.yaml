@@ -1,0 +1,11 @@
+name: dummy_vicon
+dataset:
+  _target_: src.datasets.dummy.dummy_vicon.DummyViconDataset
+  demo_num: ${data.demo_num}
+  cond_shape: ${data.cond_shape}
+  qoi_shape: ${data.qoi_shape}
+
+num_workers: ${data.num_workers}
+pin_memory: ${data.pin_memory}
+batch_size_per_device: ${data.batch_size_per_device}
+enable_device_seed: ${data.train_enable_device_seed}

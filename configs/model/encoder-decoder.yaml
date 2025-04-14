@@ -17,7 +17,6 @@ encoder:
     d_model: 128
     nhead: 4
     dim_feedforward: 512  # 128 * 4
-    mha: "built-in"
   num_layers: 6
 
 decoder:
@@ -27,9 +26,8 @@ decoder:
     d_model: 128
     nhead: 4
     dim_feedforward: 512  # 128 * 4
-    mha: "built-in"
   num_layers: 6
-  
+
 
 out_proj:
   _target_: torch.nn.Linear

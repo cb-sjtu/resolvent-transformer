@@ -1,0 +1,14 @@
+name: dummy_ol_large
+dataset:
+  _target_: src.datasets.dummy.dummy_operator.DummyOperatorDataset
+  f_seq_len: 200
+  g_seq_len: 100
+  f_inout_dim: 2
+  g_in_dim: 1
+  g_out_dim: 1
+
+num_workers: ${data.num_workers}
+pin_memory: ${data.pin_memory}
+batch_size_per_device: ${data.batch_size_per_device}
+enable_device_seed: ${data.valid_enable_device_seed}
+base_seed: ${data.valid_base_seed}

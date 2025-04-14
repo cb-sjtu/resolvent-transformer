@@ -1,9 +1,7 @@
 defaults:
-  - dataloader
-  - train:
-    - dummy_vicon
-  - valid:
-    - dummy_vicon
+  - ../dataloader@_here_
+  - train/vicon@train.vicon
+  - valid/vicon@valid.vicon
   - _self_
 
 data_folder: ${paths.data_dir}/dummy
