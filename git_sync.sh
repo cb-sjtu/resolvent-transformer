@@ -13,6 +13,9 @@ else
     stash_skipped=true
 fi
 
+# pull the current branch
+git pull origin $current_branch --no-edit
+
 # Check if upstream remote exists
 if git remote | grep -q upstream; then
     echo "----------------------------------------------------------------------------------"
@@ -57,3 +60,4 @@ else
 fi
 
 echo "All operations completed!"
+echo "Current branch: $current_branch, you can push the changes to remote yourself."
