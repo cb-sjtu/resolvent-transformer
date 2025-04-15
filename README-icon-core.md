@@ -100,7 +100,15 @@ In the activated environment, run `conda install pre-commit -y && pre-commit ins
 
 Note that you need to run `pre-commit install` before your first commit in each project.
 
-Manual ruff format before commit: `ruff format && ruff check --fix`.
+```sh
+$ pre-commit install # --config .pre-commit-config.yaml # for HTTPS connection
+$ pre-commit install --config .pre-commit-config-ssh.yaml # for SSH connection
+```
+
+Mannual ruff format before commit:
+```sh
+ruff format && ruff check --fix
+```
 
 
 ## Acknowledgement

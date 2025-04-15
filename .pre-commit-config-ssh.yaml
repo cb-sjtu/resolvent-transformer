@@ -1,6 +1,6 @@
 ---
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: git@github.com:pre-commit/pre-commit-hooks.git
     rev: v4.4.0
     hooks:
       # list of supported hooks: https://pre-commit.com/hooks.html
@@ -15,7 +15,7 @@ repos:
       - id: check-case-conflict
       - id: check-added-large-files
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
+  - repo: git@github.com:astral-sh/ruff-pre-commit.git
     # Ruff version.
     rev: v0.11.0
     hooks:
@@ -25,7 +25,7 @@ repos:
       # Run the formatter.
       - id: ruff-format
 
-  - repo: https://github.com/adrienverge/yamllint.git
+  - repo: git@github.com:adrienverge/yamllint.git
     rev: v1.37.0
     hooks:
       - id: yamllint
