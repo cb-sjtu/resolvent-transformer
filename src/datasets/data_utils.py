@@ -1,53 +1,58 @@
 from collections import namedtuple
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any, TypeVar
 
 import numpy as np
 import torch
 
+T = TypeVar("T", bound="BaseData")
 
-def dict_to_namedtuple(d: dict, name="Data"):
+
+def dict_to_namedtuple(d: dict[str, Any], name: str = "Data"):
     """Convert a dictionary to a namedtuple recursively."""
     # Recursively apply to dictionaries within the dictionary
     for key, value in d.items():
         if isinstance(value, dict):
             d[key] = dict_to_namedtuple(value, name=key.capitalize())
     # Create the namedtuple type and instantiate it
-    TupleType = namedtuple(name, d.keys())
+    TupleType = namedtuple(name, d.keys())  # type: ignore
+    # https://github.com/python/mypy/issues/9046#issuecomment-649736524
     return TupleType(**d)
 
 
 class BaseData:
-    def to(self, device):
-        # Iterates over all attributes of the instance, moving each to the specified device
-        # create a new object so the original data is not changed
-        new_data = type(self)()
-        for attr, value in self.__dict__.items():
-            if isinstance(value, torch.Tensor):
-                setattr(new_data, attr, value.to(device))
-            else:
-                setattr(new_data, attr, value)
-        return new_data
+    description: list | tuple | None
 
-    def to_numpy(self):
-        new_data = type(self)()
+    def _apply(self: T, func: Callable[[str, Any], Any], *args, **kwargs) -> T:
+        """
+        Helper method to apply a function to each attribute of the instance.
+        Creates a new instance of the same type and assigns the transformed values.
+        """
+        new_obj = type(self)()  # This works if all fields have defaults.
         for attr, value in self.__dict__.items():
-            if isinstance(value, torch.Tensor):
-                setattr(new_data, attr, value.detach().cpu().numpy())
-            else:
-                setattr(new_data, attr, value)
-        return new_data
+            setattr(new_obj, attr, func(attr, value, *args, **kwargs))
+        return new_obj
 
-    def to_tensor(self):
-        new_data = type(self)()
-        for attr, value in self.__dict__.items():
-            if isinstance(value, np.ndarray):
-                setattr(new_data, attr, torch.tensor(value))
-            else:
-                setattr(new_data, attr, value)
-        return new_data
+    def to(self: T, device: torch.device, *args, **kwargs) -> T:
+        """
+        Return a new instance with each torch.Tensor moved to the specified device.
+        """
+        return self._apply(lambda attr, v: v.to(device, *args, **kwargs) if isinstance(v, torch.Tensor) else v)
 
-    def get_one_batch(self, bid, keep_dim=False):
+    def to_numpy(self: T) -> T:
+        """
+        Return a new instance with torch.Tensors converted to numpy arrays.
+        """
+        return self._apply(lambda attr, v: v.detach().cpu().numpy() if isinstance(v, torch.Tensor) else v)
+
+    def to_tensor(self: T, *args, **kwargs) -> T:
+        """
+        Return a new instance with numpy arrays converted to torch.Tensors.
+        """
+        return self._apply(lambda attr, v: torch.tensor(v, *args, **kwargs) if isinstance(v, np.ndarray) else v)
+
+    def get_one_batch(self: T, bid: int, keep_dim=False) -> T:
         """
         return new data with bid-th batch, can keep batch dim or not
         """
@@ -63,7 +68,7 @@ class BaseData:
                 setattr(new_data, attr, value)
         return new_data
 
-    def get_slice_batch(self, bid_list):
+    def get_slice_batch(self: T, bid_list: Sequence[int]) -> T:
         """
         return new data with bid-th batch, can keep batch dim or not
         """
@@ -173,7 +178,7 @@ class BaseData:
                 doc += f"{attr}: type={type(value)} value={str(value)}\n"
         return doc
 
-    def get_print_info(self, print_lv: int = 1, info: str = None) -> str:
+    def get_print_info(self, print_lv: int = 1, info: str | None = None) -> str:
         """
         print the information of the data, no newline in the end
         print_lv = 0: only print the first 2 and the last 2 of description list, ignore other attributes
@@ -221,17 +226,17 @@ def concat_data(datas: Sequence[BaseData], to_tensor=True) -> BaseData:
 # -------Input Data-------
 @dataclass
 class OperatorData(BaseData):
-    description: list[str] = None
-    f_samples: torch.Tensor = None  # (batch, f_seq_len, f_inout_dim)
-    g_inputs: torch.Tensor = None  # (batch, g_seq_len, g_in_dim)
+    description: list[str] | None = None
+    f_samples: torch.Tensor | None = None  # (batch, f_seq_len, f_inout_dim)
+    g_inputs: torch.Tensor | None = None  # (batch, g_seq_len, g_in_dim)
 
 
 @dataclass
 class ViconData(BaseData):
-    description: list[str] = None
-    demo_cond: torch.Tensor = None
-    quest_cond: torch.Tensor = None
-    demo_qoi: torch.Tensor = None
+    description: list[str] | None = None
+    demo_cond: torch.Tensor | None = None
+    quest_cond: torch.Tensor | None = None
+    demo_qoi: torch.Tensor | None = None
 
 
 # -------Label Data-------
@@ -239,5 +244,5 @@ class ViconData(BaseData):
 # also wrap into BaseData for flexible operations
 @dataclass
 class BaseLabelData(BaseData):
-    description: list[str] = None
-    label: torch.Tensor = None
+    description: list[str] | None = None
+    label: torch.Tensor | None = None
