@@ -176,16 +176,16 @@ cython_debug/
 **/.DS_Store
 
 # put your scratch here
-/scratch/*
+/scratch
 
 # put your data here (if you don't have a better place)
-/data/*
+/data
 
 # put your job logs here (if you don't have a better place)
-/logs/*
+/logs
 
 # put important analysis results here (if you don't have a better place)
-/analysis/*
+/analysis
 
 # See README.md for more details
 **/train_custom.yaml
