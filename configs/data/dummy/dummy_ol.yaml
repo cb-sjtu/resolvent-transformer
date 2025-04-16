@@ -4,6 +4,8 @@ defaults:
   - train/ol_large@train.dummy_ol_large # load config from train/ol_large.yaml as train.dummy_ol_large
   - valid/ol@valid.dummy_ol
   - valid/ol_large@valid.dummy_ol_large
+  - test/ol@test.dummy_ol
+  - test/ol_large@test.dummy_ol_large
   - _self_
 
 data_folder: ${paths.data_dir}/dummy # the placeholder for loading data

@@ -1,5 +1,4 @@
 import torch
-from torch.utils.data import DataLoader, DistributedSampler
 
 import src.datasets.data_utils as du
 
@@ -49,8 +48,8 @@ def collate_fn(raw_list: list[dict]):
 
 class CycleLoader:
     """
-    This class takes a list of dataloader instances and creates an iterator that cycles through
-    them sequentially:
+    This class takes a list of dictionaries containing dataloader and sampler instances,
+    and creates an iterator that cycles through them sequentially:
     step 1: dataloader 1
     step 2: dataloader 2
     step 3: dataloader 3
@@ -64,27 +63,30 @@ class CycleLoader:
     with this class to create an infinite iterator.
 
     Attributes:
-        dataloaders (list): A list of dataLoader instances to cycle through.
-        samplers (list): A list of Sampler instances for each dataLoader.
+        loaders (list): A list of dictionaries containing dataloader, sampler, epoch, and iterator information.
         see __init__ for more details.
 
     Methods:
-        __init__(dataloaders, samplers): Initializes the CycleLoader with a list of dataloaders and samplers
+        __init__(loaders): Initializes with a list of dictionaries containing dataloaders and samplers
         __iter__(): Initializes iterators for each dataloader and returns self
         __next__(): Returns the next batch from the current dataloader, cycling through them
                     indefinitely. Resets exhausted dataloaders automatically.
     """
 
-    def __init__(
-        self,
-        dataloaders: list[DataLoader | "CycleLoader"],
-        samplers: list[DistributedSampler | None],
-    ):
+    def __init__(self, loaders: list[dict]):
         """
-        The elements in the `dataloaders` list can be a mix of DataLoaders and CycleLoaders.
+        Initialize the CycleLoader with a list of dictionaries containing dataloaders and samplers.
 
-        If an element is a DataLoader using DistributedSampler,
-        we must explicitly provide the DistributedSampler to the __init__ function to manually set the epoch.
+        Each dictionary in the list should have the following structure:
+        {
+            "dataloader": DataLoader | CycleLoader, can be mixed in the same list
+            "sampler": DistributedSampler | None,
+            "epoch": int,  # will be added to dict in __init__
+            "iterator": Iterator | None  # will be added to dict in __init__
+        }
+
+        If a dataloader is using DistributedSampler,
+        we must explicitly provide the DistributedSampler to the __init__ function and manually set the epoch.
         This is necessary since DistributedSampler requires manual epoch management. See example in
         https://pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler
         Lightning's automatic epoch handling is bypassed when dataloaders are wrapped in CycleLoader.
@@ -93,44 +95,45 @@ class CycleLoader:
         - DataLoaders with other types of samplers, as they do not need manual epoch management.
         - CycleLoaders, as they should be able to handle the epoch management by themselves.
         """
-        self.dataloaders = dataloaders
-        self.samplers = samplers
-        self.epochs = [0] * len(dataloaders)
+        self.loaders = loaders
+        # Initialize epoch count and iterator for each loader
+        for loader in self.loaders:
+            loader["epoch"] = 0
+            loader["iterator"] = None
+
+    def iter_loader(self, loader: dict):
+        if loader["sampler"] is not None:
+            loader["sampler"].set_epoch(loader["epoch"])
+        loader["epoch"] += 1
+        loader["iterator"] = iter(loader["dataloader"])
 
     def __iter__(self):
         # Keep an active iterator per sub-loader
-
         # at the beginning of each epoch before creating the DataLoader iterator
+        for loader in self.loaders:
+            self.iter_loader(loader)
 
-        for i, sampler in enumerate(self.samplers):
-            if sampler is not None:
-                sampler.set_epoch(self.epochs[i])
-            self.epochs[i] += 1
-
-        self.iterators = [iter(dl) for dl in self.dataloaders]
         self.idx = 0  # which loader we're pulling from
         return self
 
     def __next__(self):
         try:
             # Attempt to get a batch from the current loader
-            batch = next(self.iterators[self.idx])
+            current_loader = self.loaders[self.idx]
+            batch = next(current_loader["iterator"])  # raises StopIteration if the iterator is exhausted
             # Move to the next loader
-            self.idx = (self.idx + 1) % len(self.dataloaders)
+            self.idx = (self.idx + 1) % len(self.loaders)
             return batch
         except StopIteration:
             # Current loader is exhausted; reset its iterator
-
             # at the beginning of each epoch before creating the DataLoader iterator
-            if self.samplers[self.idx] is not None:
-                self.samplers[self.idx].set_epoch(self.epochs[self.idx])
-            self.epochs[self.idx] += 1
-            self.iterators[self.idx] = iter(self.dataloaders[self.idx])
+            current_loader = self.loaders[self.idx]
+            self.iter_loader(current_loader)
 
             # Try again from the newly-reset iterator at the same index
-            batch = next(self.iterators[self.idx])
+            batch = next(current_loader["iterator"])
             # Here we didn't use recursive call to avoid infinite loop
             # If StopIteration is raised again, it means the dataloader is not enough for one batch
             # In this case, we will raise StopIteration
-            self.idx = (self.idx + 1) % len(self.dataloaders)
+            self.idx = (self.idx + 1) % len(self.loaders)
             return batch

@@ -15,8 +15,8 @@ class BaseDataModule(LightningDataModule):
 
     def prepare_data(self) -> None:
         """Download data if needed. Lightning ensures that `self.prepare_data()` is called only
-        within a single process on CPU, so you can safely add your downloading logic within. In
-        case of multi-node training, the execution of this hook depends upon
+        within a single process on CPU, so you can safely add your downloading and caching logic within.
+        In case of multi-node training, the execution of this hook depends upon
         `self.prepare_data_per_node()`.
 
         Do not use it to assign state (self.x = y).
@@ -28,28 +28,65 @@ class BaseDataModule(LightningDataModule):
             print(f"train dataloader #{i}: {key}")
             for k, v in cfg.items():
                 print(f"\t{k}: {v}")
-            # instantiate the datasets only on Rank 0, to cache the data in disk
-            hydra.utils.instantiate(cfg.dataset)
+            self.get_train_dataset_from_cfg(cfg)
 
         for i, (key, cfg) in enumerate(self.cfg.data.valid.items()):
             print(f"valid dataloader #{i}: {key}")
             for k, v in cfg.items():
                 print(f"\t{k}: {v}")
-            hydra.utils.instantiate(cfg.dataset)
+            self.get_valid_test_dataset_from_cfg(cfg)
+
+        for i, (key, cfg) in enumerate(self.cfg.data.test.items()):
+            print(f"test dataloader #{i}: {key}")
+            for k, v in cfg.items():
+                print(f"\t{k}: {v}")
+            self.get_valid_test_dataset_from_cfg(cfg)
 
     def setup(self, stage: str | None = None) -> None:
         """
         called on each process on GPU
         """
-        # TODO: move dataset initialization here
-        pass
+        self.train_datasets = [self.get_train_dataset_from_cfg(cfg) for cfg in self.cfg.data.train.values()]
+        self.valid_datasets = [self.get_valid_test_dataset_from_cfg(cfg) for cfg in self.cfg.data.valid.values()]
+        self.test_datasets = [self.get_valid_test_dataset_from_cfg(cfg) for cfg in self.cfg.data.test.values()]
 
-    def train_dataloader_from_cfg(self, cfg):
+    def get_train_dataset_from_cfg(self, cfg):
         """
-        return a DataLoader for training
+        return dataset(s) from a given config
+        you can override this function to customize the dataset
+        even return multiple datasets!
         """
         dataset = hydra.utils.instantiate(cfg.dataset)
+        return {"dataset": dataset, "cfg": cfg}
 
+    def get_valid_test_dataset_from_cfg(self, cfg):
+        """
+        return a dataset from a given config
+        you can define your own dataset class and override this function
+        """
+        dataset = hydra.utils.instantiate(cfg.dataset)
+        return {"dataset": dataset, "cfg": cfg}
+
+    def get_train_collate_fn(self, cfg):
+        """
+        you can override this function to customize the collate function for training
+        """
+        return dlu.collate_fn
+
+    def get_valid_test_collate_fn(self, cfg):
+        """
+        you can override this function to customize the collate function for validation/test
+        """
+        return dlu.collate_fn
+
+    def get_train_dataloader(self, dataset, cfg):
+        """
+        wrap a dataset with a DataLoader for training
+        in most cases, you don't need to override this function
+        Args:
+            dataset: a dataset object
+            cfg: a config for the dataset (also with dataloader config)
+        """
         # generator will only be created once in the very begining when global_step = 0
         # In our implementation, we can have different random states during the whole training process
         # what happens when we call iter(dataloader)?
@@ -70,7 +107,7 @@ class BaseDataModule(LightningDataModule):
             "batch_size": cfg.batch_size_per_device,
             "num_workers": cfg.num_workers,
             "pin_memory": cfg.pin_memory,
-            "collate_fn": dlu.collate_fn,
+            "collate_fn": self.get_train_collate_fn(cfg),
             "generator": generator,
         }
 
@@ -81,22 +118,25 @@ class BaseDataModule(LightningDataModule):
             # use cfg.base_seed as seed. DistributedSampler will add epochs to the seed when __iter__() is called
             sampler = DistributedSampler(dataset=dataset, shuffle=True, seed=cfg.base_seed, drop_last=True)
             dataloader = DataLoader(dataset=dataset, sampler=sampler, **common_kwargs)
-            return dataloader, sampler
+            return {"dataloader": dataloader, "sampler": sampler}
         else:
             # if not distributed, a plain sampler will suffice
             dataloader = DataLoader(dataset=dataset, shuffle=True, drop_last=True, **common_kwargs)
-            return dataloader, None
+            return {"dataloader": dataloader, "sampler": None}
 
-    def valid_test_dataloader_from_cfg(self, cfg):
+    def get_valid_test_dataloader(self, dataset, cfg):
         """
-        return a DataLoader for validation or test
+        wrap a dataset with a DataLoader for validation/test
+        in most cases, you don't need to override this function
+        Args:
+            dataset: a dataset object
+            cfg: a config for the dataset (also with dataloader config)
         """
-        dataset = hydra.utils.instantiate(cfg.dataset)
 
         generator = dlu.get_dataloader_rng(
             base_seed=cfg.base_seed,
             enable_device_seed=cfg.enable_device_seed,
-            print_info=f"step = {self.trainer.global_step}, valid: {cfg.name}",
+            print_info=f"step = {self.trainer.global_step}, valid|test: {cfg.name}",
             print_lv=self.cfg.print_lv,
         )
 
@@ -111,7 +151,7 @@ class BaseDataModule(LightningDataModule):
             "batch_size": cfg.batch_size_per_device,
             "num_workers": cfg.num_workers,
             "pin_memory": cfg.pin_memory,
-            "collate_fn": dlu.collate_fn,
+            "collate_fn": self.get_valid_test_collate_fn(cfg),
             "generator": generator,
         }
 
@@ -127,25 +167,22 @@ class BaseDataModule(LightningDataModule):
         """
         return a single cycle dataloader
         """
-        dataloaders = []
-        samplers = []
-        for _i, (_key, cfg) in enumerate(self.cfg.data.train.items()):
-            dataloader, sampler = self.train_dataloader_from_cfg(cfg)
-            dataloaders.append(dataloader)
-            samplers.append(sampler)
-        return dlu.CycleLoader(dataloaders, samplers)
+        dataloaders = [self.get_train_dataloader(**ds) for ds in self.train_datasets]
+        return dlu.CycleLoader(dataloaders)
 
     def val_dataloader(self):
         """
         return a list of dataloaders for separate validation
         """
-        dataloaders = []
-        for _i, (_key, cfg) in enumerate(self.cfg.data.valid.items()):
-            dataloaders.append(self.valid_test_dataloader_from_cfg(cfg))
+        dataloaders = [self.get_valid_test_dataloader(**ds) for ds in self.valid_datasets]
         return dataloaders  # don't wrap with CycleLoader
 
     def test_dataloader(self):
-        pass
+        """
+        return a list of dataloaders for separate test
+        """
+        dataloaders = [self.get_valid_test_dataloader(**ds) for ds in self.test_datasets]
+        return dataloaders  # don't wrap with CycleLoader
 
     def teardown(self, stage=None):
         pass

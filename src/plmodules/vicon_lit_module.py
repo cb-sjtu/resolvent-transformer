@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from omegaconf import DictConfig
 from torchmetrics import MeanMetric, MetricCollection
 
+import src.utils.custom_utils as cu
 from src.datasets.data_utils import BaseLabelData, ViconData
 from src.plmodules.base_lit_module import BaseLitModule
 
@@ -135,8 +136,7 @@ class ViconLitModule(BaseLitModule):
         for metric_name in self.metric_names:
             self.valid_metrics[dataloader_idx][metric_name].update(metrics[metric_name])
 
-        valid_key = list(self.cfg.data.valid.keys())[dataloader_idx]
-        valid_name = self.cfg.data.valid[valid_key].name
+        valid_name = cu.get_dataset_name(self.cfg.data.valid, dataloader_idx)
 
         for metric_name in self.metric_names:
             self.log(
