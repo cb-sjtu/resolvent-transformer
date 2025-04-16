@@ -1,9 +1,7 @@
-import os
 from pathlib import Path
 
 import lightning as L
 import matplotlib.pyplot as plt
-import torch
 from lightning.pytorch import loggers
 from PIL import Image
 
@@ -29,26 +27,26 @@ class Viz(L.Callback):
         self.test_max_batches_log = test_max_batches_log
 
     def get_image(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0) -> Image.Image:
-        img = vu.merge_images([[None]])  # merge a list of list of matplotlib plots or PIL images
+        """
+        This is just a dummy function to test the callback and show basic usage.
+        you can inherit this callback class and override this function.
+        """
+        fig = plt.figure(figsize=(4, 3))
+        ax = fig.add_subplot(111)
+        ax.plot([0, 1, 2])
+        img = vu.merge_images([[fig]])  # merge a list of list of matplotlib plots or PIL images
         plt.close("all")
         return img  # PIL image
-
-    def on_validation_start(self, trainer, pl_module):
-        if trainer.is_global_zero:
-            for dataloader_idx in range(len(pl_module.cfg.data.valid)):
-                dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
-                dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
-                os.makedirs(dirpath, exist_ok=True)
-        if torch.distributed.is_initialized():  # only for distributed training
-            torch.distributed.barrier()  # wait for all processes to finish
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         if batch_idx >= self.valid_max_batches_local:
             return
 
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
-        img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
         dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
+        dirpath.mkdir(parents=True, exist_ok=True)
+
+        img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
         img.save(dirpath / f"{batch_idx}_rank{trainer.local_rank}.png")  # save image in all processes
 
         if batch_idx >= self.valid_max_batches_log:
@@ -56,22 +54,15 @@ class Viz(L.Callback):
 
         self.log_image(trainer, img, key=f"{dataset_name}")
 
-    def on_test_start(self, trainer, pl_module):
-        if trainer.is_global_zero:
-            for dataloader_idx in range(len(pl_module.cfg.data.test)):
-                dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
-                dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
-                os.makedirs(dirpath, exist_ok=True)
-        if torch.distributed.is_initialized():  # only for distributed training
-            torch.distributed.barrier()  # wait for all processes to finish
-
     def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         if batch_idx >= self.test_max_batches_local:
             return
 
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
-        img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
         dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
+        dirpath.mkdir(parents=True, exist_ok=True)
+
+        img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
         img.save(dirpath / f"{batch_idx}_rank{trainer.local_rank}.png")  # save image in all processes
 
         if batch_idx >= self.valid_max_batches_log:

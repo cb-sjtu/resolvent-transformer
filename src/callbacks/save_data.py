@@ -1,8 +1,6 @@
-import os
 from pathlib import Path
 
 import lightning as L
-import torch
 
 import src.utils.custom_utils as cu
 
@@ -30,32 +28,10 @@ class SaveData(L.Callback):
         self.test_max_batches_local = test_max_batches_local
         self.test_max_batches_log = test_max_batches_log
 
-    def on_train_start(self, trainer: L.Trainer, pl_module: L.LightningModule):
-        if trainer.is_global_zero:
-            dirpath = Path(self.dirpath) / "train"
-            os.makedirs(dirpath, exist_ok=True)
-        if torch.distributed.is_initialized():  # only for distributed training
-            torch.distributed.barrier()  # wait for all processes to finish
-
-    def on_validation_start(self, trainer, pl_module):
-        if trainer.is_global_zero:
-            for dataloader_idx in range(len(pl_module.cfg.data.valid)):
-                dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
-                dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
-                os.makedirs(dirpath, exist_ok=True)
-        if torch.distributed.is_initialized():  # only for distributed training
-            torch.distributed.barrier()  # wait for all processes to finish
-
-    def on_test_start(self, trainer, pl_module):
-        if trainer.is_global_zero:
-            for dataloader_idx in range(len(pl_module.cfg.data.test)):
-                dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
-                dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
-                os.makedirs(dirpath, exist_ok=True)
-        if torch.distributed.is_initialized():  # only for distributed training
-            torch.distributed.barrier()  # wait for all processes to finish
-
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
+        dirpath = Path(self.dirpath) / "train"
+        dirpath.mkdir(parents=True, exist_ok=True)
+
         if batch_idx < self.train_max_batches_log:
             pl_module.print(f"===== Train Batch # {batch_idx} =====")
             for key, value in batch.items():
@@ -73,6 +49,9 @@ class SaveData(L.Callback):
 
     def on_validation_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
+        dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
+        dirpath.mkdir(parents=True, exist_ok=True)
+
         if batch_idx < self.valid_max_batches_log:
             pl_module.print(f"===== Valid Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx} =====")
             for key, value in batch.items():
@@ -96,6 +75,9 @@ class SaveData(L.Callback):
 
     def on_test_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
+        dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
+        dirpath.mkdir(parents=True, exist_ok=True)
+
         if batch_idx < self.test_max_batches_log:
             pl_module.print(f"===== Test Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx} =====")
             for key, value in batch.items():

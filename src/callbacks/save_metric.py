@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import lightning as L
@@ -16,23 +15,16 @@ class SaveMetric(L.Callback):
 
     def on_validation_start(self, trainer, pl_module):
         self.valid_outputs = {}
-        if trainer.is_global_zero:
-            for dataloader_idx in range(len(pl_module.cfg.data.valid)):
-                dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
-                valid_dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
-                os.makedirs(valid_dirpath, exist_ok=True)
 
     def on_test_start(self, trainer, pl_module):
         self.test_outputs = {}
-        if trainer.is_global_zero:
-            for dataloader_idx in range(len(pl_module.cfg.data.test)):
-                dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
-                test_dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
-                os.makedirs(test_dirpath, exist_ok=True)
 
     def on_validation_batch_end(self, trainer, pl_module, outputs: dict, batch, batch_idx, dataloader_idx=0):
         """Cache valid batch outputs. Only save metrics since they are smaller than preds and errors."""
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
+        valid_dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
+        valid_dirpath.mkdir(parents=True, exist_ok=True)
+
         if dataset_name not in self.valid_outputs:
             self.valid_outputs[dataset_name] = []
         self.valid_outputs[dataset_name].append(
@@ -45,6 +37,9 @@ class SaveMetric(L.Callback):
     def on_test_batch_end(self, trainer, pl_module, outputs: dict, batch, batch_idx, dataloader_idx=0):
         """Cache test batch outputs. Only save metrics since they are smaller than preds and errors."""
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
+        test_dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
+        test_dirpath.mkdir(parents=True, exist_ok=True)
+
         if dataset_name not in self.test_outputs:
             self.test_outputs[dataset_name] = []
         self.test_outputs[dataset_name].append(

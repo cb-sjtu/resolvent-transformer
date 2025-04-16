@@ -7,7 +7,7 @@ defaults:
   - save_ckpt
   - save_metric
   - save_data
-  # - viz
+  - viz
   # - _self_
 
 # model_checkpoint:
