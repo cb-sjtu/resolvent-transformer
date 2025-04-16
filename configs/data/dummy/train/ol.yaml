@@ -11,3 +11,4 @@ num_workers: ${data.num_workers}
 pin_memory: ${data.pin_memory}
 batch_size_per_device: ${data.batch_size_per_device}
 enable_device_seed: ${data.train_enable_device_seed}
+base_seed: ${data.train_base_seed}

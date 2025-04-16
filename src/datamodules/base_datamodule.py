@@ -4,7 +4,7 @@ from lightning import LightningDataModule
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, DistributedSampler
 
-from src.datamodules.dataloader_utils import CycleLoader, collate_fn, get_worker_seed_fn
+from . import dataloader_utils as dlu
 
 
 class BaseDataModule(LightningDataModule):
@@ -48,77 +48,78 @@ class BaseDataModule(LightningDataModule):
         """
         return a DataLoader for training
         """
-        # use instantiate to get the dataset, since different config may use different Dataset class
         dataset = hydra.utils.instantiate(cfg.dataset)
+
+        # generator will only be created once in the very begining when global_step = 0
+        # In our implementation, we can have different random states during the whole training process
+        # what happens when we call iter(dataloader)?
+        # according to https://discuss.pytorch.org/t/dataloader-persistent-workers-usage/189329
+        # if not using persistent workers (by default), new workers will be created when dataloader.__iter__() is called
+        # and the generator is used to initialize the worker seeds (which is different from last __iter__() call)
+        # setting torch seeds inside worker_init_fn() did not work as expected in our practice.
+        # we never tested persistent workers, so we don't know if it works.
+
+        generator = dlu.get_dataloader_rng(
+            base_seed=cfg.base_seed,
+            enable_device_seed=cfg.enable_device_seed,
+            print_info=f"step = {self.trainer.global_step}, train: {cfg.name}",
+            print_lv=self.cfg.print_lv,
+        )
 
         common_kwargs = {
             "batch_size": cfg.batch_size_per_device,
             "num_workers": cfg.num_workers,
             "pin_memory": cfg.pin_memory,
-            "collate_fn": collate_fn,
+            "collate_fn": dlu.collate_fn,
+            "generator": generator,
         }
-
-        # if enable_device_seed: seeds vary across different devices
-        # it's safe to use global_rank even if not distributed
-        # if not enable_device_seed: seeds are shared across different devices (with worker-specific variations)
-        # essentially doing nothing
-        worker_init_fn = get_worker_seed_fn(
-            base_seed=None,
-            rank=self.trainer.global_rank,
-            enable_device_seed=cfg.enable_device_seed,
-            print_info=cfg.name,
-            print_lv=self.cfg.print_lv,
-        )
 
         if torch.distributed.is_initialized():
             # if distributed, use DistributedSampler
             # we will wrap the dataloader in CycleLoader,
-            # therefore lightning cannot automatically handle DistributedSampler
-            return DataLoader(
-                dataset=dataset,
-                sampler=DistributedSampler(dataset=dataset, shuffle=True, drop_last=True),
-                worker_init_fn=worker_init_fn,
-                **common_kwargs,
-            )
+            # therefore lightning cannot automatically handle DistributedSampler and epoch management
+            # use cfg.base_seed as seed. DistributedSampler will add epochs to the seed when __iter__() is called
+            sampler = DistributedSampler(dataset=dataset, shuffle=True, seed=cfg.base_seed, drop_last=True)
+            dataloader = DataLoader(dataset=dataset, sampler=sampler, **common_kwargs)
+            return dataloader, sampler
         else:
-            # if not distributed, a plain DataLoader is enough
-            return DataLoader(
-                dataset=dataset,
-                shuffle=True,
-                drop_last=True,
-                worker_init_fn=worker_init_fn,
-                **common_kwargs,
-            )
+            # if not distributed, a plain sampler will suffice
+            dataloader = DataLoader(dataset=dataset, shuffle=True, drop_last=True, **common_kwargs)
+            return dataloader, None
 
     def valid_test_dataloader_from_cfg(self, cfg):
         """
         return a DataLoader for validation or test
         """
-        # use instantiate to get the dataset, since different config may use different Dataset class
         dataset = hydra.utils.instantiate(cfg.dataset)
+
+        generator = dlu.get_dataloader_rng(
+            base_seed=cfg.base_seed,
+            enable_device_seed=cfg.enable_device_seed,
+            print_info=f"step = {self.trainer.global_step}, valid: {cfg.name}",
+            print_lv=self.cfg.print_lv,
+        )
+
+        # generator will only be created once in the very begining when global_step = 0
+        # but lightning can somehow use the generator to generate the same random states across validation epochs
+        # Don't pass a worker_init_fn into valid_test_dataloader!
+        # we found that even pass "lambda worker_id: None" into worker_init_fn
+        # will cause different random states across validation epochs.
+        # we never tested persistent workers, so we don't know if it works.
 
         common_kwargs = {
             "batch_size": cfg.batch_size_per_device,
             "num_workers": cfg.num_workers,
             "pin_memory": cfg.pin_memory,
-            "collate_fn": collate_fn,
+            "collate_fn": dlu.collate_fn,
+            "generator": generator,
         }
 
-        # always use global_rank
-        worker_init_fn = get_worker_seed_fn(
-            base_seed=cfg.base_seed,
-            rank=self.trainer.global_rank,
-            enable_device_seed=cfg.enable_device_seed,
-            print_info=cfg.name,
-            print_lv=self.cfg.print_lv,
-        )
-
-        # Since we're not using CycleLoader here, we can rely on Lightning's built-in handling of DistributedSampler
+        # We can rely on Lightning's built-in handling of DistributedSampler for validation/test
         return DataLoader(
             dataset=dataset,
             shuffle=False,  # careful: different from train_dataloader
             drop_last=False,  # careful: different from train_dataloader
-            worker_init_fn=worker_init_fn,
             **common_kwargs,
         )
 
@@ -127,9 +128,12 @@ class BaseDataModule(LightningDataModule):
         return a single cycle dataloader
         """
         dataloaders = []
+        samplers = []
         for _i, (_key, cfg) in enumerate(self.cfg.data.train.items()):
-            dataloaders.append(self.train_dataloader_from_cfg(cfg))
-        return CycleLoader(dataloaders)
+            dataloader, sampler = self.train_dataloader_from_cfg(cfg)
+            dataloaders.append(dataloader)
+            samplers.append(sampler)
+        return dlu.CycleLoader(dataloaders, samplers)
 
     def val_dataloader(self):
         """

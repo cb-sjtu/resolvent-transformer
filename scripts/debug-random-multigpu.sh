@@ -1,4 +1,5 @@
 #!/bin/bash
+#PBS -P CFP01-SF-009
 #PBS -j oe
 #PBS -k oed
 #PBS -N debug
@@ -16,20 +17,17 @@ cd $PBS_O_WORKDIR;
 source ~/.bashrc
 conda activate sg
 
-python3 src/train.py --config-name=train_operator trainer.max_steps=100 \
-            trainer.val_check_interval=50 trainer.limit_val_batches=50 \
-            data.num_workers=2 callbacks=[rich_progress_bar,save_data] print_lv=2 \
+# ddp training
+python3 src/train.py --config-name=train_operator trainer=ddp \
+            trainer.max_steps=1000 \
+            trainer.val_check_interval=50 \
+            trainer.limit_val_batches=10 \
+            data.num_workers=2 print_lv=2 \
+            callbacks=[rich_progress_bar,save_data] \
+            callbacks.save_data.train_max_batches_local=1000 \
             callbacks.save_data.train_max_batches_log=0 \
             callbacks.save_data.valid_max_batches_log=0 \
             callbacks.save_data.test_max_batches_log=0
-
-python3 src/train.py --config-name=train_operator trainer=gpu trainer.max_steps=100 \
-            trainer.val_check_interval=50 trainer.limit_val_batches=50 \
-            data.num_workers=2 callbacks=[rich_progress_bar,save_data] print_lv=2 \
-            callbacks.save_data.train_max_batches_log=0 \
-            callbacks.save_data.valid_max_batches_log=0 \
-            callbacks.save_data.test_max_batches_log=0
-
 
 echo "Done"
 

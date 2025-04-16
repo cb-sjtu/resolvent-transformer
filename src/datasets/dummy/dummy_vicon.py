@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 
+from src.datasets import dataset_utils as dsu
 from src.datasets.data_utils import BaseLabelData, ViconData
 
 
@@ -14,13 +15,17 @@ class DummyViconDataset(Dataset):
         return 500
 
     def __getitem__(self, idx):
+        description = ""
+        description += f"dataset: {self.__class__.__name__}, "
+        description += dsu.get_random_state_description(idx)
+
         demo_cond = torch.randn(1, self.demo_num, self.cond_shape[0], self.cond_shape[1], self.cond_shape[2])
         demo_qoi = torch.randn(1, self.demo_num, self.qoi_shape[0], self.qoi_shape[1], self.qoi_shape[2])
         quest_cond = torch.randn(1, 1, self.cond_shape[0], self.cond_shape[1], self.cond_shape[2])
         quest_qoi = torch.randn(1, 1, self.qoi_shape[0], self.qoi_shape[1], self.qoi_shape[2])
 
         data = ViconData(
-            description=[f"data from {self.__class__.__name__}, idx: {idx}, random state: {torch.randn(1).item()}"],
+            description=[description],
             demo_cond=demo_cond,
             demo_qoi=demo_qoi,
             quest_cond=quest_cond,
