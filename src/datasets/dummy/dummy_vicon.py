@@ -1,8 +1,8 @@
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
 from src.datasets import dataset_utils as dsu
-from src.datasets.data_utils import BaseLabelData, ViconData
 
 
 class DummyViconDataset(Dataset):
@@ -24,13 +24,16 @@ class DummyViconDataset(Dataset):
         quest_cond = torch.randn(1, 1, self.cond_shape[0], self.cond_shape[1], self.cond_shape[2])
         quest_qoi = torch.randn(1, 1, self.qoi_shape[0], self.qoi_shape[1], self.qoi_shape[2])
 
-        data = ViconData(
-            description=[description],
-            demo_cond=demo_cond,
-            demo_qoi=demo_qoi,
-            quest_cond=quest_cond,
-        )
+        data = {
+            "demo_cond": demo_cond,
+            "demo_qoi": demo_qoi,
+            "quest_cond": quest_cond,
+        }
 
-        label = BaseLabelData(description=[f"label from {self.__class__.__name__}"], label=quest_qoi)
+        label = quest_qoi
 
-        return {"data": data, "label": label}
+        return {
+            "description": np.array([description], dtype=np.dtypes.StringDType()),
+            "data": data,
+            "label": label,
+        }

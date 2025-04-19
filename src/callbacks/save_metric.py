@@ -1,7 +1,9 @@
 from pathlib import Path
 
 import lightning as L
+from optree import PyTree
 
+import src.datasets.pytree_utils as ptu
 import src.utils.custom_utils as cu
 
 
@@ -13,78 +15,36 @@ class SaveMetric(L.Callback):
         super().__init__()
         self.dirpath = dirpath
 
-    def on_validation_start(self, trainer, pl_module):
-        self.valid_outputs = {}
-
-    def on_test_start(self, trainer, pl_module):
-        self.test_outputs = {}
-
-    def on_validation_batch_end(self, trainer, pl_module, outputs: dict, batch, batch_idx, dataloader_idx=0):
+    def on_validation_batch_end(self, trainer, pl_module, outputs: dict, batch: PyTree, batch_idx, dataloader_idx=0):
         """Cache valid batch outputs. Only save metrics since they are smaller than preds and errors."""
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
         valid_dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
-        valid_dirpath.mkdir(parents=True, exist_ok=True)
+        self._save_metrics(valid_dirpath, batch, outputs, trainer.global_rank)
 
-        if dataset_name not in self.valid_outputs:
-            self.valid_outputs[dataset_name] = []
-        self.valid_outputs[dataset_name].append(
-            {
-                "description": cu.get_batch_description(batch),  # [str] * bs
-                "metrics": outputs["metrics"],  # dict {str: tensor[bs,...]}
-            }
-        )
-
-    def on_test_batch_end(self, trainer, pl_module, outputs: dict, batch, batch_idx, dataloader_idx=0):
+    def on_test_batch_end(self, trainer, pl_module, outputs: dict, batch: PyTree, batch_idx, dataloader_idx=0):
         """Cache test batch outputs. Only save metrics since they are smaller than preds and errors."""
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
         test_dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
-        test_dirpath.mkdir(parents=True, exist_ok=True)
+        self._save_metrics(test_dirpath, batch, outputs, trainer.global_rank)
 
-        if dataset_name not in self.test_outputs:
-            self.test_outputs[dataset_name] = []
-        self.test_outputs[dataset_name].append(
-            {
-                "description": cu.get_batch_description(batch),  # [str] * bs
-                "metrics": outputs["metrics"],  # dict {str: tensor[bs,...]}
-            }
-        )
-
-    def on_validation_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
-        """Save valid outputs for each process."""
-        for dataloader_idx in range(len(pl_module.cfg.data.valid)):
-            dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
-            valid_dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
-            self._save_outputs(valid_dirpath, self.valid_outputs[dataset_name], trainer.local_rank)
-
-    def on_test_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
-        """Save test outputs for each process."""
-        for dataloader_idx in range(len(pl_module.cfg.data.test)):
-            dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
-            test_dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
-            self._save_outputs(test_dirpath, self.test_outputs[dataset_name], trainer.local_rank)
-
-    def _save_outputs(self, dirpath: Path, outputs: list[dict], rank: int) -> None:
-        if len(outputs) == 0:
-            return  # in case of no valid_step or test_step
-
-        # save the outputs for each process
+    def _save_metrics(self, dirpath: Path, batch: PyTree, outputs: dict, rank: int) -> None:
+        dirpath.mkdir(parents=True, exist_ok=True)
 
         # save descriptions
         full_path = dirpath / f"description_rank{rank}.txt"
-        with open(full_path, "w") as f:
-            for out in outputs:
-                for desc in out["description"]:
-                    f.write(desc + "\n")
+        description = ptu.get_discription_list(batch)  # [str] * bs
+        with open(full_path, "a") as f:
+            for desc in description:
+                f.write(desc + "\n")
 
         # save metrics
-        for key in outputs[0]["metrics"]:
+        for key, tensor in outputs["metrics"].items():
             file_key = key.replace("/", "_")
             full_path = dirpath / f"{file_key}_rank{rank}.txt"
-            with open(full_path, "w") as f:
-                for out in outputs:
-                    tensor = out["metrics"][key].detach().cpu().numpy()
-                    if tensor.ndim == 0:  # scalar, sometimes metrics are not sample-wise
-                        f.write(str(tensor) + "\n")
-                    else:  # (bs, ...)
-                        for t in tensor:  # one line per sample
-                            f.write(" ".join(map(str, t.flatten())) + "\n")
+            with open(full_path, "a") as f:
+                tensor = tensor.detach().cpu().numpy()
+                if tensor.ndim == 0:  # scalar, sometimes metrics are not sample-wise
+                    f.write(str(tensor) + "\n")
+                else:  # (bs, ...)
+                    for t in tensor:  # one line per sample
+                        f.write(" ".join(map(str, t.flatten())) + "\n")

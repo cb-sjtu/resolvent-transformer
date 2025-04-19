@@ -4,11 +4,13 @@ from lightning import LightningDataModule
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, DistributedSampler
 
+from src.datasets import pytree_utils as ptu
+
 from . import dataloader_utils as dlu
 
 
 class BaseDataModule(LightningDataModule):
-    def __init__(self, cfg: DictConfig = None):
+    def __init__(self, cfg: DictConfig):
         super().__init__()
         self.save_hyperparameters(logger=False)
         self.cfg = cfg
@@ -71,13 +73,13 @@ class BaseDataModule(LightningDataModule):
         """
         you can override this function to customize the collate function for training
         """
-        return dlu.collate_fn
+        return ptu.concat
 
     def get_valid_test_collate_fn(self, cfg):
         """
         you can override this function to customize the collate function for validation/test
         """
-        return dlu.collate_fn
+        return ptu.concat
 
     def get_train_dataloader(self, dataset, cfg):
         """

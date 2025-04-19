@@ -39,7 +39,7 @@ class SaveData(L.Callback):
             pl_module.print("", flush=True)  # add a newline after each batch
 
         if batch_idx < self.train_max_batches_local:
-            filename = Path(self.dirpath) / "train" / f"rank_{trainer.local_rank}.txt"
+            filename = Path(self.dirpath) / "train" / f"rank_{trainer.global_rank}.txt"
             with open(filename, "a") as f:  # save to file, append to file end
                 f.write(f"===== Train Batch # {batch_idx} =====\n")
                 for key, value in batch.items():
@@ -64,7 +64,7 @@ class SaveData(L.Callback):
                 / "valid"
                 / f"step_{trainer.global_step}"
                 / dataset_name
-                / f"rank_{trainer.local_rank}.txt"
+                / f"rank_{trainer.global_rank}.txt"
             )
             with open(filename, "a") as f:  # save to file, append to file end
                 f.write(f"===== Valid Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx} =====\n")
@@ -90,7 +90,7 @@ class SaveData(L.Callback):
                 / "test"
                 / f"step_{trainer.global_step}"
                 / dataset_name
-                / f"rank_{trainer.local_rank}.txt"
+                / f"rank_{trainer.global_rank}.txt"
             )
             with open(filename, "a") as f:  # save to file, append to file end
                 f.write(f"===== Test Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx} =====\n")

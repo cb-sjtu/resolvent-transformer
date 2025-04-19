@@ -6,7 +6,7 @@ defaults:
   - print_model
   - save_ckpt
   - save_metric
-  - save_data
+  - save_batch_info
   - viz
   # - _self_
 

@@ -2,10 +2,10 @@ import hydra
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
+from optree import PyTree
 from torchmetrics import MeanMetric, MetricCollection
 
 import src.utils.custom_utils as cu
-from src.datasets.data_utils import BaseLabelData, ViconData
 from src.plmodules.base_lit_module import BaseLitModule
 
 
@@ -42,10 +42,10 @@ class ViconLitModule(BaseLitModule):
 
         return x_normalized, mean, std
 
-    def network_inference(self, data: ViconData):
-        dummy_label = torch.zeros_like(data.demo_qoi[:, -1:, :, :, :])
-        qoi = data.demo_qoi
-        cond = torch.cat((data.demo_cond, data.quest_cond), dim=1)
+    def network_inference(self, data: PyTree):
+        dummy_label = torch.zeros_like(data["demo_qoi"][:, -1:, :, :, :])
+        qoi = data["demo_qoi"]
+        cond = torch.cat((data["demo_cond"], data["quest_cond"]), dim=1)
         cond_norm, cond_mean, cond_std = self._prompt_normalization(cond)
         qoi_norm, qoi_mean, qoi_std = self._prompt_normalization(qoi)
         qoi_norm = torch.cat((qoi_norm, dummy_label), dim=1)
@@ -58,9 +58,9 @@ class ViconLitModule(BaseLitModule):
 
         return denormalized_outputs
 
-    def _get_ground_truth_all(self, data: ViconData, label: BaseLabelData):
-        qoi = data.demo_qoi
-        ground_truth = torch.cat((qoi, label.label), dim=1)
+    def _get_ground_truth_all(self, batch: PyTree):
+        qoi = batch["data"]["demo_qoi"]
+        ground_truth = torch.cat((qoi, batch["label"]), dim=1)
         return ground_truth
 
     def _get_pred_all(self, outputs: dict):
@@ -76,27 +76,23 @@ class ViconLitModule(BaseLitModule):
     def _loss_function(self, pred: torch.Tensor, target: torch.Tensor):
         return F.mse_loss(pred, target)
 
-    def _loss_all(self, batch: dict, short_num_min=1) -> torch.Tensor:
+    def _loss_all(self, batch: PyTree) -> torch.Tensor:
         # used for training
-        data = batch["data"]
-        label = batch["label"]
-        outputs = self.network_inference(data)
+        outputs = self.network_inference(batch["data"])
         all_pred = self._get_pred_all(outputs)
-        all_ground_truth = self._get_ground_truth_all(data, label)
+        all_ground_truth = self._get_ground_truth_all(batch)
         loss = self._loss_function(all_pred, all_ground_truth)
 
         return loss
 
-    def _error_all(self, batch: dict, short_num_min=1) -> torch.Tensor:
-        data = batch["data"]
-        label = batch["label"]
-        outputs = self.network_inference(data)
+    def _error_all(self, batch: PyTree) -> tuple[torch.Tensor, torch.Tensor]:
+        outputs = self.network_inference(batch["data"])
         all_pred = self._get_pred_all(outputs)
-        all_ground_truth = self._get_ground_truth_all(data, label)
+        all_ground_truth = self._get_ground_truth_all(batch)
         error = all_pred - all_ground_truth
         return all_pred, error
 
-    def _loss_quest(self, batch: dict, short_num_min=1) -> torch.Tensor:
+    def _loss_quest(self, batch: PyTree) -> torch.Tensor:
         data = batch["data"]
         label = batch["label"]
         outputs = self.network_inference(data)
@@ -104,7 +100,7 @@ class ViconLitModule(BaseLitModule):
         loss = self._loss_function(quest_pred, label)
         return loss
 
-    def _error_quest(self, batch: dict, short_num_min=1) -> torch.Tensor:
+    def _error_quest(self, batch: PyTree) -> torch.Tensor:
         data = batch["data"]
         label = batch["label"]
         outputs = self.network_inference(data)

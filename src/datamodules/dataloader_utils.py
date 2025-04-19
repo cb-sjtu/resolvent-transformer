@@ -1,7 +1,5 @@
 import torch
 
-import src.datasets.data_utils as du
-
 # We follow the practice in
 # https://pytorch.org/docs/stable/notes/randomness.html#dataloader
 # to set the generator for the dataloader
@@ -34,16 +32,6 @@ def get_dataloader_rng(
     if print_lv >= 2:
         print(f"dataloader rng, rank=[0x{rank:04x}]\tseed=[0x{seed:016x}]\t({print_info})", flush=True)
     return generator
-
-
-def collate_fn(raw_list: list[dict]):
-    data_list = [item["data"] for item in raw_list]
-    label_list = [item["label"] for item in raw_list]
-
-    combined_data = du.concat_data(data_list)
-    combined_labels = du.concat_data(label_list)
-
-    return {"data": combined_data, "label": combined_labels}
 
 
 class CycleLoader:

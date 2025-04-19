@@ -2,10 +2,10 @@ import hydra
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
+from optree import PyTree
 from torchmetrics import MeanMetric, MetricCollection
 
 import src.utils.custom_utils as cu
-from src.datasets.data_utils import BaseLabelData, OperatorData
 from src.plmodules.base_lit_module import BaseLitModule
 
 
@@ -34,20 +34,20 @@ class OperatorLitModule(BaseLitModule):
             ]
         )
 
-    def network_inference(self, data: OperatorData):
-        outputs = self._model_forward(memory=data.f_samples, query=data.g_inputs)
+    def network_inference(self, data: PyTree):
+        outputs = self._model_forward(memory=data["f_samples"], query=data["g_inputs"])
         return outputs
 
-    def _loss_function(self, data: OperatorData, label: BaseLabelData):
-        pred = self.network_inference(data)
-        return F.mse_loss(pred, label.label)
+    def _loss_function(self, batch: PyTree) -> torch.Tensor:
+        pred = self.network_inference(batch["data"])
+        return F.mse_loss(pred, batch["label"])
 
-    def get_pred(self, data: OperatorData) -> torch.Tensor:
+    def get_pred(self, data: PyTree) -> torch.Tensor:
         return self.network_inference(data)
 
-    def get_error(self, data: OperatorData, label: BaseLabelData) -> torch.Tensor:
-        pred = self.get_pred(data)
-        return torch.abs(pred - label.label)
+    def get_error(self, batch: PyTree) -> torch.Tensor:
+        pred = self.get_pred(batch["data"])
+        return torch.abs(pred - batch["label"])
 
     ############ training #############
 
@@ -55,9 +55,8 @@ class OperatorLitModule(BaseLitModule):
         for metrics in self.valid_metrics:
             metrics.reset()
 
-    def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
-        data, label = batch["data"], batch["label"]
-        loss = self._loss_function(data, label)
+    def training_step(self, batch: PyTree, batch_idx: int) -> torch.Tensor:
+        loss = self._loss_function(batch)
 
         self.train_metrics(loss)
         self.log("train/loss", self.train_metrics, on_step=True, on_epoch=True)
@@ -65,11 +64,10 @@ class OperatorLitModule(BaseLitModule):
         return loss
 
     ############ validation #############
-    def validation_step(self, batch: dict, batch_idx: int, dataloader_idx: int = 0) -> dict:
-        data, label = batch["data"], batch["label"]
-        loss = self._loss_function(data, label)
-        errors = self.get_error(data, label)
-        preds = self.get_pred(data)
+    def validation_step(self, batch: PyTree, batch_idx: int, dataloader_idx: int = 0) -> dict:
+        loss = self._loss_function(batch)
+        errors = self.get_error(batch)
+        preds = self.get_pred(batch["data"])
 
         # TODO: suggest using sample-wise metrics, i.e. each of shape (batch, ...)
         metrics = {"loss": loss.mean(), "error": errors.mean()}

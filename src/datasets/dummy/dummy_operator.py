@@ -1,8 +1,8 @@
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
 from src.datasets import dataset_utils as dsu
-from src.datasets.data_utils import BaseLabelData, OperatorData
 
 
 class DummyOperatorDataset(Dataset):
@@ -26,11 +26,15 @@ class DummyOperatorDataset(Dataset):
         g_inputs = torch.randn(1, self.g_seq_len, self.g_in_dim)
         g_targets = torch.randn(1, self.g_seq_len, self.g_out_dim)
 
-        data = OperatorData(
-            description=[description],  # must be a list, one description per sample
-            f_samples=f_samples,
-            g_inputs=g_inputs,
-        )
-        label = BaseLabelData(description=[f"label from {self.__class__.__name__}"], label=g_targets)
+        data = {
+            "f_samples": f_samples,
+            "g_inputs": g_inputs,
+        }
 
-        return {"data": data, "label": label}
+        label = g_targets
+
+        return {
+            "description": np.array([description], dtype=np.dtypes.StringDType()),
+            "data": data,
+            "label": label,
+        }
