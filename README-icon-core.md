@@ -60,12 +60,6 @@ You can create README.md in your own repository to describe your own project. We
 </div>
 
 
-## Environment
-```bash
-conda env create -f env-icon-core.yaml -n icon-core # create the environment named icon-core
-conda activate icon-core # activate the environment
-```
-
 ## Run
 
 We provided some out-of-the-box examples. You can run them directly like this:
@@ -94,22 +88,27 @@ paths:
 This file will be ignored by git, so that they are only effective on your machine and won't affect others.
 
 
-## Install pre-commit hook (before your first commit)
-
-In the activated environment, run `conda install pre-commit -y && pre-commit install` and `conda install -c conda-forge ruff -y` in the root directory of the project to install the pre-commit hook. This will check the code format when committing. The commit will be rejected if the code format check fails. The code will then be auto-formatted, so you can add the change and commit again. Manually format the code if auto-formatting is not working.
-
-Note that you need to run `pre-commit install` before your first commit in each project.
+## Install pre-commit hooks (before your first commit)
+To ensure consistent code formatting, we recommend installing pre-commit hooks. Run the following commands from the project's root directory while in the activated environment. This step is optional - you can skip it or remove the hooks later using `pre-commit uninstall` if needed.
 
 ```sh
-$ pre-commit install # --config .pre-commit-config.yaml # for HTTPS connection
-$ pre-commit install --config .pre-commit-config-ssh.yaml # for SSH connection
+$ pre-commit install # --config .pre-commit-config.yaml # for HTTPS connection to GitHub
+$ pre-commit install --config .pre-commit-config-ssh.yaml # for SSH connection to GitHub
 ```
+
+Pre-commit hooks will check the code (including python and yaml files) format when committing. The commit will be rejected if the code format check fails. The code will then be auto-formatted (if applicable), so you can add the change and commit again. Manually adjust the code if auto-formatting is not working.
+
 
 Mannual ruff format before commit:
 ```sh
-ruff format && ruff check --fix
+ruff check --fix # auto-fix if applicable
+ruff format
 ```
 
+Manually check yaml files (but won't auto-format):
+```sh
+yamllint .
+```
 
 ## Acknowledgement
 
