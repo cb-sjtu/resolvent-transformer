@@ -3,7 +3,7 @@ _target_: src.models.vicon.Vicon
 patch_resolution: 16
 patch_num_in: 8
 patch_num_out: 8
-demo_num: ${data.demo_num}
+ex_num: ${data.ex_num}
 short_num_min: 1
 dim_channel: 3
 dim_token: 256

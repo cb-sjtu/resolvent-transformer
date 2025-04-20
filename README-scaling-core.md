@@ -20,7 +20,7 @@ In our group, we suggest you create a yaml file in `configs/train_custom.yaml`, 
 
 ```yaml
 defaults:
-  - train_operator # replace with the name of the training configuration you want to use
+  - train_nop # replace with the name of the training configuration you want to use
   - _self_
 
 # your custom configurations here, here is an example on Vanda

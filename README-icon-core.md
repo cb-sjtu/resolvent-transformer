@@ -64,7 +64,7 @@ You can create README.md in your own repository to describe your own project. We
 
 We provided some out-of-the-box examples. You can run them directly like this:
 ```bash
-python src/train.py --config-name=train_operator # logger=[csv,wandb] data.batchsize=32
+python src/train.py --config-name=train_nop # logger=[csv,wandb] data.batchsize=32
 ```
 If you have created `configs/train_custom.yaml` (see below), you can run:
 ```bash
@@ -76,7 +76,7 @@ Some configurations are machine-specific. For example, the data directory and lo
 
 ```yaml
 defaults:
-  - train_operator # replace with the name of the training configuration you want to use
+  - train_nop # replace with the name of the training configuration you want to use
   - _self_
 
 # your custom configurations here, here is an example

@@ -18,7 +18,7 @@ source ~/.bashrc
 conda activate sg
 
 # ddp training
-python3 src/train.py --config-name=train_operator trainer=ddp \
+python3 src/train.py --config-name=train_nop trainer=ddp \
             trainer.max_steps=1000 \
             trainer.val_check_interval=50 \
             trainer.limit_val_batches=10 \

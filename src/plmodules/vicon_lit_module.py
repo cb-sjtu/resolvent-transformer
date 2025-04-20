@@ -43,35 +43,35 @@ class ViconLitModule(BaseLitModule):
         return x_normalized, mean, std
 
     def network_inference(self, data: PyTree):
-        dummy_label = torch.zeros_like(data["demo_qoi"][:, -1:, :, :, :])
-        qoi = data["demo_qoi"]
-        cond = torch.cat((data["demo_cond"], data["quest_cond"]), dim=1)
-        cond_norm, cond_mean, cond_std = self._prompt_normalization(cond)
-        qoi_norm, qoi_mean, qoi_std = self._prompt_normalization(qoi)
-        qoi_norm = torch.cat((qoi_norm, dummy_label), dim=1)
+        dummy_label = torch.zeros_like(data["ex_g"][:, -1:, :, :, :])
+        g = data["ex_g"]
+        f = torch.cat((data["ex_f"], data["qn_f"]), dim=1)
+        f_norm, f_mean, f_std = self._prompt_normalization(f)
+        g_norm, g_mean, g_std = self._prompt_normalization(g)
+        g_norm = torch.cat((g_norm, dummy_label), dim=1)
 
-        outputs = self._model_forward(cond_norm, qoi_norm)
-        # denormalize the predicted QoI using the mean and std of the QoI
+        outputs = self._model_forward(f_norm, g_norm)
+        # denormalize the predicted g using the mean and std of the g
         denormalized_outputs = {}
         for key, tensor in outputs.items():
-            denormalized_outputs[key] = tensor * qoi_std + qoi_mean
+            denormalized_outputs[key] = tensor * g_std + g_mean
 
         return denormalized_outputs
 
     def _get_ground_truth_all(self, batch: PyTree):
-        qoi = batch["data"]["demo_qoi"]
-        ground_truth = torch.cat((qoi, batch["label"]), dim=1)
+        g = batch["data"]["ex_g"]
+        ground_truth = torch.cat((g, batch["label"]), dim=1)
         return ground_truth
 
     def _get_pred_all(self, outputs: dict):
-        demo_pred = outputs["demo_pred"]
-        quest_pred = outputs["quest_pred"]
-        all_pred = torch.cat([demo_pred, quest_pred], dim=1)
+        ex_pred = outputs["ex_pred"]
+        qn_pred = outputs["qn_pred"]
+        all_pred = torch.cat([ex_pred, qn_pred], dim=1)
         return all_pred
 
-    def _get_pred_quest(self, outputs: dict):
-        quest_pred = outputs["quest_pred"]
-        return quest_pred
+    def _get_pred_qn(self, outputs: dict):
+        qn_pred = outputs["qn_pred"]
+        return qn_pred
 
     def _loss_function(self, pred: torch.Tensor, target: torch.Tensor):
         return F.mse_loss(pred, target)
@@ -92,20 +92,20 @@ class ViconLitModule(BaseLitModule):
         error = all_pred - all_ground_truth
         return all_pred, error
 
-    def _loss_quest(self, batch: PyTree) -> torch.Tensor:
+    def _loss_qn(self, batch: PyTree) -> torch.Tensor:
         data = batch["data"]
         label = batch["label"]
         outputs = self.network_inference(data)
-        quest_pred = self._get_pred_quest(outputs)
-        loss = self._loss_function(quest_pred, label)
+        qn_pred = self._get_pred_qn(outputs)
+        loss = self._loss_function(qn_pred, label)
         return loss
 
-    def _error_quest(self, batch: PyTree) -> torch.Tensor:
+    def _error_qn(self, batch: PyTree) -> torch.Tensor:
         data = batch["data"]
         label = batch["label"]
         outputs = self.network_inference(data)
-        quest_pred = self._get_pred_quest(outputs)
-        error = quest_pred - label
+        qn_pred = self._get_pred_qn(outputs)
+        error = qn_pred - label
         return error
 
     ############ training #############

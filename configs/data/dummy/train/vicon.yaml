@@ -1,9 +1,9 @@
 name: dummy_vicon
 dataset:
   _target_: src.datasets.dummy.dummy_vicon.DummyViconDataset
-  demo_num: ${data.demo_num}
-  cond_shape: ${data.cond_shape}
-  qoi_shape: ${data.qoi_shape}
+  ex_num: ${data.ex_num}
+  f_shape: ${data.f_shape}
+  g_shape: ${data.g_shape}
 
 num_workers: ${data.num_workers}
 pin_memory: ${data.pin_memory}

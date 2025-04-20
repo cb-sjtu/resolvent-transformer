@@ -223,22 +223,6 @@ def concat_data(datas: Sequence[BaseData], to_tensor=True) -> BaseData:
     return data
 
 
-# -------Input Data-------
-@dataclass
-class OperatorData(BaseData):
-    description: list[str] | None = None
-    f_samples: torch.Tensor | None = None  # (batch, f_seq_len, f_inout_dim)
-    g_inputs: torch.Tensor | None = None  # (batch, g_seq_len, g_in_dim)
-
-
-@dataclass
-class ViconData(BaseData):
-    description: list[str] | None = None
-    demo_cond: torch.Tensor | None = None
-    quest_cond: torch.Tensor | None = None
-    demo_qoi: torch.Tensor | None = None
-
-
 # -------Label Data-------
 # split from Input Data to avoid accidental use of label
 # also wrap into BaseData for flexible operations

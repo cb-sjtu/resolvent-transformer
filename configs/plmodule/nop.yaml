@@ -1,0 +1,2 @@
+_target_: src.plmodules.nop_lit_module.NopLitModule
+_partial_: true

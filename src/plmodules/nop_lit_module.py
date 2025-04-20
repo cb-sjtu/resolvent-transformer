@@ -9,7 +9,7 @@ import src.utils.custom_utils as cu
 from src.plmodules.base_lit_module import BaseLitModule
 
 
-class OperatorLitModule(BaseLitModule):
+class NopLitModule(BaseLitModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__(cfg)
 
@@ -35,7 +35,10 @@ class OperatorLitModule(BaseLitModule):
         )
 
     def network_inference(self, data: PyTree):
-        outputs = self._model_forward(memory=data["f_samples"], query=data["g_inputs"])
+        memory = torch.cat([data["fx"], data["fy"]], dim=-1)
+        query = data["gx"]
+        # mask is not supported yet
+        outputs = self._model_forward(memory=memory, query=query)
         return outputs
 
     def _loss_function(self, batch: PyTree) -> torch.Tensor:

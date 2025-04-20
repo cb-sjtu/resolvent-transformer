@@ -6,10 +6,10 @@ from src.datasets import dataset_utils as dsu
 
 
 class DummyViconDataset(Dataset):
-    def __init__(self, demo_num: int, cond_shape: tuple[int, int, int], qoi_shape: tuple[int, int, int]):
-        self.demo_num = demo_num
-        self.cond_shape = cond_shape  # (cond_dim, cond_h, cond_w)
-        self.qoi_shape = qoi_shape  # (qoi_dim, qoi_h, qoi_w)
+    def __init__(self, ex_num: int, f_shape: tuple[int, int, int], g_shape: tuple[int, int, int]):
+        self.ex_num = ex_num
+        self.f_shape = f_shape  # (f_dim, f_h, f_w)
+        self.g_shape = g_shape  # (g_dim, g_h, g_w)
 
     def __len__(self):
         return 500
@@ -19,18 +19,18 @@ class DummyViconDataset(Dataset):
         description += f"dataset: {self.__class__.__name__}, "
         description += dsu.get_random_state_description(idx)
 
-        demo_cond = torch.randn(1, self.demo_num, self.cond_shape[0], self.cond_shape[1], self.cond_shape[2])
-        demo_qoi = torch.randn(1, self.demo_num, self.qoi_shape[0], self.qoi_shape[1], self.qoi_shape[2])
-        quest_cond = torch.randn(1, 1, self.cond_shape[0], self.cond_shape[1], self.cond_shape[2])
-        quest_qoi = torch.randn(1, 1, self.qoi_shape[0], self.qoi_shape[1], self.qoi_shape[2])
+        ex_f = torch.randn(1, self.ex_num, *self.f_shape)
+        ex_g = torch.randn(1, self.ex_num, *self.g_shape)
+        qn_f = torch.randn(1, 1, *self.f_shape)
+        qn_g = torch.randn(1, 1, *self.g_shape)
 
         data = {
-            "demo_cond": demo_cond,
-            "demo_qoi": demo_qoi,
-            "quest_cond": quest_cond,
+            "ex_f": ex_f,
+            "ex_g": ex_g,
+            "qn_f": qn_f,
         }
 
-        label = quest_qoi
+        label = qn_g
 
         return {
             "description": np.array([description], dtype=np.dtypes.StringDType()),
