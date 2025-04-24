@@ -5,7 +5,7 @@ from omegaconf import DictConfig
 from optree import PyTree
 from torchmetrics import MeanMetric, MetricCollection
 
-import src.utils.custom_utils as cu
+import src.utils.icon_core_utils as cu
 from src.plmodules.base_lit_module import BaseLitModule
 
 

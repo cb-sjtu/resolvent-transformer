@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from lightning.pytorch import loggers
 from PIL import Image
 
-import src.utils.custom_utils as cu
+import src.utils.icon_core_utils as cu
 
 from . import viz_utils as vu
 
