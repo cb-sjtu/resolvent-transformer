@@ -32,7 +32,11 @@ def to_tensor_all(batch: PyTree, *args, **kwargs) -> PyTree:
 
 
 def is_np_numeric(leaf):
-    return isinstance(leaf, np.ndarray) and np.issubdtype(leaf.dtype, np.number)
+    return isinstance(leaf, np.ndarray) and (
+        np.issubdtype(leaf.dtype, np.number)
+        or np.issubdtype(leaf.dtype, np.bool_)
+        or np.issubdtype(leaf.dtype, np.bool)
+    )
 
 
 def to_tensor_numeric(batch: PyTree, *args, **kwargs) -> PyTree:
