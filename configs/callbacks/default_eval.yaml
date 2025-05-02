@@ -1,0 +1,8 @@
+defaults:
+  - model_summary
+  - rich_progress_bar
+  - print_model
+  - save_metric
+  - save_batch_info
+  - save_output
+  - viz

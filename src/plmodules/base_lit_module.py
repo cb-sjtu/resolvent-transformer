@@ -14,6 +14,9 @@ class BaseLitModule(L.LightningModule):
         self.save_hyperparameters(logger=False)
         self.cfg = cfg
 
+        # In eval.py's fit setup, compile the network only once, skip if it’s already been compiled.
+        self._net_compiled = False
+
         sdpa_map = {
             "cudnn": SDPBackend.CUDNN_ATTENTION,
             "math": SDPBackend.MATH,
@@ -28,8 +31,9 @@ class BaseLitModule(L.LightningModule):
             return self.net(*args, **kwargs)
 
     def setup(self, stage: str) -> None:
-        if self.cfg.model.compile and stage == "fit" and torch.__version__ >= "2.0.0":
+        if self.cfg.model.compile and stage == "fit" and torch.__version__ >= "2.0.0" and not self._net_compiled:
             self.net = torch.compile(self.net)
+            self._net_compiled = True
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(
