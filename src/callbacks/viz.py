@@ -25,6 +25,7 @@ class Viz(L.Callback):
         self.valid_max_batches_log = valid_max_batches_log
         self.test_max_batches_local = test_max_batches_local
         self.test_max_batches_log = test_max_batches_log
+        self.category = "viz_base"  # override this in the child class
 
     def get_image(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0) -> Image.Image:
         """
@@ -44,7 +45,7 @@ class Viz(L.Callback):
             img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
 
         if batch_idx < self.valid_max_batches_local:
-            dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
+            dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name / self.category
             dirpath.mkdir(parents=True, exist_ok=True)
             img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
 
@@ -57,7 +58,7 @@ class Viz(L.Callback):
             img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
 
         if batch_idx < self.test_max_batches_local:
-            dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
+            dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name / self.category
             dirpath.mkdir(parents=True, exist_ok=True)
             img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
 
@@ -73,7 +74,7 @@ class Viz(L.Callback):
     ):
         for logger in trainer.loggers:
             if isinstance(logger, loggers.WandbLogger):
-                logger.log_image(key=key, images=[img], step=trainer.global_step)
+                logger.log_image(key=f"{self.category}/{key}", images=[img], step=trainer.global_step)
             elif isinstance(logger, loggers.TensorBoardLogger):
                 # do whatever the tensorboard logger supports
                 pass
