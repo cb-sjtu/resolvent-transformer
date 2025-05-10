@@ -45,7 +45,7 @@ class Viz(L.Callback):
             img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
 
         if batch_idx < self.valid_max_batches_local:
-            dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name / self.category
+            dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
             dirpath.mkdir(parents=True, exist_ok=True)
             img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
 
@@ -58,7 +58,7 @@ class Viz(L.Callback):
             img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
 
         if batch_idx < self.test_max_batches_local:
-            dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name / self.category
+            dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
             dirpath.mkdir(parents=True, exist_ok=True)
             img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
 
