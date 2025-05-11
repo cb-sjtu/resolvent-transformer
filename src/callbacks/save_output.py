@@ -12,22 +12,22 @@ class SaveOutput(L.Callback):
     def __init__(
         self,
         dirpath: str,
-        valid_max_batches_local: int,  # save batches in local machine
-        test_max_batches_local: int,  # save batches in local machine
+        valid_batches_local: str,  # save batches in local machine
+        test_batches_local: str,  # save batches in local machine
     ):
         super().__init__()
         self.dirpath = dirpath
-        self.valid_max_batches_local = valid_max_batches_local
-        self.test_max_batches_local = test_max_batches_local
+        self.valid_batches_local = eval(valid_batches_local)
+        self.test_batches_local = eval(test_batches_local)
 
     def on_validation_batch_end(self, trainer, pl_module, outputs: dict, batch: PyTree, batch_idx, dataloader_idx=0):
-        if batch_idx < self.valid_max_batches_local:
+        if batch_idx in self.valid_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
             valid_dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
             self._save_output(valid_dirpath, batch, outputs, batch_idx, trainer.global_rank)
 
     def on_test_batch_end(self, trainer, pl_module, outputs: dict, batch: PyTree, batch_idx, dataloader_idx=0):
-        if batch_idx < self.test_max_batches_local:
+        if batch_idx in self.test_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
             test_dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
             self._save_output(test_dirpath, batch, outputs, batch_idx, trainer.global_rank)

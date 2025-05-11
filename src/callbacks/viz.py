@@ -14,17 +14,17 @@ class Viz(L.Callback):
     def __init__(
         self,
         dirpath: str,
-        valid_max_batches_local: int,  # save batches in local machine
-        valid_max_batches_log: int,  # log batches to remote wandb
-        test_max_batches_local: int,  # save batches in local machine
-        test_max_batches_log: int,  # log batches to remote wandb
+        valid_batches_local: str,  # save batches in local machine
+        valid_batches_log: str,  # log batches to remote wandb
+        test_batches_local: str,  # save batches in local machine
+        test_batches_log: str,  # log batches to remote wandb
     ):
         super().__init__()
         self.dirpath = dirpath
-        self.valid_max_batches_local = valid_max_batches_local
-        self.valid_max_batches_log = valid_max_batches_log
-        self.test_max_batches_local = test_max_batches_local
-        self.test_max_batches_log = test_max_batches_log
+        self.valid_batches_local = eval(valid_batches_local)
+        self.valid_batches_log = eval(valid_batches_log)
+        self.test_batches_local = eval(test_batches_local)
+        self.test_batches_log = eval(test_batches_log)
         self.category = "viz_base"  # override this in the child class
 
     def get_image(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0) -> Image.Image:
@@ -40,29 +40,29 @@ class Viz(L.Callback):
         return img  # PIL image
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
-        if batch_idx < self.valid_max_batches_log or batch_idx < self.valid_max_batches_local:
+        if batch_idx in self.valid_batches_log or batch_idx in self.valid_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
             img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
 
-        if batch_idx < self.valid_max_batches_local:
+        if batch_idx in self.valid_batches_local:
             dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
             dirpath.mkdir(parents=True, exist_ok=True)
             img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
 
-        if batch_idx < self.valid_max_batches_log:
+        if batch_idx in self.valid_batches_log:
             self.log_image(trainer, img, key=f"{dataset_name}")
 
     def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
-        if batch_idx < self.test_max_batches_log or batch_idx < self.test_max_batches_local:
+        if batch_idx in self.test_batches_log or batch_idx in self.test_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
             img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
 
-        if batch_idx < self.test_max_batches_local:
+        if batch_idx in self.test_batches_local:
             dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
             dirpath.mkdir(parents=True, exist_ok=True)
             img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
 
-        if batch_idx < self.test_max_batches_log:
+        if batch_idx in self.test_batches_log:
             self.log_image(trainer, img, key=f"{dataset_name}")
 
     def log_image(
