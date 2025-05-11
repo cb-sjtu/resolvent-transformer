@@ -1,6 +1,6 @@
 name: dummy_nop
 dataset:
-  _target_: src.datasets.dummy.dummy_nop.DummyNopDataset
+  _target_: src.datasets.dummy_nop.dummy_nop.DummyNopDataset
   f_len: 100
   g_len: 50
   fx_dim: 1
@@ -11,5 +11,5 @@ dataset:
 num_workers: ${data.num_workers}
 pin_memory: ${data.pin_memory}
 batch_size_per_device: ${data.batch_size_per_device}
-enable_device_seed: ${data.valid_enable_device_seed}
-base_seed: ${data.valid_base_seed}
+enable_device_seed: ${data.test_enable_device_seed}
+base_seed: ${data.test_base_seed}

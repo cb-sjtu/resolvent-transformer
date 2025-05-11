@@ -1,4 +1,4 @@
-_target_: src.models.vicon.Vicon
+_target_: src.models.vicon.vicon.Vicon
 
 patch_resolution: 16
 patch_num_in: 8
@@ -9,9 +9,9 @@ dim_channel: 3
 dim_token: 256
 
 transformer:
-  _target_: src.models.transformer.TransformerEncoder
+  _target_: src.models.base.transformer.TransformerEncoder
   layer:
-    _target_: src.models.transformer.TransformerEncoderLayer
+    _target_: src.models.base.transformer.TransformerEncoderLayer
     d_model: 256
     nhead: 8
     dim_feedforward: 1024

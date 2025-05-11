@@ -5,7 +5,7 @@ defaults:
   - test/vicon@test.vicon
   - _self_
 
-data_folder: ${paths.data_dir}/dummy
+data_folder: ${paths.data_dir}/dummy_vicon
 batch_size_per_device: 8
 
 ex_num: 5

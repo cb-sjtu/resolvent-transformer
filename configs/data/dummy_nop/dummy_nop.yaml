@@ -8,5 +8,5 @@ defaults:
   - test/nop_large@test.dummy_nop_large
   - _self_
 
-data_folder: ${paths.data_dir}/dummy # the placeholder for loading data
+data_folder: ${paths.data_dir}/dummy_nop # the placeholder for loading data
 batch_size_per_device: 8

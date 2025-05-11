@@ -1,4 +1,4 @@
-_target_: src.models.encoder_decoder.EncoderDecoder
+_target_: src.models.base.encoder_decoder.EncoderDecoder
 
 encoder_in_proj:
   _target_: torch.nn.Linear
@@ -11,18 +11,18 @@ decoder_in_proj:
   out_features: ${model.decoder.layer.d_model}
 
 encoder:
-  _target_: src.models.transformer.TransformerEncoder
+  _target_: src.models.base.transformer.TransformerEncoder
   layer:
-    _target_: src.models.transformer.TransformerEncoderLayer
+    _target_: src.models.base.transformer.TransformerEncoderLayer
     d_model: 128
     nhead: 4
     dim_feedforward: 512  # 128 * 4
   num_layers: 6
 
 decoder:
-  _target_: src.models.transformer.TransformerDecoder
+  _target_: src.models.base.transformer.TransformerDecoder
   layer:
-    _target_: src.models.transformer.TransformerDecoderLayer
+    _target_: src.models.base.transformer.TransformerDecoderLayer
     d_model: 128
     nhead: 4
     dim_feedforward: 512  # 128 * 4

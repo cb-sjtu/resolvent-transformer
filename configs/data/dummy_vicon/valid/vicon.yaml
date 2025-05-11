@@ -1,6 +1,6 @@
 name: dummy_vicon
 dataset:
-  _target_: src.datasets.dummy.dummy_vicon.DummyViconDataset
+  _target_: src.datasets.dummy_vicon.dummy_vicon.DummyViconDataset
   ex_num: ${data.ex_num}
   f_shape: ${data.f_shape}
   g_shape: ${data.g_shape}
@@ -8,5 +8,5 @@ dataset:
 num_workers: ${data.num_workers}
 pin_memory: ${data.pin_memory}
 batch_size_per_device: ${data.batch_size_per_device}
-enable_device_seed: ${data.train_enable_device_seed}
-base_seed: ${data.train_base_seed}
+enable_device_seed: ${data.valid_enable_device_seed}
+base_seed: ${data.valid_base_seed}

@@ -1,6 +1,6 @@
 name: dummy_nop_large
 dataset:
-  _target_: src.datasets.dummy.dummy_nop.DummyNopDataset
+  _target_: src.datasets.dummy_nop.dummy_nop.DummyNopDataset
   f_len: 200
   g_len: 100
   fx_dim: 1

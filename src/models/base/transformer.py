@@ -1,5 +1,4 @@
 import copy
-from functools import partial
 
 import einops
 import torch
@@ -7,31 +6,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Dropout, LayerNorm, Linear, ModuleList
 from torch.nn import MultiheadAttention as BaseMultiheadAttention
-
-
-def gumbel_scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, mode="gumbel-0"):
-    """
-    gumbel scaled dot-product attention, forward with hard attention, backward with soft attention
-    use scaled dot-product attention since it's faster than softmax
-    """
-    # TODO: support attn_mask and dropout_p
-    assert attn_mask is None, "attn_mask is not supported for gumbel scaled dot-product attention for now"
-    assert dropout_p == 0.0, "dropout_p is not supported for gumbel scaled dot-product attention for now"
-
-    dot_product = torch.einsum("...id,...jd->...ij", q, k)
-    max_indices = torch.argmax(dot_product, dim=-1, keepdim=True)  # (..., q_len, 1)
-    max_indices = einops.repeat(max_indices, "... q_len 1 -> ... q_len d", d=v.size(-1))  # (..., q_len, v_dim)
-    hard_out = torch.gather(v, -2, max_indices)  # (..., q_len, v_dim)
-    if mode == "gumbel-2":
-        return hard_out
-    soft_out = F.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0)  # (..., q_len, v_dim)
-    if mode == "gumbel-0":
-        out = hard_out.detach() - soft_out.detach() + soft_out
-    elif mode == "gumbel-1":
-        out = hard_out - soft_out.detach() + soft_out
-    else:
-        raise ValueError(f"Unknown mode in gumbel scaled dot-product attention: {mode}")
-    return out
 
 
 class MultiheadAttention(nn.Module):
@@ -87,8 +61,6 @@ class MultiheadAttention(nn.Module):
 
         if self.sdpa == "default":
             attn_fn = F.scaled_dot_product_attention
-        elif "gumbel" in self.sdpa:
-            attn_fn = partial(gumbel_scaled_dot_product_attention, mode=self.sdpa)
         else:
             raise ValueError(f"Unknown scaled dot-product attention: {self.sdpa}")
 
@@ -119,10 +91,6 @@ def get_mha(mha, d_model, nhead, dropout, factory_kwargs):
     elif mha == "custom":
         attn = MultiheadAttention(
             embed_dim=d_model, num_heads=nhead, dropout=dropout, batch_first=True, sdpa="default", **factory_kwargs
-        )
-    elif "gumbel" in mha:
-        attn = MultiheadAttention(
-            embed_dim=d_model, num_heads=nhead, dropout=dropout, batch_first=True, sdpa=mha, **factory_kwargs
         )
     else:
         raise ValueError(f"Unknown multi-head attention: {mha}")
