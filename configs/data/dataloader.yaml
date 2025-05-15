@@ -1,3 +1,10 @@
+#######################################################
+# This file belongs to the core repository.
+# If your project repository is a fork of core,
+# you are suggested to keep this file untouched in your project.
+# This helps avoid merge conflicts when syncing from core.
+#######################################################
+
 num_workers: 4
 pin_memory: true
 train_enable_device_seed: true

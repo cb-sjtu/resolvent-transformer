@@ -1,3 +1,10 @@
+#######################################################
+# This file belongs to the core repository.
+# If your project repository is a fork of core,
+# you are suggested to keep this file untouched in your project.
+# This helps avoid merge conflicts when syncing from core.
+#######################################################
+
 """
 this file contains custom utils not included in the original template but useful for our research.
 For project-specific utils, please create new files like xxx_project_utils.py
