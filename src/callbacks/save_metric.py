@@ -40,11 +40,11 @@ class SaveMetric(L.Callback):
         # save metrics
         for key, tensor in outputs["metrics"].items():
             file_key = key.replace("/", "_")
-            full_path = dirpath / f"{file_key}_rank{rank}.txt"
+            full_path = dirpath / f"{file_key}_rank{rank}.csv"
             with open(full_path, "a") as f:
                 tensor = tensor.detach().cpu().numpy()
                 if tensor.ndim == 0:  # scalar, sometimes metrics are not sample-wise
                     f.write(str(tensor) + "\n")
                 else:  # (bs, ...)
                     for t in tensor:  # one line per sample
-                        f.write(" ".join(map(str, t.flatten())) + "\n")
+                        f.write(",".join(map(str, t.flatten())) + "\n")

@@ -1,0 +1,9 @@
+defaults:
+  - ../dataloader@_here_
+  - train/ks@train.ks
+  - valid/ks@valid.ks
+  - test/ks@test.ks
+  - _self_
+
+data_folder: ${paths.data_dir}/KS_eq
+batch_size_per_device: 8

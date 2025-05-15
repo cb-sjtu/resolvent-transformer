@@ -1,5 +1,5 @@
 #!/bin/bash
-# run by `sh git_sync.sh`
+# run by `sh git-sync.sh`
 
 # Save current branch name
 current_branch=$(git rev-parse --abbrev-ref HEAD)

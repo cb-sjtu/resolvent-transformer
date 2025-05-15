@@ -1,3 +1,4 @@
+import hydra
 import lightning as L
 import torch
 from omegaconf import DictConfig
@@ -14,6 +15,7 @@ class BaseLitModule(L.LightningModule):
         self.save_hyperparameters(logger=False)
         self.cfg = cfg
 
+        self.net = hydra.utils.instantiate(cfg.model)
         # In eval.py's fit setup, compile the network only once, skip if it’s already been compiled.
         self._net_compiled = False
 

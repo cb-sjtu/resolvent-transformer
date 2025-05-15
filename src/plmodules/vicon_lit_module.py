@@ -1,4 +1,3 @@
-import hydra
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
@@ -12,11 +11,6 @@ from src.plmodules.base_lit_module import BaseLitModule
 class ViconLitModule(BaseLitModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__(cfg)
-
-        self.save_hyperparameters(logger=False)
-        self.cfg = cfg
-
-        self.net = hydra.utils.instantiate(cfg.model)
 
         self.train_metrics = MeanMetric()
 
