@@ -7,6 +7,7 @@
 
 from collections.abc import Sequence
 
+import einops
 import numpy as np
 import optree
 import torch
@@ -20,10 +21,7 @@ def to_numpy(batch: PyTree) -> PyTree:
     """
     Return a new pytree with all torch.Tensors converted to numpy arrays.
     """
-    return optree.tree_map(
-        lambda leaf: leaf.detach().cpu().numpy() if isinstance(leaf, torch.Tensor) else leaf,
-        batch,
-    )
+    return optree.tree_map(lambda leaf: einops.asnumpy(leaf.float()), batch)
 
 
 def to_tensor_all(batch: PyTree, *args, **kwargs) -> PyTree:
