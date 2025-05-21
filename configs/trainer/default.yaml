@@ -20,7 +20,7 @@ accelerator: cpu
 devices: 1
 
 # mixed precision for extra speed-up
-# precision: 16
+precision: ${accelerate.precision}
 
 # set True to to ensure deterministic results
 # makes training slower but gives more reproducibility than just setting seeds

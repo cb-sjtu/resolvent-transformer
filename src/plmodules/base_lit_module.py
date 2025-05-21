@@ -33,14 +33,14 @@ class BaseLitModule(L.LightningModule):
             "flash": SDPBackend.FLASH_ATTENTION,
         }
 
-        self.sdpa_backends = [sdpa_map[backend] for backend in self.cfg.model.sdpa]
+        self.sdpa_backends = [sdpa_map[backend] for backend in self.cfg.accelerate.sdpa]
 
     def _model_forward(self, *args, **kwargs):
         with sdpa_kernel(self.sdpa_backends):
             return self.net(*args, **kwargs)
 
     def setup(self, stage: str) -> None:
-        if self.cfg.model.compile and stage == "fit" and torch.__version__ >= "2.0.0" and not self._net_compiled:
+        if self.cfg.accelerate.compile and stage == "fit" and torch.__version__ >= "2.0.0" and not self._net_compiled:
             self.net = torch.compile(self.net)
             self._net_compiled = True
 

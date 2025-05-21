@@ -17,6 +17,7 @@ defaults:
   - datamodule: base
   - loss: none
   - opt: default
+  - accelerate: default
   - callbacks: default_rollout
   - logger: many_loggers # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
   - trainer: ddp
@@ -58,10 +59,6 @@ ckpt_path: null
 
 # seed for random number generators in pytorch, numpy and python.random
 seed: 42
-
-dynamo_cache_size_limit: 0
-
-fp32_matmul_precision: "highest" # or high, medium
 
 print_lv: 1
 

@@ -60,14 +60,14 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     :param cfg: A DictConfig configuration composed by Hydra.
     :return: A tuple with metrics and dict with all instantiated objects.
     """
-    torch._dynamo.config.cache_size_limit = cfg.dynamo_cache_size_limit
+    torch._dynamo.config.cache_size_limit = cfg.accelerate.dynamo_cache_size_limit
 
     # https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html
-    torch.set_float32_matmul_precision(cfg.fp32_matmul_precision)
+    torch.set_float32_matmul_precision(cfg.accelerate.fp32_matmul_precision)
 
     # https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-and-later-devices
     # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
-    torch.backends.cuda.matmul.allow_tf32 = cfg.fp32_matmul_precision != "highest"
+    torch.backends.cuda.matmul.allow_tf32 = cfg.accelerate.fp32_matmul_precision != "highest"
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     torch.backends.cudnn.allow_tf32 = True
 

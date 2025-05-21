@@ -40,7 +40,3 @@ out_proj:
   _target_: torch.nn.Linear
   in_features: ${model.decoder.layer.d_model}
   out_features: 1
-
-
-compile: true
-sdpa: ["cudnn", "efficient", "flash", "math"]
