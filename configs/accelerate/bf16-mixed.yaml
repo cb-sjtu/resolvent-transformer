@@ -1,5 +1,5 @@
 fp32_matmul_precision: "high" # or highest, medium
-dynamo_cache_size_limit: 0
+dynamo_cache_size_limit: null
 compile: true
 precision: "bf16-mixed" # https://lightning.ai/docs/pytorch/stable/common/trainer.html#precision
 sdpa: ["cudnn"]

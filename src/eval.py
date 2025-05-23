@@ -62,7 +62,8 @@ def evaluate(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     :param cfg: A DictConfig configuration composed by Hydra.
     :return: A tuple with metrics and dict with all instantiated objects.
     """
-    torch._dynamo.config.cache_size_limit = cfg.accelerate.dynamo_cache_size_limit
+    if cfg.accelerate.dynamo_cache_size_limit is not None:
+        torch._dynamo.config.cache_size_limit = cfg.accelerate.dynamo_cache_size_limit
 
     # https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html
     torch.set_float32_matmul_precision(cfg.accelerate.fp32_matmul_precision)
