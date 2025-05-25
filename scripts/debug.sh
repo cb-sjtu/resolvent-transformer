@@ -15,10 +15,13 @@
 cd $PBS_O_WORKDIR;
 
 source ~/.bashrc
-conda activate sg
+source .venv/bin/activate
 
-python3 src/train.py --config-name=train_nop trainer.max_steps=100 trainer.val_check_interval=50 trainer.limit_val_batches=50
-python3 src/train.py --config-name=train_vicon trainer.max_steps=100 trainer.val_check_interval=50 trainer.limit_val_batches=50
+uv sync --extra cu126
+uv tree
+
+uv run python src/train.py --config-name=train_nop trainer.max_steps=100 trainer.val_check_interval=50 trainer.limit_val_batches=50
+uv run python src/train.py --config-name=train_vicon trainer.max_steps=100 trainer.val_check_interval=50 trainer.limit_val_batches=50
 
 
 echo "Done"
