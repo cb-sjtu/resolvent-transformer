@@ -1,44 +1,32 @@
 # Environment
 
-## Create the conda environment
+You can either use uv or conda to manage the environment.
+
+## uv (recommended)
+
+See [uv](https://docs.astral.sh/uv/getting-started/installation/#installation-methods) for installation.
+
+Then run one of the following command to install the dependencies. You can also put the command in your scripts so that the environment is synced before each training. See examples in `scripts/debug.sh`.
+
 ```sh
-# you can replace icon with other environment names
-conda create -n icon python=3.11 -y && conda activate icon
+uv sync --extra cu118 # torch==2.7.0+cu118
+uv sync --extra cu124 # torch==2.6.0+cu124
+uv sync --extra cu126 # torch==2.7.0+cu126 (suggested)
+uv sync --extra cu128 # torch==2.7.0+cu128
 ```
 
-## Install packages
+
+## Conda
+
+```sh
+conda create -n sg python=3.11 -y && conda activate sg
+```
+
 We only use pip for package installation.
 
-### CUDA 11.8
 Run
-```sh
-pip install -r requirements-cuda118.txt
-```
-or step-by-step:
-```sh
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-pip install lightning
-pip install numpy pandas h5py seaborn matplotlib # data and visualization
-pip install hydra-core hydra-colorlog rootutils rich # logging
-pip install wandb mlflow # mlflow: optional
-pip install tabulate einops # utils
-pip install pre-commit ruff yamllint # formatting
-```
-to get the most advanced features.
 
-### CUDA 12.4
-Run
 ```sh
-pip install -r requirements-cuda124.txt
+pip install -r requirements-cuda118.txt # for cuda 11.8
+pip install -r requirements-cuda124.txt # for cuda 12.4
 ```
-or install step-by-step:
-```sh
-pip install torch torchvision # default as cuda=12.4
-pip install lightning
-pip install numpy pandas h5py seaborn matplotlib # data and visualization
-pip install hydra-core hydra-colorlog rootutils rich # logging
-pip install wandb mlflow # mlflow: optional
-pip install tabulate einops # utils
-pip install pre-commit ruff yamllint # formatting
-```
-to get the most advanced features.
