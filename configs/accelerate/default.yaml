@@ -2,4 +2,4 @@ fp32_matmul_precision: "highest" # or high, medium
 dynamo_cache_size_limit: null
 compile: true
 precision: "32" # https://lightning.ai/docs/pytorch/stable/common/trainer.html#precision
-sdpa: ["cudnn", "efficient", "flash", "math"]
+sdpa: ["efficient", "flash", "math"] # cudnn is not stable sometimes
