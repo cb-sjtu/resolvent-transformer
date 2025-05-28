@@ -16,8 +16,6 @@ class EncoderDecoder(nn.Module):
         encoder: nn.Module,
         decoder: nn.Module,
         out_proj: nn.Module,
-        *args,
-        **kwargs,
     ):
         super().__init__()
         self.encoder_in_proj = encoder_in_proj

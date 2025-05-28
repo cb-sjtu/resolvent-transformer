@@ -22,8 +22,6 @@ class Vicon(nn.Module):
         short_num_min,
         dim_channel,
         dim_token,
-        *args,
-        **kwargs,
     ):
         super().__init__()
 

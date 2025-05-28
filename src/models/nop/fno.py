@@ -19,8 +19,6 @@ class FNO1D(nn.Module):
         hidden_channels: int,
         num_layers: int,
         num_modes: int,
-        *args,
-        **kwargs,
     ):
         super().__init__()
         self.model = NeuralOpFNO1d(
