@@ -31,6 +31,7 @@ cu118 = ["torch>=2.6.0", "torchvision>=0.21.0", "lightning>=2.5"]
 cu124 = ["torch>=2.6.0", "torchvision>=0.21.0", "lightning>=2.5"]
 cu126 = ["torch>=2.7.0", "torchvision>=0.22.0", "lightning>=2.5"]
 cu128 = ["torch>=2.7.0", "torchvision>=0.22.0", "lightning>=2.5"]
+cpu = ["torch>=2.7.0", "torchvision>=0.22.0", "lightning>=2.5"]
 
 [tool.uv]
 conflicts = [
@@ -39,6 +40,7 @@ conflicts = [
         { extra = "cu124" },
         { extra = "cu126" },
         { extra = "cu128" },
+        { extra = "cpu" },
     ],
 ]
 
@@ -48,12 +50,14 @@ torch = [
     { index = "pytorch-cu124", extra = "cu124" },
     { index = "pytorch-cu126", extra = "cu126" },
     { index = "pytorch-cu128", extra = "cu128" },
+    { index = "pytorch-cpu", extra = "cpu" },
 ]
 torchvision = [
     { index = "pytorch-cu118", extra = "cu118" },
     { index = "pytorch-cu124", extra = "cu124" },
     { index = "pytorch-cu126", extra = "cu126" },
     { index = "pytorch-cu128", extra = "cu128" },
+    { index = "pytorch-cpu", extra = "cpu" },
 ]
 
 [[tool.uv.index]]
@@ -74,6 +78,11 @@ explicit = true
 [[tool.uv.index]]
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.ruff]
