@@ -5,6 +5,7 @@
 # This helps avoid merge conflicts when syncing from core.
 #######################################################
 
+optimizer: AdamW
 peak_lr: 1e-4
 end_lr: 0
 warmup_percent: 10

@@ -12,7 +12,7 @@ from omegaconf import DictConfig
 from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from src.opt.warmup_cosine_decay_scheduler import WarmupCosineDecayScheduler
+from src.opt.schedulers.warmup_cosine_decay_scheduler import WarmupCosineDecayScheduler
 
 
 class BaseLitModule(L.LightningModule):
@@ -44,24 +44,44 @@ class BaseLitModule(L.LightningModule):
             self.net = torch.compile(self.net)
             self._net_compiled = True
 
-    def configure_optimizers(self):
-        optimizer = optim.AdamW(
-            filter(lambda p: p.requires_grad, self.net.parameters()),
-            lr=float(self.cfg.opt.peak_lr),
-            weight_decay=float(self.cfg.opt.weight_decay),
-        )
-
+    def get_lr_scheduler(self, optimizer):
         scheduler = WarmupCosineDecayScheduler(
             optimizer=optimizer,
             warmup=int(self.cfg.opt.warmup_percent * self.cfg.trainer.max_steps // 100),
             max_iters=int(self.cfg.opt.decay_percent * self.cfg.trainer.max_steps // 100),
         )
+        return {
+            "scheduler": scheduler,
+            "interval": "step",
+            "frequency": 1,
+        }
+
+    def get_optimizer(self):
+        if self.cfg.opt.optimizer == "AdamW":
+            optimizer = optim.AdamW(
+                filter(lambda p: p.requires_grad, self.net.parameters()),
+                lr=float(self.cfg.opt.peak_lr),
+                weight_decay=float(self.cfg.opt.weight_decay),
+            )
+        elif self.cfg.opt.optimizer == "Muon":
+            from src.opt.optimizers import muon
+
+            muon_params, adamw_params = muon.split_muon_adamw_params(self.net.named_parameters())
+            optimizer = muon.Muon(
+                lr=float(self.cfg.opt.peak_lr),
+                wd=float(self.cfg.opt.weight_decay),
+                muon_params=muon_params,
+                adamw_params=adamw_params,
+            )
+        else:
+            raise ValueError(f"Optimizer {self.cfg.opt.optimizer} not supported")
+        return optimizer
+
+    def configure_optimizers(self):
+        optimizer = self.get_optimizer()
+        lr_scheduler = self.get_lr_scheduler(optimizer)
 
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "step",
-                "frequency": 1,
-            },
+            "lr_scheduler": lr_scheduler,
         }
