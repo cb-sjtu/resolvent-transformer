@@ -12,7 +12,7 @@
 defaults:
   - _self_
   - data/dummy_nop/dummy_nop@data # load from data/dummy/dummy_nop.yaml as data
-  - model: encoder-decoder
+  - model: encoder_decoder
   - plmodule: nop
   - datamodule: base
   - loss: none
