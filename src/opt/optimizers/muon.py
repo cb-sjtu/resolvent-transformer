@@ -6,9 +6,10 @@
 #######################################################
 
 import math
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 
 import torch
+from torch import nn
 
 # This code snippet is a modified version adapted from the following GitHub repository:
 # https://github.com/MoonshotAI/Moonlight/blob/master/examples/toy_train.py
@@ -63,6 +64,14 @@ def zeropower_via_newtonschulz5(G: torch.Tensor, steps: int):
     if G.size(0) > G.size(1):
         X = X.mT
     return X
+
+
+def is_muon_param(name: str, p: nn.Parameter) -> bool:
+    """
+    Check if a parameter should be optimized by Muon.
+    This is useful for debugging or inspecting the parameters that will be optimized by Muon.
+    """
+    return p.ndim >= 2 and "embed_tokens" not in name and "lm_head" not in name
 
 
 class Muon(torch.optim.Optimizer):
@@ -222,34 +231,15 @@ class Muon(torch.optim.Optimizer):
 
         return loss
 
+    @classmethod
+    def split_muon_adamw_params(
+        cls, net: nn.Module, criterion: Callable[[str, nn.Parameter], bool] = is_muon_param
+    ) -> tuple[list[nn.Parameter], ...]:
+        """
+        Extract Muon parameters from named parameters.
+        This is useful for debugging or inspecting the parameters that will be optimized by Muon.
+        """
+        muon_params = [p for name, p in net.named_parameters() if p.requires_grad and criterion(name, p)]
+        adamw_params = [p for name, p in net.named_parameters() if p.requires_grad and not criterion(name, p)]
 
-def is_ge_2d(name: str, p: torch.nn.Parameter) -> bool:
-    """
-    find ≥ 2D parameters in the body of the network, which should be optimized by Muon
-    Others should be optimized by AdamW
-    """
-    return p.ndim >= 2 and "embed_tokens" not in name and "lm_head" not in name
-
-
-def split_muon_adamw_params(
-    named_params: Iterator[tuple[str, torch.nn.Parameter]],
-    is_muon_param_fn: Callable[[str, torch.nn.Parameter], bool] = is_ge_2d,
-) -> tuple[list[torch.nn.Parameter], list[torch.nn.Parameter]]:
-    """
-    split the parameters into two groups
-    named_parameters: usually get by model.named_parameters()
-    is_muon_param_fn: a function to determine if a parameter should be optimized by Muon
-    """
-    # fmt: off
-    muon_params = [
-        p
-        for name, p in named_params
-        if p.requires_grad and is_muon_param_fn(name, p)
-    ]
-    adamw_params = [
-        p
-        for name, p in named_params
-        if p.requires_grad and not is_muon_param_fn(name, p)
-    ]
-    # fmt: on
-    return muon_params, adamw_params
+        return muon_params, adamw_params

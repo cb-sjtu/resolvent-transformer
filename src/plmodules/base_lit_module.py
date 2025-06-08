@@ -64,10 +64,11 @@ class BaseLitModule(L.LightningModule):
                 weight_decay=float(self.cfg.opt.weight_decay),
             )
         elif self.cfg.opt.optimizer == "Muon":
-            from src.opt.optimizers import muon
+            from src.opt.optimizers.muon import Muon
 
-            muon_params, adamw_params = muon.split_muon_adamw_params(self.net.named_parameters())
-            optimizer = muon.Muon(
+            muon_params, adamw_params = Muon.split_muon_adamw_params(self.net)
+
+            optimizer = Muon(
                 lr=float(self.cfg.opt.peak_lr),
                 wd=float(self.cfg.opt.weight_decay),
                 muon_params=muon_params,
