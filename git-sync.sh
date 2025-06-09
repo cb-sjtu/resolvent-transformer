@@ -6,7 +6,30 @@
 #######################################################
 
 #!/bin/bash
-# run by `sh git-sync.sh`
+# run by `sh git-sync.sh` or `sh git-sync.sh --hard`
+# This script will sync the local and origin/main branch.
+# Use --hard to force sync (reset --hard) instead of merge.
+
+# Parse command line arguments
+HARD_SYNC=false
+for arg in "$@"
+do
+    case $arg in
+        --hard)
+        HARD_SYNC=true
+        shift
+        ;;
+    esac
+done
+
+if [ "$HARD_SYNC" = true ]; then
+    echo "This script will force local and origin/main to mirror upstream/main..."
+    echo "----------------------------------------------------------------------------------"
+else
+    echo "This script will sync the local and origin/main branch with upstream/main..."
+    echo "Add --hard to force mirror instead of merge."
+    echo "----------------------------------------------------------------------------------"
+fi
 
 # Save current branch name
 current_branch=$(git rev-parse --abbrev-ref HEAD)
@@ -26,24 +49,39 @@ git pull origin $current_branch --no-edit
 # Check if upstream remote exists
 if git remote | grep -q upstream; then
     echo "----------------------------------------------------------------------------------"
-    echo "Detected upstream repository, syncing upstream/main to origin/main..."
-    git fetch upstream main
-    git checkout main
-    git merge upstream/main --no-edit
-    git push origin main
+    if [ "$HARD_SYNC" = true ]; then
+        echo "Detected upstream repository, forcing local and origin/main to mirror upstream/main..."
+        git fetch upstream main
+        git checkout main
+        git reset --hard upstream/main
+        git push -f origin main
+    else
+        echo "Detected upstream repository, syncing upstream/main to local and origin/main..."
+        git fetch upstream main
+        git fetch origin main
+        git checkout main
+        git merge origin/main --no-edit
+        git merge upstream/main --no-edit
+        git push origin main
+    fi
     echo "----------------------------------------------------------------------------------"
 else
     echo "----------------------------------------------------------------------------------"
-    echo "No upstream repository detected, skipping upstream/main sync"
+    if [ "$HARD_SYNC" = true ]; then
+        echo "No upstream repository detected, forcing local/main to mirror origin/main..."
+        git fetch origin main
+        git checkout main
+        git reset --hard origin/main
+    else
+        echo "No upstream repository detected, syncing from origin/main..."
+        git fetch origin main
+        git checkout main
+        git merge origin/main --no-edit
+    fi
     echo "If this repository is forked from scaling-core, consider adding an upstream remote with"
     echo "git remote add upstream https://github.com/scaling-group/scaling-core.git"
     echo "----------------------------------------------------------------------------------"
 fi
-
-# Pull latest code from origin/main
-echo "Pulling latest code from origin/main..."
-git checkout main
-git pull origin main --no-edit
 
 # Switch back to original branch
 echo "Switching back to original branch $current_branch..."
