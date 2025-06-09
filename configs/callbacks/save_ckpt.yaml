@@ -5,6 +5,8 @@
 # This helps avoid merge conflicts when syncing from core.
 #######################################################
 
+# https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.callbacks.ModelCheckpoint.html
+
 save_ckpt:
   _target_: lightning.pytorch.callbacks.ModelCheckpoint
   dirpath: ${paths.output_dir}/checkpoints # directory to save the model file

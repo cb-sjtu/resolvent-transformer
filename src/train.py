@@ -6,6 +6,7 @@
 #######################################################
 
 import os
+from pathlib import Path
 from typing import Any
 
 import hydra
@@ -73,7 +74,7 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     torch.backends.cudnn.allow_tf32 = True
 
     # set seed for random number generators in pytorch, numpy and python.random
-    if cfg.get("seed"):
+    if cfg.seed is not None:
         L.seed_everything(cfg.seed, workers=True)
 
     # pass the whole config to the datamodule and plmodule
@@ -84,13 +85,16 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     model: LightningModule = hydra.utils.instantiate(cfg.plmodule)(cfg=cfg)
 
     log.info("Instantiating callbacks...")
-    callbacks: list[Callback] = instantiate_callbacks(cfg.get("callbacks"))
+    callbacks: list[Callback] = instantiate_callbacks(cfg.callbacks)
 
     log.info("Instantiating loggers...")
-    logger: list[Logger] = instantiate_loggers(cfg.get("logger"))
+    logger: list[Logger] = instantiate_loggers(cfg.logger)
 
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
-    trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
+    if cfg.train:
+        trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
+    else:
+        trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger, max_steps=0)
 
     object_dict = {
         "cfg": cfg,
@@ -105,21 +109,41 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
         log.info("Logging hyperparameters!")
         log_hyperparameters(object_dict)
 
-    if cfg.get("train"):
-        log.info("Starting training!")
-        trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path"))
+    """
+    Based on "restore ckpts" and "train", there are following cases:
+    - restore ckpts is None, train = False: just eval random initialized model
+    - restore ckpts is None, train = True: normal train, valid, and test
+    - restore ckpts is not None, train = False: valid and test for ckpts
+    - restore ckpts is not None, train = True: for each ckpts: load, train, valid, and test
+    """
 
-    train_metrics = trainer.callback_metrics
+    if cfg.paths.get("restore_dir") is None and cfg.paths.get("restore_ckpts") is None:
+        # no restore ckpts, train model from scratch
+        ckpt_paths = [None]
+    elif cfg.paths.get("restore_ckpts") is not None:  # try loading restore_ckpts first
+        ckpt_paths = [Path(ckpt) for ckpt in cfg.paths.restore_ckpts]
+    else:  # if restore_ckpts is None, load all ckpts in restore_dir
+        ckpt_paths = Path(cfg.paths.restore_dir).glob("*.ckpt")
+        # TODO: drop last.ckpt
 
-    if cfg.get("test"):
-        log.info("Starting testing!")
-        ckpt_path = None  # use the current model
-        trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
-        log.info(f"Best ckpt path: {ckpt_path}")
+    for ckpt_path in ckpt_paths:
+        log.info(f"Loading ckpt from {ckpt_path}, training mode {cfg.train}")
+        # trainer.validate cannot restore global steps, so we have to call fit even if we only need validation
+        trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
+        if not cfg.train:
+            # manual validation, since step=0 won't trigger validation
+            trainer.validate(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
 
-    test_metrics = trainer.callback_metrics
+        train_metrics = trainer.callback_metrics
 
-    # merge train and test metrics
+        if cfg.test:
+            log.info("Starting testing!")
+            trainer.test(model=model, datamodule=datamodule, ckpt_path=None)  # use the current model
+
+        test_metrics = trainer.callback_metrics
+
+    # merge train and test metrics,
+    # If multiple ckpts are restored, only save and return the last one
     metric_dict = {**train_metrics, **test_metrics}
 
     return metric_dict, object_dict

@@ -23,6 +23,8 @@ uv tree
 uv run python src/train.py --config-name=train_nop trainer.max_steps=100 trainer.val_check_interval=50 trainer.limit_val_batches=50
 uv run python src/train.py --config-name=train_vicon trainer.max_steps=100 trainer.val_check_interval=50 trainer.limit_val_batches=50
 
+# load and eval:
+# uv run python src/train.py --config-name=train_nop train=False paths.restore_dir=./logs/train/runs/2025-01-01_00-00-00/checkpoints
 
 echo "Done"
 
