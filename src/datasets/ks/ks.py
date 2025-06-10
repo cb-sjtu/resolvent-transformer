@@ -8,9 +8,10 @@
 import h5py
 import numpy as np
 import torch
+from torch.utils.data import Dataset
 
 
-class KSDataset:
+class KSDataset(Dataset):
     def __init__(
         self,
         path: str,
