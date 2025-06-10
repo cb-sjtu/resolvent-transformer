@@ -10,6 +10,7 @@ from collections.abc import Callable
 from importlib.util import find_spec
 from typing import Any
 
+import rich
 from omegaconf import DictConfig
 
 from src.utils import pylogger, rich_utils
@@ -31,6 +32,9 @@ def extras(cfg: DictConfig) -> None:
     if not cfg.get("extras"):
         log.warning("Extras config not found! <cfg.extras=null>")
         return
+
+    if width := cfg.extras.get("rich_console_width"):
+        rich.console.Console.width = width
 
     # disable python warnings
     if cfg.extras.get("ignore_warnings"):

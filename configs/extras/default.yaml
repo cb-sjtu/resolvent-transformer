@@ -5,6 +5,8 @@
 # This helps avoid merge conflicts when syncing from core.
 #######################################################
 
+rich_console_width: 200
+
 # disable python warnings if they annoy you
 ignore_warnings: False
 
