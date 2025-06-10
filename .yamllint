@@ -36,3 +36,4 @@ rules:
 
 ignore: |
   logs/
+  .venv/

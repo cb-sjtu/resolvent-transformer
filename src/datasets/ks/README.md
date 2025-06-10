@@ -12,32 +12,32 @@ file_structure:
       data_location: "data directory containing three HDF5 files: KS_train_512.h5, KS_valid_512.h5, KS_test_512.h5"
       top_level_groups: "Each file contains a top-level group named after the split ('train', 'valid', 'test')"
       datasets_per_group: "Five datasets with consistent naming but different dimensions"
-    
+
     datasets:
       pde_140-256:
         description: "KS equation solution tensor"
         shape: "512*140*256"
         dimensions: "samples*time_steps*spatial_points"
         details: "512 independent samples, each retaining the last 140 time steps (nt_effective=140), with 256 spatial discretization points (nx=256)"
-      
+
       x:
         description: "Spatial coordinates for each sample"
-        shape: "512*256" 
+        shape: "512*256"
         dimensions: "samples*spatial_points"
         details: "Spatial coordinates from 0 to L(1-1/256)=63.75, with step size L/nx=0.25"
-      
+
       dx:
         description: "Spatial grid spacing"
         shape: "512"
         dimensions: "samples"
         details: "Each element equals 0.25, representing the spatial step size"
-      
+
       t:
         description: "Temporal coordinates"
         shape: "512*140"
         dimensions: "samples*time_steps"
         details: "Physical time moments for the last 140 time points of each trajectory. Time sampling: 500 equally-spaced points in [0,T] then truncated to last 140 steps, where T randomly varies between 90 and 110"
-      
+
       dt:
         description: "Temporal step size"
         shape: "512"

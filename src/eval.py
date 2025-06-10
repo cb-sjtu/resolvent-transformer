@@ -13,7 +13,6 @@ from typing import Any
 
 import hydra
 import lightning as L
-import rich
 import rootutils
 import torch
 import torch._dynamo
