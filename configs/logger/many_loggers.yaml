@@ -8,6 +8,6 @@
 # train with many loggers at once
 
 defaults:
-  - none
-  # - csv
+  # - none
+  - csv
   # - wandb
