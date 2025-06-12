@@ -25,6 +25,8 @@ uv run python src/train.py --config-name=train_vicon trainer.max_steps=100 train
 
 # load and eval:
 # uv run python src/train.py --config-name=train_nop train=False paths.restore_dir=./logs/train/runs/2025-01-01_00-00-00/checkpoints
+# uv run python src/train.py --config-name=train_nop train=False paths.restore_ckpts=["./logs/train/runs/2025-01-01_00-00-00/checkpoints/last.ckpt"]
+# see more details in src/train.py and configs/paths/default.yaml
 
 echo "Done"
 

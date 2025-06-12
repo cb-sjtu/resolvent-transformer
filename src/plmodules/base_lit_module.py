@@ -23,7 +23,7 @@ class BaseLitModule(L.LightningModule):
         self.cfg = cfg
 
         self.net = hydra.utils.instantiate(cfg.model)
-        # In eval.py's fit setup, compile the network only once, skip if it’s already been compiled.
+        # compile the network only once, skip if it’s already been compiled.
         self._net_compiled = False
 
         sdpa_map = {
