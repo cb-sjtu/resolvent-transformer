@@ -39,7 +39,7 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 from src.utils import (  # noqa: E402
     RankedLogger,
     extras,
-    get_metric_value,
+    # get_metric_value,
     instantiate_callbacks,
     instantiate_loggers,
     log_hyperparameters,
@@ -125,27 +125,34 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
         ckpt_paths = Path(cfg.paths.restore_dir).glob("*.ckpt")
         # TODO: drop last.ckpt
 
+    ckpt_paths = list(ckpt_paths)
     for ckpt_path in ckpt_paths:
-        log.info(f"Loading ckpt from {ckpt_path}, training mode {cfg.train}")
-        # trainer.validate cannot restore global steps, so we have to call fit even if we only need validation
-        trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
-        if not cfg.train:
-            # manual validation, since step=0 won't trigger validation
-            trainer.validate(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
+        log.info(f"Found checkpoint: {ckpt_path}")
 
-        train_metrics = trainer.callback_metrics
-
-        if cfg.test:
-            log.info("Starting testing!")
-            trainer.test(model=model, datamodule=datamodule, ckpt_path=None)  # use the current model
-
-        test_metrics = trainer.callback_metrics
-
-    # merge train and test metrics,
-    # If multiple ckpts are restored, only save and return the last one
-    metric_dict = {**train_metrics, **test_metrics}
-
-    return metric_dict, object_dict
+    if cfg.train:
+        log.info("Entering training mode...")
+        for ckpt_path in ckpt_paths:
+            log.info(f"Fitting model with ckpt_path: {ckpt_path}")
+            trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
+    else:
+        log.info("Entering validation mode...")
+        # prepare dataloaders to avoid dataloader re-init
+        datamodule.prepare_data()  # prepare data (e.g. download, extract, etc.)
+        datamodule.setup(stage="validate")  # setup data on each process
+        train_dataloader = datamodule.train_dataloader()
+        valid_dataloaders = datamodule.val_dataloader()
+        log.info("DataModule prepared and set up for validation.")
+        for ckpt_path in ckpt_paths:
+            log.info(f"Evaluating model with ckpt_path: {ckpt_path}")
+            trainer.fit(
+                model=model,
+                train_dataloaders=train_dataloader,
+                val_dataloaders=valid_dataloaders,
+                ckpt_path=ckpt_path,
+            )
+            log.info("Running trainer.validate() for validation.")
+            trainer.validate(model=model, dataloaders=valid_dataloaders, ckpt_path=ckpt_path)
+    return {}, {}
 
 
 # if train_custom.yaml exists, use it as default config file
@@ -154,24 +161,24 @@ config_file_name = "train_custom.yaml" if os.path.exists("./configs/train_custom
 
 
 @hydra.main(version_base="1.3", config_path="../configs/", config_name=config_file_name)
-def main(cfg: DictConfig) -> float | None:
+def main(cfg: DictConfig):
     """Main entry point for training.
 
     :param cfg: DictConfig configuration composed by Hydra.
-    :return: Optional[float] with optimized metric value.
     """
     # apply extra utilities
     # (e.g. ask for tags if none are provided in cfg, print cfg tree, etc.)
     extras(cfg)
 
     # train the model
-    metric_dict, _ = train(cfg)
+    train(cfg)
+    # metric_dict, _ = train(cfg)
 
-    # safely retrieve metric value for hydra-based hyperparameter optimization
-    metric_value = get_metric_value(metric_dict=metric_dict, metric_name=cfg.get("optimized_metric"))
+    # # safely retrieve metric value for hydra-based hyperparameter optimization
+    # metric_value = get_metric_value(metric_dict=metric_dict, metric_name=cfg.get("optimized_metric"))
 
-    # return optimized metric
-    return metric_value
+    # # return optimized metric
+    # return metric_value
 
 
 if __name__ == "__main__":

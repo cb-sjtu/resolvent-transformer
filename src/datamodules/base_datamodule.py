@@ -108,7 +108,8 @@ class BaseDataModule(LightningDataModule):
         generator = dlu.get_dataloader_rng(
             base_seed=cfg.base_seed,
             enable_device_seed=cfg.enable_device_seed,
-            print_info=f"step = {self.trainer.global_step}, train: {cfg.name}",
+            # print_info=f"step = {self.trainer.global_step}, train: {cfg.name}",
+            print_info=f"train: {cfg.name}",
             print_lv=self.cfg.print_lv,
         )
 
@@ -145,7 +146,8 @@ class BaseDataModule(LightningDataModule):
         generator = dlu.get_dataloader_rng(
             base_seed=cfg.base_seed,
             enable_device_seed=cfg.enable_device_seed,
-            print_info=f"step = {self.trainer.global_step}, valid|test: {cfg.name}",
+            # print_info=f"step = {self.trainer.global_step}, valid|test: {cfg.name}",
+            print_info=f"valid|test: {cfg.name}",
             print_lv=self.cfg.print_lv,
         )
 

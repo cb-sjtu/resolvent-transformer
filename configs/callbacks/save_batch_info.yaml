@@ -5,7 +5,7 @@
 # This helps avoid merge conflicts when syncing from core.
 #######################################################
 
-save_data:
+save_batch_info:
   _target_: src.callbacks.save_batch_info.SaveBatchInfo
   dirpath: ${paths.output_dir}/batch_info
   print_lv_local: 2
