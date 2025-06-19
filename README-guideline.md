@@ -6,6 +6,19 @@ This document describes the workflow for adding new components to the project.
 
 This repository already contains a lot of components, including models, lightning modules, datasets, callbacks, etc. You should try to leverage them by reusing or inheriting from them in your project. Additionally, they serve as practical implementation references for your work.
 
+Do not modify files inherited from the core repository. These files start with a header in the beginning of the file:
+
+```python
+#######################################################
+# This file belongs to the core repository.
+# If your project repository is a fork of core,
+# you are suggested to keep this file untouched in your project.
+# This helps avoid merge conflicts when syncing from core.
+#######################################################
+```
+
+Other files are not part of the core repository and are free to modify. Do not add the header in your newly created files, so other developers can easily identify them.
+
 ## Adding New Components
 
 ### Model and Lightning Module
@@ -18,12 +31,10 @@ Please refer to `src/models/README.md` and `src/plmodules/README.md` for more de
 - Create new torch datasets in `src/datasets/your_dataset_folder/your_dataset_file.py`.
 - Create new lightning data modules and dataloaders in `src/datamodules/your_datamodule_file.py`.
 
-Please refer to `src/datasets/README.md` and `src/datamodules/README.md` for more details.
+Please refer to `src/datasets/README.md` for more details.
 
 ### Callbacks
 - Create new callbacks in `src/callbacks/your_callback_name.py`.
-
-Please refer to `src/callbacks/README.md` for more details.
 
 ## Configuration
 
