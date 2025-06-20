@@ -18,9 +18,11 @@ This directory contains all configuration files for the project, organized using
 - `paths/` - Path configurations
 - `plmodule/` - PyTorch Lightning module configurations
 - `trainer/` - Trainer configurations
-...
-...
-- `train_nop.yaml` - Training configuration for Neural Operator models
-- `train_nop_rollout.yaml` - Training configuration for NOP models with rollout
-- `train_vicon.yaml` - Training configuration for Vicon models
-...
+- ...
+
+The followings are examples of training configuration files
+
+- `train_nop.yaml` - Training configuration for neural operator models
+- `train_nop_rollout.yaml` - Training configuration for neural operator models with rollout
+- `train_vicon.yaml` - Training configuration for vision in-context operator networks
+- ...

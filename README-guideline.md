@@ -4,7 +4,7 @@ This document describes the workflow for adding new components to the project.
 
 ## Reusing Existing Components
 
-This repository already contains a lot of components, including models, lightning modules, datasets, callbacks, etc. You should try to leverage them by reusing or inheriting from them in your project. Additionally, they serve as practical implementation references for your work.
+This repository already contains a lot of components, including models, lightning modules, datasets, callbacks, etc. You should try to leverage them by reusing or inheriting from them in your project. Additionally, they serve as practical implementation references. Read them before implementing your own.
 
 Do not modify files inherited from the core repository. These files start with a header in the beginning of the file:
 
@@ -22,18 +22,21 @@ Other files are not part of the core repository and are free to modify. Do not a
 ## Adding New Components
 
 ### Model and Lightning Module
+
 - Create new model architectures in `src/models/your_model_folder/your_model_file.py`.
 - Create Lightning Module for new training and evaluation pipelines in `src/plmodules/your_plmodule_file.py`
 
 Please refer to `src/models/README.md` and `src/plmodules/README.md` for more details.
 
 ### Dataset and DataModule
+
 - Create new torch datasets in `src/datasets/your_dataset_folder/your_dataset_file.py`.
 - Create new lightning data modules and dataloaders in `src/datamodules/your_datamodule_file.py`.
 
 Please refer to `src/datasets/README.md` for more details.
 
 ### Callbacks
+
 - Create new callbacks in `src/callbacks/your_callback_name.py`.
 
 ## Configuration
@@ -41,6 +44,6 @@ Please refer to `src/datasets/README.md` for more details.
 After implementing your components, you need to:
 
 1. Add configuration files in the subdirectories of `configs/`.
-2. Create a new configuration file `configs/train_project_name.yaml`. For reference, you can mimic the format of `configs/train_nop_rollout.yaml`, and replace the configs with ones you need.
+2. Create a new configuration file `configs/train_project_name.yaml`.
 
 Please refer to `configs/README.md` for more details.

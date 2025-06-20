@@ -9,7 +9,6 @@ dependencies = [
     "h5py>=3.13.0",
     "hydra-colorlog>=1.2.0",
     "hydra-core>=1.3.2",
-    # "lightning>=2.5.1.post0",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
     "mlflow>=2.22.0",
@@ -21,9 +20,9 @@ dependencies = [
     "rootutils>=1.0.7",
     "seaborn>=0.13.2",
     "tabulate>=0.9.0",
-    # "torch>=2.6.0",
-    # "torchvision>=0.21.0",
     "wandb>=0.19.11",
+    # lightning, torch, and torchvision will be handled via extra
+    # The above are for icon-core, put your project dependencies below
 ]
 
 [project.optional-dependencies]

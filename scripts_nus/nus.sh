@@ -2,7 +2,7 @@
 #PBS -P CFP01-SF-009
 #PBS -j oe
 #PBS -k oed
-#PBS -N debug
+#PBS -N example
 #PBS -l walltime=30:00:00
 #PBS -l select=1:ngpus=2
 ##----- CPU/Mem will be allocated at 10/200gb per GPU. -----
@@ -15,20 +15,8 @@
 cd $PBS_O_WORKDIR;
 
 source ~/.bashrc
-source .venv/bin/activate
 
-uv sync --extra cu126
-uv tree
-
-uv run python src/train.py --config-name=train_nop trainer.max_steps=100 trainer.val_check_interval=50 trainer.limit_val_batches=50
-uv run python src/train.py --config-name=train_vicon trainer.max_steps=100 trainer.val_check_interval=50 trainer.limit_val_batches=50
-
-# load and eval:
-# uv run python src/train.py --config-name=train_nop train=False paths.restore_dir=./logs/train/runs/2025-01-01_00-00-00/checkpoints
-# uv run python src/train.py --config-name=train_nop train=False paths.restore_ckpts=["./logs/train/runs/2025-01-01_00-00-00/checkpoints/last.ckpt"]
-# see more details in src/train.py and configs/paths/default.yaml
-
-echo "Done"
+bash scripts_core/gpu.sh
 
 ##**************************************************************************
 ##   WARNING and IMPORTANT NOTICE                                          *

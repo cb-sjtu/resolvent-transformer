@@ -164,8 +164,7 @@ cython_debug/
 
 
 # ------------------------------------------------------------------------------------------------
-# The following are not from the original template, but added by the group.
-# These are configs shared in all projects.
+# The following are not from the original lightning-hydra-template template, but added by icon-core.
 
 # VSCode
 .vscode/

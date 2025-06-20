@@ -25,10 +25,11 @@ Suggestions and Pull Requests are welcome!
 This repository was originally the infrastructure inside our group, [Scientific Computing and Intelligence Group (scaling group)](https://scaling-group.github.io/). We open-sourced it for the community to use.
 
 This repository is based on the [lightning-hydra-template](https://github.com/ashleve/lightning-hydra-template) (See [acknowledgement](#acknowledgement) below). We made some changes in the code structure, and added more files specifically for the research in this field, including:
-  - Standard models and algorithms for operator learning and in-context operator learning, for tutorial and benchmark.
-  - Testbed datasets and dataloaders.
-  - Standard training and evaluation pipelines as examples.
-  - Utilities, including visualization, printing, saving, logging, etc.
+
+- Standard models and algorithms for operator learning and in-context operator learning, for tutorial and benchmark.
+- Testbed datasets and dataloaders.
+- Standard training and evaluation pipelines as examples.
+- Utilities, including visualization, printing, saving, logging, etc.
 
 We will keep updating this repository, but as an academic research group, we are unable to provide technical support for this repository or guarantee the stability of the codebase.
 
@@ -41,10 +42,96 @@ There are two ways to use this repository:
 
 We didn't release this repository as a package, as we believe the current structure is more flexible for academic use.
 
+## Environment
+
+You can either use uv or conda to manage the environment.
+
+### uv
+
+See [uv](https://docs.astral.sh/uv/getting-started/installation/#installation-methods) for installation.
+
+Run one of the following command to install the dependencies.
+
+```sh
+# consider adding "--index-url https://pypi.tuna.tsinghua.edu.cn/simple" if you have difficulty in connecting to pypi.org
+uv sync --extra cu118 # torch-cu118
+uv sync --extra cu124 # torch-cu124
+uv sync --extra cu126 # torch-cu126 (suggested)
+uv sync --extra cu128 # torch-cu128
+uv sync --extra cpu # torch-cpu
+```
+
+You can also put the above commands in your scripts so that the environment is activated and synced before each training. See examples in `scripts_core`.
+
+### Conda
+
+```sh
+conda create -n core python=3.11 -y && conda activate core # you can replace core with other names
+```
+
+We use pip for package installation.
+
+Run
+
+```sh
+pip install -r requirements/requirements-icon-core-cuda118.txt # for cuda 11.8
+pip install -r requirements/requirements-icon-core-cuda124.txt # for cuda 12.4
+```
+
+## Run
+
+We provided some out-of-the-box script examples in `scripts_core`. Run as
+
+```sh
+sh scripts_core/cpu.sh
+```
+
+Some configs are machine-specific, for example, the data directory and log directory. You can create a yaml file `configs/train_custom.yaml` with contents like the following:
+
+```yaml
+defaults:
+  - train_nop # base configs, replace with the name of training config file for your project
+  - _self_
+
+# your machine-specific configs here, will override base configs, here is an example
+paths:
+  data_dir: ./project_data/
+  log_dir: ./project_logs/
+```
+
+If you created `configs/train_custom.yaml`, `src/train.py` will read it as the training config file, so you don't need to manually pass one anymore. For example, you can run:
+
+```sh
+uv run python src/train.py # no need to add --config-name=train_xxx
+uv run python src/train.py trainer.max_steps=10 # you can pass other configs
+```
+
+`configs/train_custom.yaml` will be ignored by git, so it is only effective on your machine. All configs will be logged (including those in `configs/train_custom.yaml`), so in principle you don't need to worry about reproducibility. However, for better collaboration, please only include insignificant machine-specific configs in `configs/train_custom.yaml`.
+
+## Pre-commit hooks
+
+To ensure consistent code formatting and avoid mistake like uploading private keys, we strongly recommend installing pre-commit hooks. Pre-commit hooks will check your code when you make a commit in your local repository. If your code cannot pass the check, pre-commit hooks will reject the commit and try to fix it automatically, so you can amend the changes and commit again. If auto-fix is not working, you can manually adjust the code according to the prompted message.
+
+To install pre-commit hooks, please run the following commands in your repository's root directory.
+
+```sh
+pip install pre-commit # you can skip this if pre-commit is already installed
+# you need to run one of the following for each local repository
+pre-commit install # for HTTPS connection to GitHub, by default using .pre-commit-config.yaml
+pre-commit install --config requirements/.pre-commit-config-ssh.yaml # for SSH connection to GitHub
+```
+
+Pre-commit hooks will only check files modified in the current commit, ignoring others, so it is strongly suggested to install pre-commit hooks before your first commit. You can also manually run pre-commit hooks to check all files:
+
+```sh
+pre-commit run --all-files
+```
+
+We have also integrated pre-commit hooks in GitHub workflows, enabling GitHub to check your remote repository. If you really don't like it, you can delete the folder `.github/workflows`, and uninstall pre-commit hooks with `pre-commit uninstall`.
+
 ## Project-specific README
 
 You can create README.md in your own repository to describe your own project. We fully leave it to you. For your reference, you can adapt the following header (also from [lightning-hydra-template](https://github.com/ashleve/lightning-hydra-template)):
-
 
 <div align="center">
 
@@ -59,67 +146,15 @@ You can create README.md in your own repository to describe your own project. We
 
 </div>
 
-
-## Run
-
-We provided some out-of-the-box examples. You can run them directly like this:
-```bash
-python src/train.py --config-name=train_nop # logger=[csv,wandb] data.batchsize=32
-```
-If you have created `configs/train_custom.yaml` (see below), you can run:
-```bash
-python src/train.py # logger=[csv,wandb] data.batchsize=32
-```
-
-## Machine-specific custom configurations
-Some configurations are machine-specific. For example, the data directory and log directory. You can create a yaml file in `configs/train_custom.yaml`, and add contents like the following:
-
-```yaml
-defaults:
-  - train_nop # replace with the name of the training configuration you want to use
-  - _self_
-
-# your custom configurations here, here is an example
-paths:
-  data_dir: ./data/
-  log_dir: ./logs/
-
-```
-This file will be ignored by git, so that they are only effective on your machine and won't affect others.
-
-
-## Install pre-commit hooks (before your first commit)
-To ensure consistent code formatting, we recommend installing pre-commit hooks. Run the following commands from the project's root directory while in the activated environment. This step is optional - you can skip it or remove the hooks later using `pre-commit uninstall` if needed.
-
-```sh
-$ pre-commit install # --config .pre-commit-config.yaml # for HTTPS connection to GitHub
-$ pre-commit install --config .pre-commit-config-ssh.yaml # for SSH connection to GitHub
-```
-
-Pre-commit hooks will check the code (including python and yaml files) format when committing. The commit will be rejected if the code format check fails. The code will then be auto-formatted (if applicable), so you can add the change and commit again. Manually adjust the code if auto-formatting is not working.
-
-
-Mannual ruff format before commit:
-```sh
-ruff check --fix # auto-fix if applicable
-ruff format
-```
-
-Manually check yaml files (but won't auto-format):
-```sh
-yamllint .
-```
-
 ## Acknowledgement
 
 Please include the following acknowledgement in your code that uses this repository, or simply keep this `README-icon-core.md` file in your repository for clarity.
-
 
 This project uses the [ICON-CORE](https://github.com/scaling-group/icon-core), an open-source project led by [Scientific Computing and Intelligence Group](https://scaling-group.github.io/) and contributed by many community [contributors](https://github.com/scaling-group/icon-core/graphs/contributors), under the supervision of Prof. Liu Yang.
 
 ICON-CORE is under the MIT license.
 
-```
+```txt
 MIT License
 
 Copyright (c) 2025 Scientific Computing and Intelligence Group
@@ -145,7 +180,7 @@ SOFTWARE.
 
 ICON-CORE is based on the [lightning-hydra-template](https://github.com/ashleve/lightning-hydra-template), also under the MIT license.
 
-```
+```txt
 MIT License
 
 Copyright (c) 2021 ashleve
