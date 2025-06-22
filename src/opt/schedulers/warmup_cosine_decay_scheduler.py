@@ -21,7 +21,7 @@ class WarmupCosineDecayScheduler(optim.lr_scheduler._LRScheduler):
 
     def get_lr_factor(self, epoch):
         if epoch <= self.warmup:
-            lr_factor = epoch * 1.0 / self.warmup
+            lr_factor = epoch * 1.0 / max(self.warmup, 1)
         else:
             progress = (epoch - self.warmup) / (self.max_num_iters - self.warmup)
             lr_factor = 0.5 * (1 + np.cos(np.pi * progress))
