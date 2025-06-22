@@ -47,3 +47,20 @@ After implementing your components, you need to:
 2. Create a new configuration file `configs/train_project_name.yaml`.
 
 Please refer to `configs/README.md` for more details.
+
+
+## Testing
+
+### Unit Tests
+
+You can add unit tests code in the same file as the code to be tested, under the `if __name__ == "__main__":` block. Alternatively, you can add individual test files `test_your_component.py` for complicated tests, but it is suggested to keep the test code in the same folder as the code to be tested.
+
+You may have difficulty in importing local modules. An easy way is to run the test code in the root directory as follows:
+```bash
+uv run python -m src.subfolder.test_your_component
+```
+Here `uv run` ensures running in the virtual environment.
+
+### End-to-End Tests
+
+Refer to `README-icon-core.md` for how to run code end-to-end.
