@@ -8,7 +8,8 @@
 defaults:
   - ../dataloader@_here_
   - train/ks@train.ks
-  - valid/ks@valid.ks
+  - valid/ks_short@valid.ks_short
+  - valid/ks_long@valid.ks_long
   - test/ks@test.ks
   - _self_
 

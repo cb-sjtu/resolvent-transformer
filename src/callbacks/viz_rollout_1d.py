@@ -15,7 +15,7 @@ from . import viz_utils as vu
 from .viz import Viz
 
 
-class RolloutViz1D(Viz):
+class VizRollout1D(Viz):
     def __init__(
         self,
         dirpath: str,
@@ -31,7 +31,7 @@ class RolloutViz1D(Viz):
             test_batches_local,
             test_batches_log,
         )
-        self.category = "rollout_viz_1d"
+        self.category = "viz_rollout_1d"
 
     def get_image(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0) -> Image.Image:
         """

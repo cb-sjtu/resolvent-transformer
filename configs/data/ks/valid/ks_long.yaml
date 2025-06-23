@@ -5,7 +5,7 @@
 # This helps avoid merge conflicts when syncing from core.
 #######################################################
 
-name: ks_valid
+name: ks_long
 dataset:
   _target_: src.datasets.ks.ks.KSDataset
   path: ${data.data_folder}/KS_valid.h5

@@ -18,7 +18,7 @@ defaults:
   - loss: none
   - opt: default
   - accelerate: default
-  - callbacks: default_rollout
+  - callbacks: many_callbacks_nop_rollout
   - logger: many_loggers # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
   - trainer: ddp
   - paths: default

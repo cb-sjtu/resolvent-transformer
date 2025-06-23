@@ -5,10 +5,13 @@
 # This helps avoid merge conflicts when syncing from core.
 #######################################################
 
-rollout_viz:
-  _target_: src.callbacks.viz_rollout.RolloutViz
-  dirpath: ${paths.output_dir}/viz_rollout
-  valid_batches_local: "[0]"
-  valid_batches_log: "[0]"
-  test_batches_local: "[0]"
-  test_batches_log: "[0]"
+defaults:
+  - model_summary
+  - rich_progress_bar
+  - print_model
+  - save_ckpt
+  - save_metric
+  - save_batch_info
+  - viz_rollout_error
+  - viz_rollout_1d
+  - _self_
