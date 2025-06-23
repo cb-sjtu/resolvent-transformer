@@ -28,11 +28,11 @@ class NopLitModule(BaseLitModule):
             # add more metrics here
         ]
 
-        self.valid_metrics = torch.nn.ModuleList(
-            [
-                MetricCollection({k: MeanMetric() for k in self.metric_names})
-                for _ in range(len(self.cfg.data.valid))  # initialize metrics for each valid_loader
-            ]
+        self.valid_metrics = torch.nn.ModuleDict(
+            {
+                self.cfg.data.valid[key].name: MetricCollection({k: MeanMetric() for k in self.metric_names})
+                for key in self.cfg.data.valid
+            }
         )
 
     def network_inference(self, data: PyTree):
@@ -56,7 +56,7 @@ class NopLitModule(BaseLitModule):
     ############ training #############
 
     def on_train_start(self) -> None:
-        for metrics in self.valid_metrics:
+        for metrics in self.valid_metrics.values():
             metrics.reset()
 
     def training_step(self, batch: PyTree, batch_idx: int) -> torch.Tensor:
@@ -76,20 +76,16 @@ class NopLitModule(BaseLitModule):
         # TODO: suggest using sample-wise metrics, i.e. each of shape (batch, ...)
         metrics = {"loss": loss.mean(), "error": errors.mean()}
 
-        for metric_name in self.metric_names:
-            self.valid_metrics[dataloader_idx][metric_name].update(metrics[metric_name])
-
         valid_name = cu.get_dataset_name(self.cfg.data.valid, dataloader_idx)
+        for metric_name in self.metric_names:
+            self.valid_metrics[valid_name][metric_name].update(metrics[metric_name])
 
         for metric_name in self.metric_names:
             self.log(
                 f"{valid_name}/{metric_name}",
-                self.valid_metrics[dataloader_idx][metric_name],
+                self.valid_metrics[valid_name][metric_name],
                 on_step=False,
                 on_epoch=True,
                 add_dataloader_idx=False,
             )
         return {"preds": preds, "errors": errors, "metrics": metrics}
-
-    def test_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
-        pass

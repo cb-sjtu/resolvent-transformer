@@ -5,7 +5,6 @@
 # This helps avoid merge conflicts when syncing from core.
 #######################################################
 
-from typing import Literal
 
 import einops
 import torch
@@ -35,18 +34,11 @@ class NopRolloutLitModule(BaseLitModule):
             "error_step_1",
         ]
 
-        self.valid_metrics = torch.nn.ModuleList(
-            [
-                MetricCollection({k: MeanMetric() for k in self.metric_names})
-                for _ in range(len(self.cfg.data.valid))  # initialize metrics for each valid_loader
-            ]
-        )
-
-        self.test_metrics = torch.nn.ModuleList(
-            [
-                MetricCollection({k: MeanMetric() for k in self.metric_names})
-                for _ in range(len(self.cfg.data.test))  # initialize metrics for each test_loader
-            ]
+        self.valid_metrics = torch.nn.ModuleDict(
+            {
+                self.cfg.data.valid[key].name: MetricCollection({k: MeanMetric() for k in self.metric_names})
+                for key in self.cfg.data.valid
+            }
         )
 
     def _loss_function(self, batch: PyTree) -> torch.Tensor:
@@ -141,7 +133,7 @@ class NopRolloutLitModule(BaseLitModule):
     ############ training #############
 
     def on_train_start(self) -> None:
-        for metrics in self.valid_metrics:
+        for metrics in self.valid_metrics.values():
             metrics.reset()
 
     def training_step(self, batch: PyTree, batch_idx: int) -> torch.Tensor:
@@ -153,9 +145,7 @@ class NopRolloutLitModule(BaseLitModule):
         return loss.mean()  # pool over batch in the end
 
     ############ validation #############
-    def eval_step(
-        self, batch: PyTree, batch_idx: int, stage: Literal["valid", "test"] = "valid", dataloader_idx: int = 0
-    ) -> dict:
+    def validation_step(self, batch: dict, batch_idx: int, dataloader_idx: int = 0):
         """
         Returns:
             dict[str, torch.Tensor]:
@@ -167,37 +157,18 @@ class NopRolloutLitModule(BaseLitModule):
         errors = self.get_rollout_errors(preds, batch)
         metrics = self.get_rollout_metrics(errors)
 
-        if stage == "valid":
-            eval_metrics = self.valid_metrics
-            dataset_name = cu.get_dataset_name(self.cfg.data.valid, dataloader_idx)
-        elif stage == "test":
-            eval_metrics = self.test_metrics
-            dataset_name = cu.get_dataset_name(self.cfg.data.test, dataloader_idx)
-        else:
-            raise ValueError(f"Got unknown stage: {stage}")
+        dataset_name = cu.get_dataset_name(self.cfg.data.valid, dataloader_idx)
 
-        for metric_name in eval_metrics[dataloader_idx]:
-            eval_metrics[dataloader_idx][metric_name].update(metrics[metric_name])
+        for metric_name in self.valid_metrics[dataset_name]:
+            self.valid_metrics[dataset_name][metric_name].update(metrics[metric_name])
 
-        for metric_name in eval_metrics[dataloader_idx]:
+        for metric_name in self.valid_metrics[dataset_name]:
             self.log(
                 f"{dataset_name}/{metric_name}",
-                eval_metrics[dataloader_idx][metric_name],
+                self.valid_metrics[dataset_name][metric_name],
                 on_step=False,
                 on_epoch=True,
                 add_dataloader_idx=False,
             )
 
         return {"preds": preds, "errors": errors, "metrics": metrics}
-
-    def validation_step(self, batch: dict, batch_idx: int, dataloader_idx: int = 0):
-        return self.eval_step(batch, batch_idx, "valid", dataloader_idx)
-
-    ############# test #############
-    def on_test_start(self) -> None:
-        """Lightning hook that is called when testing begins."""
-        for metrics in self.test_metrics:
-            metrics.reset()
-
-    def test_step(self, batch: dict, batch_idx: int, dataloader_idx: int = 0):
-        return self.eval_step(batch, batch_idx, "test", dataloader_idx)
