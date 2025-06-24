@@ -81,6 +81,10 @@ We use the Kuramoto-Shivashinsky (KS) equation simulation dataset. The dataset i
 
 In this project, we use two validation datasets: `ks_short` and `ks_long`, for validating the model's performance on short-term and long-term predictions, respectively. Therefore we have two corresponding validation configurations in `configs/data/ks/valid/` folder, and listed them in the main dataset yaml file `configs/data/ks/ks.yaml`.
 
+### DataModule
+
+We don't need new dataloader logic for this project, so we just reuse the existing `BaseDataModule` class.
+
 ### Callbacks
 
 We implement two callbacks in `src/callbacks/viz_rollout_error.py ` and `src/callbacks/viz_rollout_1d.py` to visualize the rollout error and the rollout trajectory, respectively. Notably, we inherit from the `Viz` class in `src/callbacks/viz.py` for visualization.
