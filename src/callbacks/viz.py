@@ -50,6 +50,8 @@ class Viz(L.Callback):
         if batch_idx in self.valid_batches_log or batch_idx in self.valid_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
             img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
+            if img is None:
+                return
 
         if batch_idx in self.valid_batches_local:
             dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
@@ -57,12 +59,23 @@ class Viz(L.Callback):
             img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
 
         if batch_idx in self.valid_batches_log:
-            self.log_image(trainer, img, key=f"{dataset_name}")
+            self.log_image(
+                trainer,
+                img,
+                key=f"{dataset_name}",
+                artifact_file=f"valid/"
+                f"{self.__class__.__name__}/"
+                f"{dataset_name}/"
+                f"step_{trainer.global_step}"
+                f"_{batch_idx}_rank{trainer.global_rank}.png",
+            )
 
     def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         if batch_idx in self.test_batches_log or batch_idx in self.test_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
             img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
+            if img is None:
+                return
 
         if batch_idx in self.test_batches_local:
             dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
@@ -70,14 +83,23 @@ class Viz(L.Callback):
             img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
 
         if batch_idx in self.test_batches_log:
-            self.log_image(trainer, img, key=f"{dataset_name}")
+            self.log_image(
+                trainer,
+                img,
+                key=f"{dataset_name}",
+                artifact_file=f"test/"
+                f"{self.__class__.__name__}/"
+                f"{dataset_name}/"
+                f"step_{trainer.global_step}"
+                f"_{batch_idx}_rank{trainer.global_rank}.png",
+            )
 
     def log_image(
         self,
         trainer: L.Trainer,
         img: Image.Image,
         key: str,
-        artifact_file: str = None,
+        artifact_file: str | None = None,
     ):
         for logger in trainer.loggers:
             if isinstance(logger, loggers.WandbLogger):
@@ -92,11 +114,11 @@ class Viz(L.Callback):
                 # See https://mlflow.org/docs/latest/api_reference/python_api/mlflow.client.html#mlflow.client.MlflowClient.log_image
                 # for API
                 # example usage:
-                # logger.experiment.log_image(
-                #     run_id=logger.run_id,
-                #     image=img,
-                #     key=key,
-                #     artifact_file=artifact_file,
-                #     step=trainer.global_step,
-                # )
+                logger.experiment.log_image(
+                    run_id=logger.run_id,
+                    image=img,
+                    # key=key,
+                    artifact_file=artifact_file,
+                    # step=trainer.global_step,
+                )
                 pass
