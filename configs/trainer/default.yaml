@@ -28,7 +28,7 @@ deterministic: False
 
 val_check_interval: 10000
 check_val_every_n_epoch: null
-limit_val_batches: 500
+limit_val_batches: null
 
 
 gradient_clip_val: ${opt.gnorm_clip}
