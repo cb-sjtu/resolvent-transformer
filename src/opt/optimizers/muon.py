@@ -71,7 +71,7 @@ def is_muon_param(name: str, p: nn.Parameter) -> bool:
     Check if a parameter should be optimized by Muon.
     This is useful for debugging or inspecting the parameters that will be optimized by Muon.
     """
-    return p.ndim >= 2 and "embed_tokens" not in name and "lm_head" not in name
+    return p.ndim == 2 and "embed_tokens" not in name and "lm_head" not in name
 
 
 class Muon(torch.optim.Optimizer):
