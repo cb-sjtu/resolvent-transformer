@@ -3,7 +3,7 @@
 #PBS -j oe
 #PBS -k oed
 #PBS -N example
-#PBS -l walltime=30:00:00
+#PBS -l walltime=10:00:00
 #PBS -l select=1:ngpus=2
 ##----- CPU/Mem will be allocated at 10/200gb per GPU. -----
 ##----- sample config for ngpus of 2, 4, 8, 16 via either line below ----
