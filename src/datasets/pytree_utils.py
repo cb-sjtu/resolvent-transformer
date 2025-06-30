@@ -11,10 +11,27 @@ import einops
 import numpy as np
 import optree
 import torch
+from frozendict import frozendict
 from optree import PyTree
 from rich.tree import Tree
 
 # See docs: https://optree.readthedocs.io/en/latest/pytree.html
+
+
+def to_hashable_pytree(batch: PyTree) -> PyTree:
+    """
+    Return a new pytree with list -> tuple and dict -> frozendict recursively.
+    """
+    if isinstance(batch, dict):
+        return frozendict({k: to_hashable_pytree(v) for k, v in batch.items()})
+    elif isinstance(batch, list):
+        return tuple(to_hashable_pytree(item) for item in batch)
+    elif isinstance(batch, np.ndarray):
+        return tuple(batch.flatten().tolist())
+    elif isinstance(batch, torch.Tensor):
+        return to_hashable_pytree(einops.asnumpy(batch.float()))
+    else:
+        return batch
 
 
 def to_numpy(batch: PyTree) -> PyTree:
