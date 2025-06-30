@@ -26,10 +26,11 @@ def to_hashable_pytree(batch: PyTree) -> PyTree:
         return frozendict({k: to_hashable_pytree(v) for k, v in batch.items()})
     elif isinstance(batch, list):
         return tuple(to_hashable_pytree(item) for item in batch)
-    elif isinstance(batch, np.ndarray):
-        return tuple(batch.flatten().tolist())
-    elif isinstance(batch, torch.Tensor):
-        return to_hashable_pytree(einops.asnumpy(batch.float()))
+    elif isinstance(batch, np.ndarray | torch.Tensor):
+        if batch.ndim == 0:
+            return batch.item()
+        else:
+            return tuple(to_hashable_pytree(item) for item in batch)
     else:
         return batch
 
@@ -236,9 +237,11 @@ def get_discription_list(batch: PyTree) -> list:
 
 
 if __name__ == "__main__":
+    import typing
+
     batch = {
         "description": np.array(["test", "test2"], dtype=np.dtypes.StringDType()),
-        "data": np.array([1, 2], dtype=np.int32),
+        "data": np.array([[1, 2], [3, 4]], dtype=np.int32),
         "label": torch.tensor([3, 4], dtype=torch.int32),
     }
 
@@ -247,3 +250,16 @@ if __name__ == "__main__":
     print(get_print_info(batch, print_lv=0))
     print(get_print_info(batch, print_lv=1))
     print(get_print_info(batch, print_lv=2))
+    hashable_batch = to_hashable_pytree(batch)
+    print(hashable_batch)
+    print(isinstance(hashable_batch, typing.Hashable), hash(hashable_batch))
+
+    batch["data"] += 1
+    hashable_batch = to_hashable_pytree(batch)
+    print(hashable_batch)
+    print(isinstance(hashable_batch, typing.Hashable), hash(hashable_batch))
+
+    batch["label"] += 1
+    hashable_batch = to_hashable_pytree(batch)
+    print(hashable_batch)
+    print(isinstance(hashable_batch, typing.Hashable), hash(hashable_batch))
