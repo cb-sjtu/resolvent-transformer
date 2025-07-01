@@ -4,6 +4,10 @@
 - **Original Authors**: Brandstetter, Johannes and Welling, Max and Worrall, Daniel E
 - **Repository**: [LPSDA GitHub Repository](https://github.com/brandstetter-johannes/LPSDA)
 - **License**: MIT License
+- **Command**:
+1. `git clone https://github.com/brandstetter-johannes/LPSDA.git`
+2. `cd LPSDA`
+3. `python generate/generate_data.py --experiment=KS --train_samples=512 --valid_samples=512 --test_samples=512 --L=64 --nt=500`
 
 ## Data Structure
 
