@@ -17,6 +17,7 @@ dependencies = [
     "numpy>=2.2.4",
     "optree>=0.15.0",
     "pandas>=2.2.3",
+    "pre-commit>=4.2.0",
     "rich>=14.0.0",
     "rootutils>=1.0.7",
     "seaborn>=0.13.2",

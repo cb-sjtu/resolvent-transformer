@@ -46,11 +46,9 @@ We didn't release this repository as a package, as we believe the current struct
 
 You can either use uv or conda to manage the environment.
 
-### uv
+### uv (recommended)
 
-See [uv](https://docs.astral.sh/uv/getting-started/installation/#installation-methods) for installation.
-
-Run one of the following command to install the dependencies.
+See [uv website](https://docs.astral.sh/uv/getting-started/installation/#installation-methods) for installing uv. Then run one of the following command to install the dependencies.
 
 ```sh
 # consider adding "--index-url https://pypi.tuna.tsinghua.edu.cn/simple" if you have difficulty in connecting to pypi.org
@@ -80,17 +78,26 @@ pip install -r requirements/requirements-icon-core-cuda124.txt # for cuda 12.4
 
 ## Run
 
+### Example scripts
 We provided some out-of-the-box script examples in `scripts_core`. Run as
 
 ```sh
 sh scripts_core/cpu.sh
 ```
 
+### Run your project
+
+You can run your project in the way like:
+
+```sh
+uv run python src/train.py --config-name=train_your_project
+```
+
 Some configs are machine-specific, for example, the data directory and log directory. You can create a yaml file `configs/train_custom.yaml` with contents like the following:
 
 ```yaml
 defaults:
-  - train_nop # base configs, replace with the name of training config file for your project
+  - train_your_project # base configs, replace with the name of training config file for your project
   - _self_
 
 # your machine-specific configs here, will override base configs, here is an example
@@ -112,12 +119,25 @@ uv run python src/train.py trainer.max_steps=10 # you can pass other configs
 
 To ensure consistent code formatting and avoid mistake like uploading private keys, we strongly recommend installing pre-commit hooks. Pre-commit hooks will check your code when you make a commit in your local repository. If your code cannot pass the check, pre-commit hooks will reject the commit and try to fix it automatically, so you can amend the changes and commit again. If auto-fix is not working, you can manually adjust the code according to the prompted message.
 
-To install pre-commit hooks, please run the following commands in your repository's root directory.
+Pre-commit hooks need to installed for EACH LOCAL REPOSITORY.
 
+If you are using uv for environment management, after installing uv and running `uv sync --extra xxx`, you can run the following command to install pre-commit hooks.
 ```sh
-pip install pre-commit # you can skip this if pre-commit is already installed
-# you need to run one of the following for each local repository
+uv run pre-commit install # for HTTPS connection to GitHub, by default using .pre-commit-config.yaml
+```
+If you are using SSH connection to GitHub, you can run:
+```sh
+uv run pre-commit install --config requirements/.pre-commit-config-ssh.yaml
+```
+
+If you are using conda and pip for environment management, you can install pre-commit hooks in the following way.
+```sh
+conda activate your_env # activate your environment
+pip install pre-commit # you can skip this if pre-commit is already installed in your environment
 pre-commit install # for HTTPS connection to GitHub, by default using .pre-commit-config.yaml
+```
+Similarly, if you are using HTTPS connection to GitHub, you can run:
+```sh
 pre-commit install --config requirements/.pre-commit-config-ssh.yaml # for SSH connection to GitHub
 ```
 
@@ -127,7 +147,7 @@ Pre-commit hooks will only check files modified in the current commit, ignoring 
 pre-commit run --all-files
 ```
 
-We have also integrated pre-commit hooks in GitHub workflows, enabling GitHub to check your remote repository. If you really don't like it, you can delete the folder `.github/workflows`, and uninstall pre-commit hooks with `pre-commit uninstall`.
+We have also integrated pre-commit hooks in GitHub workflows, enabling GitHub to check your remote repository. If you really don't like it, you can delete the folder `.github/workflows`, and uninstall pre-commit hooks with `uv run pre-commit uninstall` or `pre-commit uninstall`.
 
 ## Project-specific README
 
