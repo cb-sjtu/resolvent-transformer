@@ -44,7 +44,7 @@ class DummyNopDataset(Dataset):
             "gm": gm_samples,
         }
 
-        label = gx_samples
+        label = torch.randn(1, self.g_len, self.gy_dim)
 
         return {
             "description": np.array([description], dtype=np.dtypes.StringDType()),
