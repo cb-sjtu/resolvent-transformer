@@ -70,6 +70,7 @@ class ICON(nn.Module):
         if self.data_mask:
             # data_mask is used when some data points are masked out.
             # It is not tested in this code, i.e., only data_mask = None is tested
+            # So cannot guarantee the correctness
             data_mask = mu.build_data_mask(
                 data, cond_bool_list, qoi_kv_bool_list, qoi_k_bool_list
             )  # [batchsize, total_len]
@@ -78,6 +79,8 @@ class ICON(nn.Module):
             data_mask = None  # all data is used
 
         # careful: here basic_mask use zero for "no attention" and one for "attention"
+        # but in transformer API, mask should be one for "no attention" and zero for "attention"
+        # so we need to invert the mask here
         if need_weights:
             sequence, weights = self.transformer(
                 sequence, mask=~basic_mask, src_key_padding_mask=data_mask, need_weights=True
@@ -123,7 +126,7 @@ class ICON(nn.Module):
                 data=data, mode="test", index_pos=index_pos, basic_mask=basic_mask, shot_num_min=None, need_weights=True
             )
             quest_qoi_len = data["quest_qoi_mask"].shape[-1]
-            sequence = sequence[:, -quest_qoi_len:, :]
+            sequence = sequence[:, None, -quest_qoi_len:, :]
             return sequence, weights
         else:
             sequence = self._basic_forward(

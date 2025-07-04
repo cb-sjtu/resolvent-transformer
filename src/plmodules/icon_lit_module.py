@@ -35,11 +35,11 @@ class IconLitModule(BaseLitModule):
             }
         )
 
-    def network_inference(self, data: PyTree, mode: str):
+    def network_inference(self, data: PyTree, **kwargs):
         """Network inference for ICON model"""
 
         # Forward pass
-        outputs = self._model_forward(data=data, mode=mode)
+        outputs = self._model_forward(data=data, **kwargs)
         return outputs
 
     def _build_train_label(self, batch: PyTree):
@@ -55,8 +55,10 @@ class IconLitModule(BaseLitModule):
 
     def get_preds(self, data: PyTree) -> torch.Tensor:
         """Get predictions"""
+        quest_qoi_v, attn_weights = self.network_inference(data, mode="test", need_weights=True)
         return {
-            "quest_qoi_v": self.network_inference(data, mode="test"),
+            "quest_qoi_v": quest_qoi_v,
+            "attn_weights": attn_weights,
         }
 
     def get_errors(self, preds, batch: PyTree) -> torch.Tensor:
