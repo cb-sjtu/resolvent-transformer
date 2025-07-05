@@ -151,6 +151,25 @@ def get_print_info_lv0(batch: PyTree) -> PyTree:
     return {"description": description, "keys": ", ".join(list(batch.keys()))}
 
 
+def get_array_tensor_info(leaf: np.ndarray | torch.Tensor) -> str:
+    if isinstance(leaf, np.ndarray):
+        if np.issubdtype(leaf.dtype, np.floating):
+            range_str = f"range={leaf.min():.3f}:{leaf.max():.3f}"
+        elif not np.issubdtype(leaf.dtype, np.complexfloating):  # should be integer or bool
+            range_str = f"range={leaf.min()}:{leaf.max()}"
+        else:
+            range_str = ""
+        return f"{type(leaf).__name__} {leaf.shape} {leaf.dtype} {range_str} "
+    if isinstance(leaf, torch.Tensor):
+        if torch.is_floating_point(leaf):
+            range_str = f"range={leaf.min():.3f}:{leaf.max():.3f}"
+        elif not torch.is_complex(leaf):  # should be integer or bool
+            range_str = f"range={leaf.min()}:{leaf.max()}"
+        else:
+            range_str = ""
+        return f"{type(leaf).__name__} {leaf.shape} {leaf.dtype} {range_str} {leaf.device}"
+
+
 def get_print_info_lv1(batch: PyTree) -> PyTree:
     """
     Return the print info of the batch, return a pytree with the print info of each leaf
@@ -162,10 +181,7 @@ def get_print_info_lv1(batch: PyTree) -> PyTree:
         if isinstance(leaf, np.ndarray) and np.issubdtype(leaf.dtype, np.dtypes.StringDType()):
             info_list = [str(s) for s in leaf]
             return truncate_seq(info_list, max_len=4)
-        elif isinstance(leaf, np.ndarray):
-            return f"{type(leaf).__name__} {leaf.shape} {leaf.dtype}"
-        elif isinstance(leaf, torch.Tensor):
-            return f"{type(leaf).__name__} {leaf.shape} {leaf.dtype} {leaf.device}"
+        return get_array_tensor_info(leaf)
 
     return optree.tree_map(get_print_info_leaf, batch)
 
@@ -180,10 +196,7 @@ def get_print_info_lv2(batch: PyTree) -> PyTree:
             return f"type={type(leaf)}, warning: non-tensor/array leaf"  # this should not happen in general
         if isinstance(leaf, np.ndarray) and np.issubdtype(leaf.dtype, np.dtypes.StringDType()):
             return [str(s) for s in leaf]
-        elif isinstance(leaf, np.ndarray):
-            return f"{type(leaf).__name__} {leaf.shape} {leaf.dtype}"
-        elif isinstance(leaf, torch.Tensor):
-            return f"{type(leaf).__name__} {leaf.shape} {leaf.dtype} {leaf.device}"
+        return get_array_tensor_info(leaf)
 
     return optree.tree_map(get_print_info_leaf, batch)
 
