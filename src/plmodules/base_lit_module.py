@@ -9,10 +9,7 @@ import hydra
 import lightning as L
 import torch
 from omegaconf import DictConfig
-from torch import optim
 from torch.nn.attention import SDPBackend, sdpa_kernel
-
-from src.opt.schedulers.warmup_cosine_decay_scheduler import WarmupCosineDecayScheduler
 
 
 class BaseLitModule(L.LightningModule):
@@ -45,13 +42,7 @@ class BaseLitModule(L.LightningModule):
             self._net_compiled = True
 
     def get_lr_scheduler(self, optimizer):
-        # Convert end_lr to end_lr_factor (end_lr / peak_lr)
-        scheduler = WarmupCosineDecayScheduler(
-            optimizer=optimizer,
-            warmup=int(self.cfg.opt.warmup_percent * self.cfg.trainer.max_steps // 100),
-            max_iters=int(self.cfg.opt.decay_percent * self.cfg.trainer.max_steps // 100),
-            end_lr_factor=self.cfg.opt.end_lr_factor,
-        )
+        scheduler = hydra.utils.instantiate(self.cfg.opt.scheduler)(optimizer=optimizer)
         return {
             "scheduler": scheduler,
             "interval": "step",
@@ -59,20 +50,16 @@ class BaseLitModule(L.LightningModule):
         }
 
     def get_optimizer(self):
-        if self.cfg.opt.optimizer == "AdamW":
-            optimizer = optim.AdamW(
-                filter(lambda p: p.requires_grad, self.net.parameters()),
-                lr=float(self.cfg.opt.peak_lr),
-                weight_decay=float(self.cfg.opt.weight_decay),
+        if self.cfg.opt.optimizer._target_ == "torch.optim.AdamW":
+            optimizer = hydra.utils.instantiate(self.cfg.opt.optimizer)(
+                params=filter(lambda p: p.requires_grad, self.net.parameters()),
             )
-        elif self.cfg.opt.optimizer == "Muon":
+        elif self.cfg.opt.optimizer._target_ == "src.opt.optimizers.muon.Muon":
             from src.opt.optimizers.muon import Muon
 
             muon_params, adamw_params = Muon.split_muon_adamw_params(self.net)
 
-            optimizer = Muon(
-                lr=float(self.cfg.opt.peak_lr),
-                wd=float(self.cfg.opt.weight_decay),
+            optimizer = hydra.utils.instantiate(self.cfg.opt.optimizer)(
                 muon_params=muon_params,
                 adamw_params=adamw_params,
             )
