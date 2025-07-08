@@ -45,10 +45,12 @@ class BaseLitModule(L.LightningModule):
             self._net_compiled = True
 
     def get_lr_scheduler(self, optimizer):
+        # Convert end_lr to end_lr_factor (end_lr / peak_lr)
         scheduler = WarmupCosineDecayScheduler(
             optimizer=optimizer,
             warmup=int(self.cfg.opt.warmup_percent * self.cfg.trainer.max_steps // 100),
             max_iters=int(self.cfg.opt.decay_percent * self.cfg.trainer.max_steps // 100),
+            end_lr_factor=self.cfg.opt.end_lr_factor,
         )
         return {
             "scheduler": scheduler,

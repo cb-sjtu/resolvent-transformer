@@ -10,9 +10,10 @@ from torch import optim
 
 
 class WarmupCosineDecayScheduler(optim.lr_scheduler._LRScheduler):
-    def __init__(self, optimizer, warmup, max_iters):
+    def __init__(self, optimizer, warmup, max_iters, end_lr_factor):
         self.warmup = warmup
         self.max_num_iters = max_iters
+        self.end_lr_factor = end_lr_factor
         super().__init__(optimizer)
 
     def get_lr(self):
@@ -24,5 +25,9 @@ class WarmupCosineDecayScheduler(optim.lr_scheduler._LRScheduler):
             lr_factor = epoch * 1.0 / max(self.warmup, 1)
         else:
             progress = (epoch - self.warmup) / (self.max_num_iters - self.warmup)
-            lr_factor = 0.5 * (1 + np.cos(np.pi * progress))
+            # Clamp progress to [0, 1] to handle cases where epoch > max_iters
+            progress = np.clip(progress, 0.0, 1.0)
+            # Cosine decay from 1.0 to end_lr_factor
+            cosine_decay = 0.5 * (1 + np.cos(np.pi * progress))
+            lr_factor = self.end_lr_factor + (1.0 - self.end_lr_factor) * cosine_decay
         return lr_factor
