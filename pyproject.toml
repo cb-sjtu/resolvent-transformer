@@ -22,6 +22,7 @@ dependencies = [
     "rootutils>=1.0.7",
     "seaborn>=0.13.2",
     "tabulate>=0.9.0",
+    "transformers",
     "wandb>=0.19.11",
     # lightning, torch, and torchvision will be handled via extra
     # The above are for icon-core, put your project dependencies below
