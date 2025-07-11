@@ -5,8 +5,7 @@
 # This helps avoid merge conflicts when syncing from core.
 #######################################################
 
-
-import transformers as tfs
+import hydra
 from omegaconf import DictConfig
 from torch.utils.data import Dataset
 
@@ -19,9 +18,9 @@ class ProcessDatasetWrapper(Dataset):
     This allows the processing to run in parallel with DataLoader workers.
     """
 
-    def __init__(self, dataset, image_processor):
+    def __init__(self, dataset, image_processor_cfg):
         self.dataset = dataset
-        self.image_processor = image_processor
+        self.image_processor = hydra.utils.instantiate(image_processor_cfg)
 
     def __len__(self):
         return len(self.dataset)
@@ -30,15 +29,16 @@ class ProcessDatasetWrapper(Dataset):
         item = self.dataset[idx]
 
         # Process images in the worker process
-        item["processed_images"] = self.process_image(item["raw_images"])
+        for example in item["examples"]:
+            example["processed_images"] = self.process_image(example["raw_images"])
 
         return item
 
     def process_image(self, image):
         """
         Process image with image_processor
-        image: [..., c, h, w], int between 0 and 255
-        return [..., c, h', w']
+        image: [..., c, h, w], usually uint between 0 and 255
+        return [..., c, h', w'], usually float in [0, 1] or [-1, 1]
         """
         reshaped_image = image.reshape(-1, *image.shape[-3:])  # (..., c, h, w) -> (n, c, h, w)
         processed_image = self.image_processor(reshaped_image, return_tensors="pt")["pixel_values"]
@@ -47,19 +47,21 @@ class ProcessDatasetWrapper(Dataset):
         return processed_image
 
 
-class WrapperDataModule(BaseDataModule):
+class ControlDataModule(BaseDataModule):
     """
+    ControlDataModule that moves image processing to individual workers for parallel execution.
+
     ImageProcessor always returns tensors on CPUs, even if the input is on GPUs.
     Therefore, we put the image processing in the DataModule instead of the models.
-    This is a simple example of how to post-process individual samples in the DataModule.
-    You can also implement more complex processing in the wrapper.
     """
 
     def __init__(self, cfg: DictConfig):
         super().__init__(cfg)
-        # for example, using HuggingFace ImageProcessor to process images
-        vision_tower_name = self.cfg.data.image_encoder.vision_tower_name
-        self.image_processor = tfs.AutoImageProcessor.from_pretrained(vision_tower_name)
+        # for example, put the following in the cfg.data yaml file
+        # image_processor:
+        #   _target_: transformers.AutoImageProcessor.from_pretrained
+        #   pretrained_model_name_or_path: "google/vit-base-patch16-224"
+        self.image_processor_cfg = self.cfg.data.image_processor
 
     def get_train_dataset_from_cfg(self, cfg):
         """
@@ -69,7 +71,7 @@ class WrapperDataModule(BaseDataModule):
         dataset = base_result["dataset"]
 
         # Wrap with processing dataset
-        processed_dataset = ProcessDatasetWrapper(dataset, self.image_processor)
+        processed_dataset = ProcessDatasetWrapper(dataset, self.image_processor_cfg)
 
         return {"dataset": processed_dataset, "cfg": cfg}
 
@@ -81,6 +83,6 @@ class WrapperDataModule(BaseDataModule):
         dataset = base_result["dataset"]
 
         # Wrap with processing dataset
-        processed_dataset = ProcessDatasetWrapper(dataset, self.image_processor)
+        processed_dataset = ProcessDatasetWrapper(dataset, self.image_processor_cfg)
 
         return {"dataset": processed_dataset, "cfg": cfg}
