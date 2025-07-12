@@ -171,6 +171,7 @@ cython_debug/
 
 # Cursor
 .cursor/
+!.cursor/rules/
 
 # for macOS
 **/.DS_Store
