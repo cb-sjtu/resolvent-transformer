@@ -7,21 +7,14 @@ When creating commits, always include a detailed summary of the conversation in 
 ```
 <brief description of changes>
 
-User requests:
-- <concise summary of main request>
-- <additional request if substantially different>
+Changes made:
+- (AI): <concise summary of what Claude did>
+- (User): <manual edits or user-authored code, if any>
+- (AI): <additional Claude action if substantially different>
 
 User raw prompts:
 - <exact user prompt 1>
 - <exact user prompt 2>
-
-Claude actions:
-- <concise summary of what was done and files modified>
-- <additional action if substantially different>
-
-User changes:
-- <if user made direct changes to files, list them here>
-- <note any manual edits or user-authored code>
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
@@ -29,7 +22,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ## Guidelines
 
 1. **User requests**: Only include user commands/requests that are relevant to THIS specific commit
-2. **User raw prompts**: Include the exact user prompt/request that was used to generate the commit
+2. **User raw prompts**: Include the exact user prompt/request that was used to generate the commit. Of course, ignore the user's requests that are not relevant to this commit. Also ignore those too long, e.g., error messages, code blocks, etc.
 3. **Claude actions**: Summarize the key actions taken, files modified, and decisions made for this commit
 4. **User changes**: Only include this section if the user made direct file modifications themselves (omit if only Claude made changes)
 5. **Be specific**: Include file names, tool usage, and important findings
@@ -37,6 +30,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 7. **Check timing**: Compare git history (including timestamps) with Claude conversation history to determine which user requests belong to this commit
 
 This helps maintain a clear history of how changes were made and what was discussed during the development process.
+
+## Detecting User vs Claude Changes
+
+When composing commit messages, compare the changes to be committed (`git diff`) against Claude's actions in the current conversation. Any changes not made by Claude's recorded tool usage are user changes.
 
 ## Pre-commit Hooks
 
