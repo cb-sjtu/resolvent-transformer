@@ -1,6 +1,6 @@
 # Claude Code Instructions
 
-## Commit Message Format
+## Commit Messages
 
 When creating commits, always include a detailed summary of the conversation in the commit message using this format:
 
@@ -19,19 +19,13 @@ User raw prompts:
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
-## Guidelines
+### Guidelines for Commit Messages
 
-1. **User requests**: Only include user commands/requests that are relevant to THIS specific commit
+1. **Changes made**: Keep it concise, try to reduce the bullet points to the most important ones.
 2. **User raw prompts**: Include the exact user prompt/request that was used to generate the commit. Of course, ignore the user's requests that are not relevant to this commit. Also ignore those too long, e.g., error messages, code blocks, etc.
-3. **Claude actions**: Summarize the key actions taken, files modified, and decisions made for this commit
-4. **User changes**: Only include this section if the user made direct file modifications themselves (omit if only Claude made changes)
-5. **Be specific**: Include file names, tool usage, and important findings
-6. **Keep it concise**: Focus on the most important aspects of the conversation
-7. **Check timing**: Compare git history (including timestamps) with Claude conversation history to determine which user requests belong to this commit
+3. In the end, don't add something like "Generated with [Claude Code](https://claude.ai/code)". Coauthor is enough.
 
-This helps maintain a clear history of how changes were made and what was discussed during the development process.
-
-## Detecting User vs Claude Changes
+### Detecting User vs Claude Changes
 
 When composing commit messages, compare the changes to be committed (`git diff`) against Claude's actions in the current conversation. Any changes not made by Claude's recorded tool usage are user changes.
 
