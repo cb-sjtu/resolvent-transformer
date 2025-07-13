@@ -1,4 +1,4 @@
-# Guideline
+# Workflow
 
 This document describes the workflow for adding new components to the project.
 
