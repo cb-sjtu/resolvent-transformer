@@ -27,7 +27,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ### Detecting User vs Claude Changes
 
-When composing commit messages, compare the changes to be committed (`git diff`) against Claude's actions in the current conversation. Any changes not made by Claude's recorded tool usage are user changes.
+When composing commit messages, compare the changes to be committed (`git diff`) against Claude's actions in the current conversation. Any changes not made by Claude's recorded tool usage are user changes. If you are not sure, use `<unknown>` to indicate the author of the changes.
 
 ## Pre-commit Hooks
 
