@@ -115,6 +115,10 @@ uv run python src/train.py --config-name=train_nop_rollout
 echo "Done"
 ```
 
+## Modifying Project Components
+
+Whenever you modify project components (those without the header in the beginning of the file), especially if you change their initialization parameters, be sure to update the relevant configuration files accordingly.
+
 ## Testing
 
 ### Unit Tests

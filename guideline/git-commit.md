@@ -22,7 +22,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ### Guidelines for Commit Messages
 
 1. **Changes made**: Keep it concise, try to reduce the bullet points to the most important ones.
-2. **User raw prompts**: Include the exact user prompt/request that was used to generate the commit. Of course, ignore the user's requests that are not relevant to this commit. Also ignore those too long, e.g., error messages, code blocks, etc.
+2. **User raw prompts**: Include the exact user prompt/request that was used to generate the commit. Of course, ignore the user's requests that are not relevant to this commit. Also for those too long, e.g., error messages, code blocks, etc., replace them with descriptive placeholders like `<ImportError: No module named 'torch'>` or `<code block in file_name.py>`, etc.
 3. In the end, don't add something like "Generated with [Claude Code](https://claude.ai/code)". Coauthor is enough.
 
 ### Detecting User vs Claude Changes

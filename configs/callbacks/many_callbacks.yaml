@@ -7,7 +7,7 @@
 
 defaults:
   - model_summary
-  - rich_progress_bar
+  # - rich_progress_bar # somehow doesn't work with model restore
   - print_model
   - save_ckpt
   - save_metric
