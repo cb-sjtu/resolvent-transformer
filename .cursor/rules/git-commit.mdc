@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+---
+Please follow the guidelines in the [git-commit.md](guideline/git-commit.md) file to write a commit message.
+
+Replace the claude-related parts with your own, since you are cursor, not claude. You can add `Co-Authored-By: Cursor <hi@cursor.com>` to the commit message.

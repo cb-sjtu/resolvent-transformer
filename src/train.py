@@ -16,7 +16,7 @@ import torch
 import torch._dynamo
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
@@ -158,6 +158,9 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
 # if train_custom.yaml exists, use it as default config file
 # otherwise, need to specify config file in command line
 config_file_name = "train_custom.yaml" if os.path.exists("./configs/train_custom.yaml") else None
+
+# Register eval resolver for mathematical expressions in config
+OmegaConf.register_new_resolver("eval", eval)
 
 
 @hydra.main(version_base="1.3", config_path="../configs/", config_name=config_file_name)

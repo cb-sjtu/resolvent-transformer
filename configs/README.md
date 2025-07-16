@@ -5,7 +5,7 @@ This directory contains all configuration files for the project, organized using
 ## Structure
 
 - `accelerate/` - Configuration for distributed training acceleration
-- `callbacks/` - Lightning callbacks configuration (e.g., model summary, checkpointing)
+- `callbacks/` - Lightning callbacks configuration (e.g., model summary, checkpointing) Please check the README file in this directory for more details.
 - `data/` - Dataset and dataloader configurations
 - `datamodule/` - PyTorch Lightning datamodule configurations
 - `experiment/` - Experiment-specific configurations aiming to overwrite only specified parameters

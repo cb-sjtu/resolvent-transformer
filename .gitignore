@@ -170,7 +170,8 @@ cython_debug/
 .vscode/
 
 # Cursor
-.cursor/
+.cursor/*
+!.cursor/rules/
 
 # for macOS
 **/.DS_Store

@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+Please read and follow the guidelines in the [CLAUDE.md](CLAUDE.md) file. In other words, you should load the content of the [CLAUDE.md](CLAUDE.md) file to your context.
+
+Replace the claude-related parts with your own, since you are cursor, not claude. You can add `Co-Authored-By: Cursor <hi@cursor.com>` to the commit message.

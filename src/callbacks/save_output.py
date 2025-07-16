@@ -12,7 +12,7 @@ import lightning as L
 from optree import PyTree
 
 import src.datasets.pytree_utils as ptu
-import src.utils.custom_utils as cu
+import src.utils.icon_core_utils as cu
 
 
 class SaveOutput(L.Callback):
