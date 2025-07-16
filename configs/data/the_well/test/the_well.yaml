@@ -1,0 +1,20 @@
+#######################################################
+# This file belongs to the core repository.
+# If your project repository is a fork of core,
+# you are suggested to keep this file untouched in your project.
+# This helps avoid merge conflicts when syncing from core.
+#######################################################
+
+name: the_well
+dataset:
+  _target_: src.datasets.the_well.the_well.TheWellActiveMatterDataset_pro
+  well_base_path: ${data.data_folder}
+  ex_num: ${data.ex_num}
+  # f_shape: ${data.f_shape}
+  # g_shape: ${data.g_shape}
+
+num_workers: ${data.num_workers}
+pin_memory: ${data.pin_memory}
+batch_size_per_device: ${data.batch_size_per_device}
+enable_device_seed: ${data.test_enable_device_seed}
+base_seed: ${data.test_base_seed}
