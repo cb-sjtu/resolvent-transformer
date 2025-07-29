@@ -1,0 +1,46 @@
+# @package _global_
+
+# specify here default configuration
+# order of defaults determines the order of config composition
+defaults:
+  - _self_
+  - data: flow_sequence_2d/flow_sequence_2d
+  - datamodule: base
+  - model: swin_transformer_2d
+  - plmodule: flow_swin_2d
+  - callbacks: many_callbacks
+  - logger: wandb
+  - trainer: ddp
+  - opt: default
+  - paths: default
+  - extras: default
+  - hydra: default
+
+# task name, determines output directory path
+task_name: "flow_swin_2d"
+
+# tags to help you identify your experiments
+# you can overwrite this in experiment configs
+# overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
+tags: ["flow", "swin", "2d", "u_field"]
+
+# set False to skip model summary
+print_model_summary: True
+
+# pretty print config tree at the start of the run using Rich library
+print_config: True
+
+# disable python warnings if they annoy you
+ignore_warnings: True
+
+# evaluate on test set, using the best model weights achieved during training
+# lightning chooses best weights based on the metric specified in checkpoint callback
+test_after_training: True
+
+# simply provide checkpoint path to resume training
+ckpt_path: null
+
+# seed for random number generators in pytorch, numpy and python.random
+seed: 12345
+
+log_project: "turbulence_swin"

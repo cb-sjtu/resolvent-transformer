@@ -1,0 +1,6 @@
+_target_: src.plmodules.flow_swin_2d_lit_module.FlowSwin2DLitModule
+
+model: ${model}
+optimizer: ${opt}
+scheduler: ${scheduler}
+loss_fn: "mse"

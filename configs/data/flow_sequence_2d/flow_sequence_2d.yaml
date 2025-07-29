@@ -1,0 +1,8 @@
+train:
+  - flow_sequence_2d/train/flow_train_2d
+
+valid:
+  - flow_sequence_2d/valid/flow_valid_2d
+
+test:
+  - flow_sequence_2d/test/flow_test_2d
