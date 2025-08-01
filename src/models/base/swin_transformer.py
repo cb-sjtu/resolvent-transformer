@@ -346,11 +346,19 @@ class SwinTransformer2D(nn.Module):
     def forward(self, x):
         """
         Args:
-            x: (B, T, C, H, W) input sequence
+            x: (B, T, C, H, W) input sequence or (B*T, C, H, W) flattened input
         Returns:
             output: (B, T_pred, C, H, W) predicted sequence
         """
-        B, T, C, H, W = x.shape
+        # Handle flattened input: reshape from (B*T, C, H, W) to (B, T, C, H, W)
+        if len(x.shape) == 4:
+            BT, C, H, W = x.shape
+            B = BT // self.sequence_length
+            T = self.sequence_length
+            x = x.view(B, T, C, H, W)
+        else:
+            B, T, C, H, W = x.shape
+
         assert self.sequence_length == T, f"Expected sequence length {self.sequence_length}, got {T}"
         assert self.input_shape == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
 
@@ -393,6 +401,11 @@ class SwinTransformer2D(nn.Module):
         # Unfold patches back to original spatial resolution
         x = x.permute(0, 1, 2, 4, 3, 5)  # (B, T_pred, patch_H, patch_size[0], patch_W, patch_size[1])
         x = x.contiguous().reshape(B, self.prediction_horizon, 1, H, W)
+
+        # For single prediction horizon, squeeze out the prediction dimension
+        # Output should be (B, 1, H, W) to match target shape (B, 1, H, W)
+        if self.prediction_horizon == 1:
+            x = x.squeeze(1)  # (B, 1, H, W)
 
         return x
 
