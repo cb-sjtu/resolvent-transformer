@@ -1,0 +1,126 @@
+import glob
+import os
+
+import h5py
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+
+
+class FastFlowSequence2DDataset(Dataset):
+    """Fast dataset for preprocessed 2D flow field data."""
+
+    def __init__(
+        self,
+        data_dir: str = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow",
+        input_length: int = 5,
+        field_name: str = "u",
+        resolution_scale: tuple = (2, 3, 1),
+        y_slice: int = 192,
+        file_pattern: str = "*.h5",  # Not used but kept for compatibility
+        train_ratio: float = 0.7,
+        valid_ratio: float = 0.15,
+        test_ratio: float = 0.15,
+        split: str = "train",
+    ):
+        """
+        Args:
+            data_dir: Directory containing preprocessed HDF5 files
+            input_length: Number of previous timesteps for prediction
+            train_ratio: Ratio of data for training
+            valid_ratio: Ratio of data for validation
+            test_ratio: Ratio of data for testing
+            split: Dataset split ('train', 'val', 'test')
+        """
+        assert split in ["train", "val", "test"]
+        assert abs(train_ratio + valid_ratio + test_ratio - 1.0) < 1e-6
+
+        self.data_dir = data_dir
+        self.input_length = input_length
+        self.split = split
+
+        # Metadata from preprocessing
+        self.field_name = field_name
+        self.resolution_scale = resolution_scale
+        self.y_slice = y_slice
+
+        # Get all preprocessed files
+        pattern = (
+            f"{field_name}_scale{resolution_scale[0]}-{resolution_scale[1]}-{resolution_scale[2]}_yslice{y_slice}_*.h5"
+        )
+        self.file_list = sorted(glob.glob(os.path.join(data_dir, pattern)))
+        self.num_frames = len(self.file_list)
+        self.num_samples = self.num_frames - self.input_length
+
+        if self.num_samples <= 0:
+            raise ValueError(f"Not enough frames. Need at least {input_length + 1}, got {self.num_frames}")
+
+        # Split data indices
+        train_samples = int(self.num_samples * train_ratio)
+        valid_samples = int(self.num_samples * valid_ratio)
+
+        if split == "train":
+            self.indices = list(range(0, train_samples))
+        elif split == "val":
+            self.indices = list(range(train_samples, train_samples + valid_samples))
+        else:  # test
+            self.indices = list(range(train_samples + valid_samples, self.num_samples))
+
+        print(f"FastFlowSequence2DDataset {split}: {len(self.indices)} samples from {self.num_frames} files")
+
+        # Get data shape from first file
+        if self.file_list:
+            with h5py.File(self.file_list[0], "r") as f:
+                self.data_shape = f["data"].shape
+                print(f"Data shape per frame: {self.data_shape}")
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, idx: int) -> dict:
+        """
+        Returns:
+            dict with keys:
+                - "description": sample description
+                - "data": input sequence data
+                - "label": target frame
+        """
+        base_idx = self.indices[idx]
+        description = f"dataset: FastFlowSequence2DDataset, idx: {idx}, field: {self.field_name}"
+
+        # Load input sequence - much faster now!
+        frames = []
+        for i in range(self.input_length + 1):
+            fpath = self.file_list[base_idx + i]
+            with h5py.File(fpath, "r") as f:
+                data_2d = f["data"][()]  # Already preprocessed 2D data
+                frames.append(data_2d)
+
+        # Convert to tensors
+        input_seq = np.stack(frames[:-1], axis=0)  # (input_length, H, W)
+        target = frames[-1]  # (H, W)
+
+        # Add channel dimension
+        input_seq = input_seq[:, None, :, :]  # (input_length, 1, H, W)
+        target = target[None, :, :]  # (1, H, W)
+
+        # Add batch dimension like original dataset
+        input_seq = torch.from_numpy(input_seq).float().unsqueeze(0)  # (1, input_length, 1, H, W)
+        target = torch.from_numpy(target).float().unsqueeze(0)  # (1, 1, H, W)
+
+        # Structure like original dataset
+        data = {"input_seq": input_seq}
+        label = target
+
+        return {"description": np.array([description], dtype="<U100"), "data": data, "label": label}
+
+
+if __name__ == "__main__":
+    # Test the fast dataset
+    dataset = FastFlowSequence2DDataset(split="train")
+    print(f"Dataset length: {len(dataset)}")
+
+    if len(dataset) > 0:
+        sample = dataset[0]
+        print(f"Input sequence shape: {sample['data']['input_seq'].shape}")
+        print(f"Target shape: {sample['label'].shape}")
