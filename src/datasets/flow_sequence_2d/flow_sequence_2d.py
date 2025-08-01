@@ -81,9 +81,9 @@ class FlowSequence2DDataset(Dataset):
 
             # Extract 2D slice (take slice in y-direction, so result is (z, x))
             if self.y_slice is None:
-                self.y_slice = data.shape[1] // 2  # Use middle slice in y-direction
+                self.y_slice = data.shape[2] // 2  # Use middle slice in y-direction
 
-            data_2d = data[:, self.y_slice, :]  # Shape: (z, x)
+            data_2d = data[:, :, self.y_slice]  # Shape: (z, x)
             self.data_shape = data_2d.shape
 
             print(f"Original 3D shape: {f['data'][self.field_name].shape}")
@@ -93,13 +93,16 @@ class FlowSequence2DDataset(Dataset):
     def __len__(self):
         return len(self.indices)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> dict:
         """
         Returns:
-            input_sequence: (input_length, 1, H, W) - input sequence
-            target: (1, H, W) - target frame
+            dict with keys:
+                - "description": sample description
+                - "data": input sequence data
+                - "label": target frame
         """
         base_idx = self.indices[idx]
+        description = f"dataset: {self.__class__.__name__}, idx: {idx}, field: {self.field_name}"
 
         # Load input sequence
         frames = []
@@ -113,18 +116,26 @@ class FlowSequence2DDataset(Dataset):
                 data = data[:: self.resolution_scale[0], :: self.resolution_scale[1], :: self.resolution_scale[2]]
 
                 # Extract 2D slice (y-slice, result is (z, x))
-                data_2d = data[:, self.y_slice, :]
+                data_2d = data[:, :, self.y_slice]
                 frames.append(data_2d)
 
         # Convert to tensors
         input_seq = np.stack(frames[:-1], axis=0)  # (input_length, H, W)
         target = frames[-1]  # (H, W)
 
-        # Add channel dimension
+        # Add channel dimension and batch dimension (like TheWell dataset)
         input_seq = input_seq[:, None, :, :]  # (input_length, 1, H, W)
         target = target[None, :, :]  # (1, H, W)
 
-        return torch.from_numpy(input_seq).float(), torch.from_numpy(target).float()
+        # Add leading batch dimension of 1 (like TheWell dataset)
+        input_seq = torch.from_numpy(input_seq).float().unsqueeze(0)  # (1, input_length, 1, H, W)
+        target = torch.from_numpy(target).float().unsqueeze(0)  # (1, 1, H, W)
+
+        # Structure like TheWell dataset
+        data = {"input_seq": input_seq}  # Could add more fields here if needed
+        label = target
+
+        return {"description": np.array([description], dtype=np.dtypes.StringDType()), "data": data, "label": label}
 
 
 class TurbulenceDataset2D(Dataset):
