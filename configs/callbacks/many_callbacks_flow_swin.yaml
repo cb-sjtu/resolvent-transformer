@@ -1,0 +1,18 @@
+#######################################################
+# Callback configuration for Flow Swin Transformer project
+# This file contains the callbacks used for training the
+# Swin Transformer model for flow field prediction
+#######################################################
+
+defaults:
+  - model_summary
+  - print_model
+  - save_ckpt
+  - save_metric
+  - save_batch_info
+  # - viz  # Disabled to avoid matplotlib errors
+  - _self_
+
+# you can amend configs here, for example
+# model_summary:
+#   max_depth: -1

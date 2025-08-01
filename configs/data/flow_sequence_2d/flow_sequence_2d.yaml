@@ -1,8 +1,16 @@
-train:
-  - flow_sequence_2d/train/flow_train_2d
+#######################################################
+# This file belongs to the core repository.
+# If your project repository is a fork of core,
+# you are suggested to keep this file untouched in your project.
+# This helps avoid merge conflicts when syncing from core.
+#######################################################
 
-valid:
-  - flow_sequence_2d/valid/flow_valid_2d
+defaults:
+  - ../dataloader@_here_
+  - train/flow_2d_train@train.flow_sequence_2d
+  - valid/flow_2d_valid@valid.flow_sequence_2d
+  - test/flow_2d_test@test.flow_sequence_2d
+  - _self_
 
-test:
-  - flow_sequence_2d/test/flow_test_2d
+data_folder: /home/sh/CB/RE550_test/
+batch_size_per_device: 32

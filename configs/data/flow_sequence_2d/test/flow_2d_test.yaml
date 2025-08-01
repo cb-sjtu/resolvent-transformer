@@ -1,0 +1,20 @@
+name: flow_sequence_2d
+
+dataset:
+  _target_: src.datasets.flow_sequence_2d.fast_flow_dataset.FastFlowSequence2DDataset
+  data_dir: "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
+  input_length: 5
+  field_name: "u"
+  file_pattern: "*.h5"
+  resolution_scale: [2, 3, 1]  # (z, x, y) downsamping
+  y_slice: 192  # Use y_slice 192
+  train_ratio: 0.7
+  valid_ratio: 0.15
+  test_ratio: 0.15
+  split: "test"
+
+num_workers: ${data.num_workers}
+pin_memory: ${data.pin_memory}
+batch_size_per_device: ${data.batch_size_per_device}
+enable_device_seed: ${data.test_enable_device_seed}
+base_seed: ${data.test_base_seed}
