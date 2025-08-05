@@ -3,11 +3,11 @@ name: flow_sequence_2d
 dataset:
   _target_: src.datasets.flow_sequence_2d.fast_flow_dataset.FastFlowSequence2DDataset
   data_dir: "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
-  input_length: 5
+  input_length: 3
   field_name: "u"
   file_pattern: "*.h5"
   resolution_scale: [2, 3, 1]  # (z, x, y) downsampling
-  y_slice: 192  # Use y_slice 192
+  y_slice: 5  # Use y_slice 5
   train_ratio: 0.7
   valid_ratio: 0.15
   test_ratio: 0.15

@@ -13,4 +13,4 @@ defaults:
   - _self_
 
 data_folder: /home/sh/CB/RE550_test/
-batch_size_per_device: 32
+batch_size_per_device: 16
