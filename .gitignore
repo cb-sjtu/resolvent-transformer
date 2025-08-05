@@ -195,6 +195,12 @@ cython_debug/
 **/*.o*
 *.slurm
 
+# model evaluation
+evaluation_results/
+
+# degub files
+debug_test
+
 
 # ------------------------------------------------------------------------------------------------
 # The following are for project-specific configs
