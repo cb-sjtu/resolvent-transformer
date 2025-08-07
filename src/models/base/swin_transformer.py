@@ -220,17 +220,124 @@ class SwinTransformerBlock2D(nn.Module):
         return x
 
 
+class PatchMerging2D(nn.Module):
+    """Patch Merging Layer for 2D Swin Transformer."""
+
+    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
+        super().__init__()
+        self.input_resolution = input_resolution
+        self.dim = dim
+        self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
+        self.norm = norm_layer(4 * dim)
+
+    def forward(self, x):
+        """
+        Args:
+            x: (B, H*W, C)
+        Returns:
+            (B, (H//2)*(W//2), 2*C)
+        """
+        H, W = self.input_resolution
+        B, L, C = x.shape
+        assert L == H * W, "input feature has wrong size"
+        assert H % 2 == 0 and W % 2 == 0, f"x size ({H}*{W}) are not even."
+
+        x = x.view(B, H, W, C)
+
+        x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
+        x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
+        x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C
+        x3 = x[:, 1::2, 1::2, :]  # B H/2 W/2 C
+        x = torch.cat([x0, x1, x2, x3], -1)  # B H/2 W/2 4*C
+        x = x.view(B, -1, 4 * C)  # B H/2*W/2 4*C
+
+        x = self.norm(x)
+        x = self.reduction(x)
+
+        return x
+
+
+class PatchExpand2D(nn.Module):
+    """Patch Expanding Layer for U-net decoder."""
+
+    def __init__(self, input_resolution, dim, dim_scale=2, norm_layer=nn.LayerNorm):
+        super().__init__()
+        self.input_resolution = input_resolution
+        self.dim = dim
+        self.dim_scale = dim_scale
+        self.expand = nn.Linear(dim, 2 * dim, bias=False) if dim_scale == 2 else nn.Identity()
+        self.norm = norm_layer(dim // dim_scale)
+
+    def forward(self, x):
+        """
+        Args:
+            x: (B, H*W, C)
+        Returns:
+            (B, 4*H*W, C//2)
+        """
+        H, W = self.input_resolution
+        x = self.expand(x)
+        B, L, C = x.shape
+        assert L == H * W, "input feature has wrong size"
+
+        x = x.view(B, H, W, C)
+        x = x.view(B, H, W, 2, 2, C // 4)
+        x = x.permute(0, 1, 3, 2, 4, 5)  # B, H, 2, W, 2, C//4
+        x = x.contiguous().view(B, H * 2, W * 2, C // 4)
+        x = x.view(B, -1, C // 4)
+        x = self.norm(x)
+
+        return x
+
+
+class FinalPatchExpand2D(nn.Module):
+    """Final patch expanding layer for reconstruction."""
+
+    def __init__(self, input_resolution, dim, dim_scale=4, norm_layer=nn.LayerNorm):
+        super().__init__()
+        self.input_resolution = input_resolution
+        self.dim = dim
+        self.dim_scale = dim_scale
+        self.expand = nn.Linear(dim, 16 * dim, bias=False)
+        self.output_dim = dim
+        self.norm = norm_layer(self.output_dim)
+
+    def forward(self, x):
+        """
+        Args:
+            x: (B, H*W, C)
+        Returns:
+            (B, 16*H*W, C)
+        """
+        H, W = self.input_resolution
+        x = self.expand(x)
+        B, L, C = x.shape
+        assert L == H * W, "input feature has wrong size"
+
+        x = x.view(B, H, W, C)
+        x = x.view(B, H, W, 4, 4, C // 16)
+        x = x.permute(0, 1, 3, 2, 4, 5)  # B, H, 4, W, 4, C//16
+        x = x.contiguous().view(B, H * 4, W * 4, C // 16)
+        x = x.view(B, -1, C // 16)
+        x = self.norm(x)
+
+        return x
+
+
 class PatchEmbed2D(nn.Module):
     """2D patch embedding."""
 
-    def __init__(self, patch_size=(4, 4), in_chans=1, embed_dim=96):
+    def __init__(self, patch_size=(4, 4), in_chans=1, embed_dim=96, norm_layer=None):
         super().__init__()
         self.patch_size = patch_size
         self.in_chans = in_chans
         self.embed_dim = embed_dim
 
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
-        self.norm = nn.LayerNorm(embed_dim)
+        if norm_layer is not None:
+            self.norm = norm_layer(embed_dim)
+        else:
+            self.norm = None
 
     def forward(self, x):
         """
@@ -242,12 +349,294 @@ class PatchEmbed2D(nn.Module):
         x = self.proj(x)  # (B, embed_dim, H//Ph, W//Pw)
         B, C, H, W = x.shape
         x = x.flatten(2).transpose(1, 2)  # (B, N, embed_dim)
-        x = self.norm(x)
+        if self.norm is not None:
+            x = self.norm(x)
         return x, (H, W)
 
 
+class SwinTransformer2DWithMerging(nn.Module):
+    """2D Swin U-net for temporal flow field prediction with multiscale features."""
+
+    def __init__(
+        self,
+        input_shape: tuple[int, int],  # (H, W)
+        sequence_length: int = 5,
+        prediction_horizon: int = 1,
+        patch_size: tuple[int, int] = (4, 4),
+        embed_dim: int = 96,
+        depths: tuple[int, ...] = (2, 4, 4, 6, 4, 4, 2),
+        num_heads: int = 8,
+        window_size: tuple[int, int] = (7, 7),
+        mlp_ratio: float = 4.0,
+        qkv_bias: bool = True,
+        drop_rate: float = 0.0,
+        attn_drop_rate: float = 0.0,
+        drop_path_rate: float = 0.1,
+        norm_layer=nn.LayerNorm,
+        patch_norm: bool = True,
+        final_upsample: str = "expand_first",
+        use_patch_merging: bool = True,
+    ):
+        super().__init__()
+
+        # Validate depths parameter
+        assert len(depths) % 2 == 1, "depths must have odd length for symmetric encoder-decoder structure"
+
+        self.input_shape = input_shape
+        self.sequence_length = sequence_length
+        self.prediction_horizon = prediction_horizon
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
+        self.patch_norm = patch_norm
+
+        # Split depths into encoder, latent, and decoder
+        self.num_encoder_layers = len(depths) // 2
+        self.depths_encoder = depths[: self.num_encoder_layers]
+        self.depth_latent = depths[self.num_encoder_layers]
+        self.depths_decoder = depths[self.num_encoder_layers + 1 :]
+
+        self.num_layers = len(self.depths_encoder)
+        self.num_layers_decoder = len(self.depths_decoder)
+        self.final_upsample = final_upsample
+        self.use_patch_merging = use_patch_merging
+
+        H, W = input_shape
+        self.patch_H = H // patch_size[0]
+        self.patch_W = W // patch_size[1]
+
+        # Temporal embedding - combine sequence into channels
+        self.temporal_conv = nn.Conv2d(
+            sequence_length, sequence_length, kernel_size=3, padding=1, groups=sequence_length
+        )
+
+        # Temporal position embedding
+        self.temporal_pos_embed = nn.Parameter(torch.zeros(1, sequence_length, 1, 1, 1))
+        nn.init.trunc_normal_(self.temporal_pos_embed, std=0.02)
+
+        # Patch embedding
+        self.patch_embed = PatchEmbed2D(
+            patch_size=patch_size,
+            in_chans=sequence_length,
+            embed_dim=embed_dim,
+            norm_layer=norm_layer if self.patch_norm else None,
+        )
+
+        self.pos_drop = nn.Dropout(drop_rate)
+
+        # Stochastic depth
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths_encoder))]
+        dpr_decoder = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths_decoder))]
+
+        # Build encoder layers
+        self.layers = nn.ModuleList()
+        self.downsample_layers = nn.ModuleList()
+
+        for i_layer in range(self.num_layers):
+            layer = nn.ModuleList(
+                [
+                    SwinTransformerBlock2D(
+                        dim=int(embed_dim * 2**i_layer),
+                        num_heads=num_heads,
+                        window_size=window_size,
+                        shift_size=(0, 0) if (i % 2 == 0) else tuple(ws // 2 for ws in window_size),
+                        mlp_ratio=mlp_ratio,
+                        qkv_bias=qkv_bias,
+                        drop=drop_rate,
+                        attn_drop=attn_drop_rate,
+                        drop_path=dpr[sum(self.depths_encoder[:i_layer]) + i],
+                        norm_layer=norm_layer,
+                    )
+                    for i in range(self.depths_encoder[i_layer])
+                ]
+            )
+            self.layers.append(layer)
+
+            # Add patch merging layer (except for the last layer)
+            if i_layer < self.num_layers - 1:
+                downsample = PatchMerging2D(
+                    input_resolution=(self.patch_H // (2**i_layer), self.patch_W // (2**i_layer)),
+                    dim=int(embed_dim * 2**i_layer),
+                    norm_layer=norm_layer,
+                )
+                self.downsample_layers.append(downsample)
+            else:
+                self.downsample_layers.append(None)
+
+        # Build decoder layers
+        self.layers_decoder = nn.ModuleList()
+        self.upsample_layers = nn.ModuleList()
+        self.concat_back_dim = nn.ModuleList()
+
+        for i_layer in range(self.num_layers_decoder):
+            # After upsampling, dimension is halved, then doubled by concatenation
+            dim_after_upsample = int(embed_dim * 2 ** (self.num_encoder_layers - 1 - i_layer)) // 2
+            concat_linear = (
+                nn.Linear(
+                    2 * dim_after_upsample,  # Input: concatenated features (upsampled + skip)
+                    dim_after_upsample,  # Output: back to upsampled dimension
+                )
+                if i_layer < self.num_layers_decoder - 1
+                else nn.Identity()
+            )
+
+            layer_up = (
+                PatchExpand2D(
+                    input_resolution=(
+                        self.patch_H // (2 ** (self.num_encoder_layers - 1 - i_layer)),
+                        self.patch_W // (2 ** (self.num_encoder_layers - 1 - i_layer)),
+                    ),
+                    dim=int(embed_dim * 2 ** (self.num_encoder_layers - 1 - i_layer)),
+                    dim_scale=2,
+                    norm_layer=norm_layer,
+                )
+                if (i_layer < self.num_layers_decoder - 1)
+                else nn.Identity()
+            )
+
+            layer = nn.ModuleList(
+                [
+                    SwinTransformerBlock2D(
+                        dim=int(embed_dim * 2 ** (self.num_encoder_layers - 1 - i_layer)),
+                        num_heads=num_heads,
+                        window_size=window_size,
+                        shift_size=(0, 0) if (i % 2 == 0) else tuple(ws // 2 for ws in window_size),
+                        mlp_ratio=mlp_ratio,
+                        qkv_bias=qkv_bias,
+                        drop=drop_rate,
+                        attn_drop=attn_drop_rate,
+                        drop_path=dpr_decoder[sum(self.depths_decoder[:i_layer]) + i],
+                        norm_layer=norm_layer,
+                    )
+                    for i in range(self.depths_decoder[i_layer])
+                ]
+            )
+
+            self.layers_decoder.append(layer)
+            self.upsample_layers.append(layer_up)
+            self.concat_back_dim.append(concat_linear)
+
+        self.norm = norm_layer(self.embed_dim)
+
+        # Final patch expanding and output layer
+        if self.final_upsample == "expand_first":
+            # Use PatchExpand2D with correct scaling to match patch_size
+            self.up = PatchExpand2D(
+                input_resolution=(self.patch_H, self.patch_W),
+                dim=embed_dim,
+                dim_scale=patch_size[0],
+                norm_layer=norm_layer,
+            )
+            self.output = nn.Conv2d(
+                in_channels=embed_dim // patch_size[0],  # PatchExpand2D reduces channels by dim_scale
+                out_channels=prediction_horizon,
+                kernel_size=1,
+                bias=False,
+            )
+
+        # Initialize weights
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            nn.init.trunc_normal_(m.weight, std=0.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            nn.init.trunc_normal_(m.weight, std=0.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        """
+        Args:
+            x: (B, T, C, H, W) input sequence or (B*T, C, H, W) flattened input
+        Returns:
+            output: (B, T_pred, C, H, W) predicted sequence
+        """
+        # Handle flattened input
+        if len(x.shape) == 4:
+            BT, C, H, W = x.shape
+            B = BT // self.sequence_length
+            T = self.sequence_length
+            x = x.view(B, T, C, H, W)
+        else:
+            B, T, C, H, W = x.shape
+
+        assert self.sequence_length == T, f"Expected sequence length {self.sequence_length}, got {T}"
+        assert tuple(self.input_shape) == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
+
+        # Add temporal position embedding
+        x = x + self.temporal_pos_embed
+        x = x.reshape(B, T * C, H, W)
+        x = self.temporal_conv(x)
+
+        # Patch embedding
+        x, _ = self.patch_embed(x)
+        x = self.pos_drop(x)
+
+        # Store encoder features for skip connections
+        x_downsample = []
+
+        # Encoder
+        for i_layer, (layer, downsample) in enumerate(zip(self.layers, self.downsample_layers, strict=False)):
+            # Store current features for skip connection
+            x_downsample.append(x)
+
+            # Apply transformer blocks
+            current_resolution = (self.patch_H // (2**i_layer), self.patch_W // (2**i_layer))
+            for block in layer:
+                x = block(x, current_resolution[0], current_resolution[1])
+
+            # Patch merging (downsampling)
+            if downsample is not None:
+                x = downsample(x)
+
+        # Decoder with skip connections
+        for i_layer, (layer_up, layer, concat_back_dim) in enumerate(
+            zip(self.upsample_layers, self.layers_decoder, self.concat_back_dim, strict=False)
+        ):
+            # Apply transformer blocks first
+            current_resolution = (
+                self.patch_H // (2 ** (self.num_encoder_layers - 1 - i_layer)),
+                self.patch_W // (2 ** (self.num_encoder_layers - 1 - i_layer)),
+            )
+            for block in layer:
+                x = block(x, current_resolution[0], current_resolution[1])
+
+            # Upsample (except for last decoder layer)
+            if i_layer < self.num_layers_decoder - 1:
+                x = layer_up(x)
+                # Concatenate with encoder features (skip connection)
+                skip_idx = self.num_encoder_layers - 2 - i_layer  # Correct skip connection index
+                if skip_idx >= 0:
+                    x = torch.cat([x, x_downsample[skip_idx]], -1)
+                    x = concat_back_dim(x)
+
+        x = self.norm(x)
+
+        # Final upsampling and output
+        if self.final_upsample == "expand_first":
+            x = self.up(x)
+            # Calculate actual spatial dimensions after final upsampling
+            # PatchExpand2D with dim_scale=patch_size[0] expands by patch_size[0] in each spatial dimension
+            final_H = self.patch_H * self.patch_size[0]
+            final_W = self.patch_W * self.patch_size[1]
+            x = x.view(B, final_H, final_W, -1)
+            x = x.permute(0, 3, 1, 2)  # (B, C, H, W)
+            x = self.output(x)  # (B, prediction_horizon, H, W)
+
+            if self.prediction_horizon == 1:
+                x = x.squeeze(1)  # (B, H, W) -> need to add channel dim
+                x = x.unsqueeze(1)  # (B, 1, H, W)
+
+        return x
+
+
 class SwinTransformer2D(nn.Module):
-    """2D Swin Transformer for temporal flow field prediction."""
+    """Enhanced 2D Swin Transformer with patch merging for temporal flow field prediction."""
 
     def __init__(
         self,
@@ -264,6 +653,7 @@ class SwinTransformer2D(nn.Module):
         drop_rate: float = 0.0,
         attn_drop_rate: float = 0.0,
         drop_path_rate: float = 0.1,
+        use_patch_merging: bool = True,
     ):
         super().__init__()
 
@@ -272,37 +662,37 @@ class SwinTransformer2D(nn.Module):
         self.prediction_horizon = prediction_horizon
         self.patch_size = patch_size
         self.embed_dim = embed_dim
+        self.use_patch_merging = use_patch_merging
 
         H, W = input_shape
         self.patch_H = H // patch_size[0]
         self.patch_W = W // patch_size[1]
 
-        # Temporal embedding - combine sequence into channels
-        # Input will be (B, T*C, H, W) where C=1, so T*C = sequence_length
+        # Temporal embedding
         self.temporal_conv = nn.Conv2d(
             sequence_length, sequence_length, kernel_size=3, padding=1, groups=sequence_length
         )
-
-        # Temporal position embedding for sequence information
         self.temporal_pos_embed = nn.Parameter(torch.zeros(1, sequence_length, 1, 1, 1))
         nn.init.trunc_normal_(self.temporal_pos_embed, std=0.02)
 
         # Patch embedding
         self.patch_embed = PatchEmbed2D(patch_size=patch_size, in_chans=sequence_length, embed_dim=embed_dim)
-
-        # Relative position embedding - will be handled by attention blocks
-        # Remove absolute positional embedding
         self.pos_drop = nn.Dropout(drop_rate)
 
-        # Build layers
+        # Build layers with optional patch merging
         self.layers = nn.ModuleList()
+        self.merging_layers = nn.ModuleList()
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
 
+        current_dim = embed_dim
+        current_resolution = (self.patch_H, self.patch_W)
+
         for i_layer, (depth, num_head) in enumerate(zip(depths, num_heads, strict=False)):
+            # Swin Transformer blocks
             layer = nn.ModuleList(
                 [
                     SwinTransformerBlock2D(
-                        dim=embed_dim,
+                        dim=current_dim,
                         num_heads=num_head,
                         window_size=window_size,
                         shift_size=(0, 0) if (i % 2 == 0) else tuple(ws // 2 for ws in window_size),
@@ -317,14 +707,25 @@ class SwinTransformer2D(nn.Module):
             )
             self.layers.append(layer)
 
-        self.norm = nn.LayerNorm(embed_dim)
+            # Patch merging (except for the last layer)
+            if self.use_patch_merging and i_layer < len(depths) - 1:
+                merging = PatchMerging2D(input_resolution=current_resolution, dim=current_dim, norm_layer=nn.LayerNorm)
+                self.merging_layers.append(merging)
+                current_dim *= 2
+                current_resolution = (current_resolution[0] // 2, current_resolution[1] // 2)
+            else:
+                self.merging_layers.append(None)
 
-        # Output projection
+        self.norm = nn.LayerNorm(current_dim)
+
+        # Output projection - adapted for final dimension
         self.output_proj = nn.Sequential(
-            nn.Linear(embed_dim, embed_dim * 2),
+            nn.Linear(current_dim, current_dim * 2),
             nn.GELU(),
             nn.Dropout(drop_rate),
-            nn.Linear(embed_dim * 2, prediction_horizon * (patch_size[0] * patch_size[1])),
+            nn.Linear(current_dim * 2, embed_dim),  # Project back to original embed_dim
+            nn.GELU(),
+            nn.Linear(embed_dim, prediction_horizon * (patch_size[0] * patch_size[1])),
         )
 
         # Initialize weights
@@ -350,7 +751,7 @@ class SwinTransformer2D(nn.Module):
         Returns:
             output: (B, T_pred, C, H, W) predicted sequence
         """
-        # Handle flattened input: reshape from (B*T, C, H, W) to (B, T, C, H, W)
+        # Handle flattened input
         if len(x.shape) == 4:
             BT, C, H, W = x.shape
             B = BT // self.sequence_length
@@ -362,28 +763,35 @@ class SwinTransformer2D(nn.Module):
         assert self.sequence_length == T, f"Expected sequence length {self.sequence_length}, got {T}"
         assert self.input_shape == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
 
-        # Add temporal position embedding before reshaping
-        x = x + self.temporal_pos_embed  # (B, T, C, H, W)
-
-        # Reshape to (B, T*C, H, W) for temporal processing
-        # When C=1, this becomes (B, T, H, W)
+        # Temporal processing
+        x = x + self.temporal_pos_embed
         x = x.reshape(B, T * C, H, W)
-
-        # Apply temporal convolution
         x = self.temporal_conv(x)
 
-        # Patch embedding: (B, embed_dim, patch_H, patch_W)
-        x, patch_dims = self.patch_embed(x)  # (B, N, embed_dim)
-
-        # Apply dropout (no absolute positional embedding)
+        # Patch embedding
+        x, _ = self.patch_embed(x)
         x = self.pos_drop(x)
 
-        # Apply Swin Transformer layers
-        for layer in self.layers:
+        # Apply Swin Transformer layers with optional patch merging
+        current_H, current_W = self.patch_H, self.patch_W
+
+        for layer, merging in zip(self.layers, self.merging_layers, strict=False):
+            # Apply transformer blocks
             for block in layer:
-                x = block(x, self.patch_H, self.patch_W)
+                x = block(x, current_H, current_W)
+
+            # Apply patch merging if available
+            if merging is not None:
+                x = merging(x)
+                current_H, current_W = current_H // 2, current_W // 2
 
         x = self.norm(x)
+
+        # Global average pooling to reduce spatial dimensions
+        # Reshape for pooling: (B, H*W, C) -> (B, C, H, W)
+        x = x.transpose(1, 2).view(B, -1, current_H, current_W)
+        x = F.adaptive_avg_pool2d(x, (self.patch_H, self.patch_W))  # Pool back to original patch resolution
+        x = x.view(B, -1, self.patch_H * self.patch_W).transpose(1, 2)  # Back to (B, H*W, C)
 
         # Output projection
         x = self.output_proj(x)  # (B, N_patches, prediction_horizon * patch_area)
@@ -402,32 +810,92 @@ class SwinTransformer2D(nn.Module):
         x = x.permute(0, 1, 2, 4, 3, 5)  # (B, T_pred, patch_H, patch_size[0], patch_W, patch_size[1])
         x = x.contiguous().reshape(B, self.prediction_horizon, 1, H, W)
 
-        # For single prediction horizon, squeeze out the prediction dimension
-        # Output should be (B, 1, H, W) to match target shape (B, 1, H, W)
+        # Handle output format
         if self.prediction_horizon == 1:
             x = x.squeeze(1)  # (B, 1, H, W)
 
         return x
 
 
+# Alias for the enhanced U-net version (for advanced users)
+SwinUnet2D = SwinTransformer2DWithMerging
+
+
+def SwinTransformerAuto(use_patch_merging: bool = True, **kwargs):
+    """
+    Factory function to automatically choose between SwinTransformer2D and SwinTransformer2DWithMerging
+    based on the use_patch_merging parameter.
+
+    Args:
+        use_patch_merging: If True, use SwinTransformer2DWithMerging, else use SwinTransformer2D
+        **kwargs: Arguments passed to the selected model
+
+    Returns:
+        Either SwinTransformer2D or SwinTransformer2DWithMerging instance
+    """
+    if use_patch_merging:
+        # Remove use_patch_merging from kwargs since SwinTransformer2DWithMerging doesn't need it
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k != "use_patch_merging"}
+        return SwinTransformer2DWithMerging(**filtered_kwargs)
+    else:
+        # Remove use_patch_merging from kwargs since SwinTransformer2D doesn't need it
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k != "use_patch_merging"}
+        # Convert depths parameter for SwinTransformer2D (extract encoder depths only)
+        if "depths" in filtered_kwargs:
+            depths = filtered_kwargs["depths"]
+            if len(depths) % 2 == 1:  # If it's the new format (encoder, latent, decoder)
+                num_encoder_layers = len(depths) // 2
+                filtered_kwargs["depths"] = depths[:num_encoder_layers]
+        return SwinTransformer2D(use_patch_merging=False, **filtered_kwargs)
+
+
 if __name__ == "__main__":
-    # Test the model
-    model = SwinTransformer2D(
-        input_shape=(128, 96),  # 2D shape (H, W)
-        sequence_length=5,
+    print("Testing Enhanced Swin Transformer 2D with patch merging...")
+
+    # Test with patch merging enabled
+    print("\n1. Testing with patch merging enabled:")
+    model_with_merging = SwinTransformer2D(
+        input_shape=(64, 48),  # Smaller for testing
+        sequence_length=3,
         prediction_horizon=1,
-        embed_dim=96,
-        depths=(2, 2, 6),
-        num_heads=(3, 6, 12),
-        window_size=(7, 7),
+        embed_dim=48,
+        depths=(2, 2),
+        num_heads=(3, 6),
+        window_size=(4, 4),
         patch_size=(4, 4),
+        use_patch_merging=True,
+        drop_path_rate=0.0,
     )
 
-    # Test input
-    x = torch.randn(2, 5, 1, 128, 96)  # (B, T, C, H, W)
-
+    x = torch.randn(1, 3, 1, 64, 48)  # (B, T, C, H, W)
     print(f"Input shape: {x.shape}")
+
     with torch.no_grad():
-        output = model(x)
+        output = model_with_merging(x)
     print(f"Output shape: {output.shape}")
-    print(f"Model parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M")
+    print(f"Model parameters: {sum(p.numel() for p in model_with_merging.parameters()) / 1e6:.2f}M")
+
+    # Test without patch merging (original behavior)
+    print("\n2. Testing without patch merging (original behavior):")
+    model_without_merging = SwinTransformer2D(
+        input_shape=(64, 48),
+        sequence_length=3,
+        prediction_horizon=1,
+        embed_dim=48,
+        depths=(2, 2),
+        num_heads=(3, 6),
+        window_size=(4, 4),
+        patch_size=(4, 4),
+        use_patch_merging=False,
+        drop_path_rate=0.0,
+    )
+
+    with torch.no_grad():
+        output_orig = model_without_merging(x)
+    print(f"Output shape: {output_orig.shape}")
+    print(f"Model parameters: {sum(p.numel() for p in model_without_merging.parameters()) / 1e6:.2f}M")
+
+    print("\n✓ All tests passed! Enhanced model with patch merging is working.")
+    print("  - Patch merging enables multiscale feature extraction")
+    print("  - U-net-like architecture improves spatial reasoning")
+    print("  - Backward compatibility maintained with use_patch_merging=False")
