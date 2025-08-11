@@ -201,6 +201,8 @@ evaluation_results/
 # degub files
 debug_test
 
+# evaluation results
+wandb/
 
 # ------------------------------------------------------------------------------------------------
 # The following are for project-specific configs
