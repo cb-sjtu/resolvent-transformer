@@ -17,6 +17,14 @@ import torch.nn as nn
 
 warnings.filterwarnings("ignore")
 
+try:
+    import wandb
+
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not available. Plots will only be saved locally.")
+
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
@@ -47,7 +55,56 @@ class SimpleModelEvaluator:
         # Create output directory using log directory name
         log_dir_name = self._extract_log_dir_name()
         self.output_dir = Path(f"evaluation_results/evaluation_results_{log_dir_name}")
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(exist_ok=True, parents=True)
+
+        # Initialize wandb for evaluation logging
+        if WANDB_AVAILABLE:
+            # Try to resume the training run if possible
+            training_run_id = self._extract_wandb_run_id()
+
+            if training_run_id:
+                print(f"Found training wandb run ID: {training_run_id}")
+                try:
+                    # Resume the existing training run for evaluation
+                    self.wandb_run = wandb.init(
+                        project="turbulence_swin",  # Same project as training
+                        id=training_run_id,  # Resume the same run
+                        resume="allow",  # Allow resuming the run
+                        tags=["evaluation", "flow", "swin", "2d"],  # Add evaluation tag
+                    )
+                    print("Successfully resumed training wandb run for evaluation")
+                except Exception as e:
+                    print(f"Failed to resume training run: {e}")
+                    print("Creating new evaluation run...")
+                    # Fallback: create a new linked run
+                    self.wandb_run = wandb.init(
+                        project="turbulence_swin",  # Same project as training
+                        name=f"evaluation_{log_dir_name}",
+                        tags=["evaluation", "flow", "swin", "2d"],
+                        config={
+                            "checkpoint_path": checkpoint_path,
+                            "device": str(self.device),
+                            "log_dir": log_dir_name,
+                            "evaluation_type": "post_training",
+                            "training_run_id": training_run_id,
+                        },
+                    )
+            else:
+                print("No training wandb run ID found, creating new evaluation run...")
+                # Create new evaluation run
+                self.wandb_run = wandb.init(
+                    project="turbulence_swin",  # Same project as training
+                    name=f"evaluation_{log_dir_name}",
+                    tags=["evaluation", "flow", "swin", "2d"],
+                    config={
+                        "checkpoint_path": checkpoint_path,
+                        "device": str(self.device),
+                        "log_dir": log_dir_name,
+                        "evaluation_type": "post_training",
+                    },
+                )
+        else:
+            self.wandb_run = None
 
     def _load_model(self) -> nn.Module:
         """Load the model from checkpoint."""
@@ -110,6 +167,30 @@ class SimpleModelEvaluator:
         checkpoint_path = Path(self.checkpoint_path)
         run_dir = checkpoint_path.parent.parent.name  # Get the run directory name
         return run_dir
+
+    def _extract_wandb_run_id(self) -> str:
+        """Extract wandb run ID from the training logs."""
+        # Look for wandb run ID in the log directory
+        checkpoint_path = Path(self.checkpoint_path)
+        run_dir = checkpoint_path.parent.parent
+        wandb_dir = run_dir / "wandb"
+
+        if wandb_dir.exists():
+            # Look for the latest-run symlink or run directories
+            latest_run_link = wandb_dir / "latest-run"
+            if latest_run_link.exists() and latest_run_link.is_symlink():
+                run_name = latest_run_link.readlink().name
+                # Extract run ID from run name like "run-20250806_122524-h77kz7la"
+                if run_name.startswith("run-") and "-" in run_name:
+                    return run_name.split("-")[-1]  # Get the last part (run ID)
+
+            # Fallback: look for run directories directly
+            for item in wandb_dir.iterdir():
+                if item.is_dir() and item.name.startswith("run-"):
+                    run_id = item.name.split("-")[-1]
+                    return run_id
+
+        return None
 
     def _setup_test_dataset(self):
         """Setup test dataset."""
@@ -177,6 +258,19 @@ class SimpleModelEvaluator:
         print(f"Validation dataset loaded with {len(val_dataset)} samples")
         return val_dataset
 
+    def _log_to_wandb(self, key: str, value, step: int = None):
+        """Log metrics or images to wandb if available."""
+        if self.wandb_run is not None:
+            if step is not None:
+                wandb.log({key: value}, step=step)
+            else:
+                wandb.log({key: value})
+
+    def _log_image_to_wandb(self, key: str, image_path: str, caption: str = ""):
+        """Log an image file to wandb if available."""
+        if self.wandb_run is not None:
+            wandb.log({key: wandb.Image(str(image_path), caption=caption)})
+
     def evaluate_model(self, num_samples: int = 100) -> dict[str, float]:
         """Evaluate the model on test data.
 
@@ -239,6 +333,12 @@ class SimpleModelEvaluator:
         print(f"  MSE: {metrics['mse']:.6f}")
         print(f"  MAE: {metrics['mae']:.6f}")
         print(f"  Rel Error: {metrics['rel_error']:.6f}")
+
+        # Log metrics to wandb
+        self._log_to_wandb("test/mse", metrics["mse"])
+        self._log_to_wandb("test/mae", metrics["mae"])
+        self._log_to_wandb("test/relative_error", metrics["rel_error"])
+        self._log_to_wandb("test/num_samples", metrics["count"])
 
         return metrics
 
@@ -398,6 +498,13 @@ class SimpleModelEvaluator:
         print(f"Visualization saved to {save_path}")
         print("Per-timestep ranges used (allows better temporal visualization):")
 
+        # Log image to wandb
+        self._log_image_to_wandb(
+            f"test/sample_{sample_idx}_prediction",
+            save_path,
+            f"Autoregressive prediction for sample {sample_idx} over {num_future} timesteps",
+        )
+
         plt.show()
 
     def create_prediction_video(self, sample_idx: int = 0, num_future: int = 30):
@@ -554,6 +661,12 @@ class SimpleModelEvaluator:
             print("Saving animation as GIF...")
             anim.save(video_path_gif, writer="pillow", fps=2)
             print(f"Video saved as GIF: {video_path_gif}")
+
+            # Log GIF to wandb
+            if self.wandb_run is not None:
+                self._log_to_wandb(
+                    f"test/sample_{sample_idx}_evolution", wandb.Video(str(video_path_gif), fps=2, format="gif")
+                )
         except Exception as e:
             print(f"Error saving GIF: {e}")
             print("Trying alternative approach...")
@@ -720,6 +833,13 @@ class SimpleModelEvaluator:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         print(f"Teacher forcing visualization saved to {save_path}")
 
+        # Log image to wandb
+        self._log_image_to_wandb(
+            f"{split}/teacher_forcing_prediction",
+            save_path,
+            f"Teacher forcing prediction for {split} data over {num_future} timesteps",
+        )
+
         plt.show()
 
     def create_teacher_forcing_video(self, split: str = "train", sample_idx: int = 0, num_future: int = 30):
@@ -831,6 +951,12 @@ class SimpleModelEvaluator:
             print("Saving teacher forcing animation as GIF...")
             anim.save(video_path_gif, writer="pillow", fps=2)
             print(f"Video saved as GIF: {video_path_gif}")
+
+            # Log GIF to wandb
+            if self.wandb_run is not None:
+                self._log_to_wandb(
+                    f"{split}/teacher_forcing_evolution", wandb.Video(str(video_path_gif), fps=2, format="gif")
+                )
         except Exception as e:
             print(f"Error saving teacher forcing GIF: {e}")
             print("Trying alternative approach...")
@@ -921,19 +1047,42 @@ class SimpleModelEvaluator:
         print("- Train (teacher forcing): train_teacher_forcing_prediction.png, train_teacher_forcing_evolution.mp4")
         print("- Val (teacher forcing): val_teacher_forcing_prediction.png, val_teacher_forcing_evolution.mp4")
 
+        # Log summary metrics to wandb
+        self._log_to_wandb("evaluation/status", "completed")
+
+    def close_wandb(self):
+        """Close wandb run."""
+        if self.wandb_run is not None:
+            wandb.finish()
+            print("Wandb run closed.")
+
 
 def main():
     """Main function."""
-    checkpoint_path = (
-        "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-08-06_12-25-21-684781/checkpoints/last.ckpt"
-    )
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Evaluate Flow Swin 2D model")
+    parser.add_argument("checkpoint_path", nargs="?", default=None, help="Path to model checkpoint")
+    args = parser.parse_args()
+
+    # Use command line argument or default path
+    if args.checkpoint_path:
+        checkpoint_path = args.checkpoint_path
+    else:
+        # Default to the hardcoded path if no argument provided
+        checkpoint_path = (
+            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-08-06_12-25-21-684781/checkpoints/last.ckpt"
+        )
 
     if not os.path.exists(checkpoint_path):
         print(f"Checkpoint not found: {checkpoint_path}")
         return
 
     evaluator = SimpleModelEvaluator(checkpoint_path)
-    evaluator.run_evaluation()
+    try:
+        evaluator.run_evaluation()
+    finally:
+        evaluator.close_wandb()  # Ensure wandb is properly closed
 
 
 if __name__ == "__main__":
