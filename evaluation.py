@@ -9,11 +9,16 @@ import sys
 import warnings
 from pathlib import Path
 
+import hydra
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
+import rootutils
 import torch
 import torch.nn as nn
+from omegaconf import DictConfig
+
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 warnings.filterwarnings("ignore")
 
@@ -34,13 +39,15 @@ from src.datasets.flow_sequence_2d.fast_flow_dataset import FastFlowSequence2DDa
 class SimpleModelEvaluator:
     """Simple evaluator for the 2D Flow Swin Transformer model."""
 
-    def __init__(self, checkpoint_path: str):
+    def __init__(self, checkpoint_path: str, model_cfg: DictConfig):
         """Initialize the evaluator.
 
         Args:
             checkpoint_path: Path to the model checkpoint
+            model_cfg: Model configuration from Hydra
         """
         self.checkpoint_path = checkpoint_path
+        self.model_cfg = model_cfg
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Load model weights
@@ -120,25 +127,9 @@ class SimpleModelEvaluator:
             # Use default parameters based on config
             print("Using default parameters")
 
-        # Create model with current parameters from config
-        from src.models.base.swin_transformer import SwinTransformerAuto
-
-        model = SwinTransformerAuto(
-            use_patch_merging=True,
-            input_shape=(256, 256),
-            sequence_length=3,
-            prediction_horizon=1,
-            patch_size=(2, 2),
-            embed_dim=64,
-            depths=[2, 4, 4, 6, 4, 4, 2],
-            num_heads=8,
-            window_size=(8, 8),
-            mlp_ratio=4.0,
-            qkv_bias=True,
-            drop_rate=0.1,
-            attn_drop_rate=0.1,
-            drop_path_rate=0.1,
-        )
+        # Create model with parameters from config
+        print("Instantiating model from config...")
+        model = hydra.utils.instantiate(self.model_cfg)
 
         # Load state dict
         if "state_dict" in checkpoint:
@@ -201,6 +192,7 @@ class SimpleModelEvaluator:
         test_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
             input_length=3,
+            max_k_steps=1,  # For evaluation, we only need single frame targets
             field_name="u",
             file_pattern="*.h5",
             resolution_scale=[2, 3, 1],
@@ -223,6 +215,7 @@ class SimpleModelEvaluator:
         train_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
             input_length=3,
+            max_k_steps=1,  # For evaluation, we only need single frame targets
             field_name="u",
             file_pattern="*.h5",
             resolution_scale=[2, 3, 1],
@@ -245,6 +238,7 @@ class SimpleModelEvaluator:
         val_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
             input_length=3,
+            max_k_steps=1,  # For evaluation, we only need single frame targets
             field_name="u",
             file_pattern="*.h5",
             resolution_scale=[2, 3, 1],
@@ -290,7 +284,9 @@ class SimpleModelEvaluator:
             for item in batch:
                 # Remove the extra batch dimension that the dataset adds
                 input_seq = item["data"]["input_seq"].squeeze(0)  # (input_length, 1, H, W)
-                target = item["label"].squeeze(0)  # (1, H, W)
+                target_seq = item["label"].squeeze(0)  # (max_k_steps, 1, H, W)
+                # For evaluation, take only the first target frame
+                target = target_seq[0]  # (1, H, W)
                 input_seqs.append(input_seq)
                 targets.append(target)
 
@@ -390,7 +386,9 @@ class SimpleModelEvaluator:
         for i in range(num_future + 1):
             if sample_idx + i < len(self.test_dataset):
                 sample = self.test_dataset[sample_idx + i]
-                target = sample["label"].cpu().numpy()[0]  # (C, H, W)
+                target_seq = sample["label"].cpu().numpy()[0]  # (max_k_steps, C, H, W)
+                # Take the first target frame
+                target = target_seq[0]  # (C, H, W)
                 ground_truth_frames.append(target[0])  # Take channel 0
 
                 # Debug: Print shapes for first few frames
@@ -517,7 +515,9 @@ class SimpleModelEvaluator:
             if sample_idx + i < len(self.test_dataset):
                 sample = self.test_dataset[sample_idx + i]
                 input_seq = sample["data"]["input_seq"].cpu().numpy()[0]  # (T, C, H, W)
-                target = sample["label"].cpu().numpy()[0]  # (C, H, W)
+                target_seq = sample["label"].cpu().numpy()[0]  # (max_k_steps, C, H, W)
+                # Take the first target frame
+                target = target_seq[0]  # (C, H, W)
 
                 if i == 0:
                     # For first sample, add all input frames
@@ -745,7 +745,9 @@ class SimpleModelEvaluator:
             if sample_idx + i < len(dataset):
                 sample = dataset[sample_idx + i]
                 input_seq = sample["data"]["input_seq"].to(self.device)  # (1, T, C, H, W)
-                target = sample["label"].to(self.device)  # (1, C, H, W)
+                target_seq = sample["label"].to(self.device)  # (1, max_k_steps, C, H, W)
+                # Take the first target frame
+                target = target_seq[:, 0]  # (1, C, H, W)
 
                 # Store ground truth
                 ground_truth_frames.append(target.cpu().numpy()[0, 0])  # (H, W)
@@ -1061,9 +1063,12 @@ def main():
     """Main function."""
     import argparse
 
+    # Parse command line arguments BEFORE Hydra initialization
     parser = argparse.ArgumentParser(description="Evaluate Flow Swin 2D model")
     parser.add_argument("checkpoint_path", nargs="?", default=None, help="Path to model checkpoint")
-    args = parser.parse_args()
+
+    # Parse known args to separate our checkpoint path from Hydra overrides
+    args, hydra_overrides = parser.parse_known_args()
 
     # Use command line argument or default path
     if args.checkpoint_path:
@@ -1071,18 +1076,22 @@ def main():
     else:
         # Default to the hardcoded path if no argument provided
         checkpoint_path = (
-            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-08-06_12-25-21-684781/checkpoints/last.ckpt"
+            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-08-11_22-40-39-792051/checkpoints/last.ckpt"
         )
 
     if not os.path.exists(checkpoint_path):
         print(f"Checkpoint not found: {checkpoint_path}")
         return
 
-    evaluator = SimpleModelEvaluator(checkpoint_path)
-    try:
-        evaluator.run_evaluation()
-    finally:
-        evaluator.close_wandb()  # Ensure wandb is properly closed
+    # Initialize Hydra with the remaining overrides
+    with hydra.initialize(version_base="1.3", config_path="configs"):
+        cfg = hydra.compose(config_name="train_flow_swin_2d", overrides=hydra_overrides)
+
+        evaluator = SimpleModelEvaluator(checkpoint_path, cfg.model)
+        try:
+            evaluator.run_evaluation()
+        finally:
+            evaluator.close_wandb()  # Ensure wandb is properly closed
 
 
 if __name__ == "__main__":

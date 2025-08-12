@@ -14,6 +14,7 @@ class FastFlowSequence2DDataset(Dataset):
         self,
         data_dir: str = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow",
         input_length: int = 5,
+        max_k_steps: int = 1,
         field_name: str = "u",
         resolution_scale: tuple = (2, 3, 1),
         y_slice: int = 192,
@@ -27,6 +28,7 @@ class FastFlowSequence2DDataset(Dataset):
         Args:
             data_dir: Directory containing preprocessed HDF5 files
             input_length: Number of previous timesteps for prediction
+            max_k_steps: Maximum number of future steps for k-step rollout training
             train_ratio: Ratio of data for training
             valid_ratio: Ratio of data for validation
             test_ratio: Ratio of data for testing
@@ -37,6 +39,7 @@ class FastFlowSequence2DDataset(Dataset):
 
         self.data_dir = data_dir
         self.input_length = input_length
+        self.max_k_steps = max_k_steps
         self.split = split
 
         # Metadata from preprocessing
@@ -50,10 +53,11 @@ class FastFlowSequence2DDataset(Dataset):
         )
         self.file_list = sorted(glob.glob(os.path.join(data_dir, pattern)))
         self.num_frames = len(self.file_list)
-        self.num_samples = self.num_frames - self.input_length
+        # For k-step rollout, we need input_length frames + max_k_steps target frames
+        self.num_samples = self.num_frames - self.input_length - self.max_k_steps + 1
 
         if self.num_samples <= 0:
-            raise ValueError(f"Not enough frames. Need at least {input_length + 1}, got {self.num_frames}")
+            raise ValueError(f"Not enough frames. Need at least {input_length + max_k_steps}, got {self.num_frames}")
 
         # Split data indices
         train_samples = int(self.num_samples * train_ratio)
@@ -83,44 +87,48 @@ class FastFlowSequence2DDataset(Dataset):
             dict with keys:
                 - "description": sample description
                 - "data": input sequence data
-                - "label": target frame
+                - "label": target sequence (k frames)
         """
         base_idx = self.indices[idx]
-        description = f"dataset: FastFlowSequence2DDataset, idx: {idx}, field: {self.field_name}"
+        description = (
+            f"dataset: FastFlowSequence2DDataset, idx: {idx}, field: {self.field_name}, max_k_steps: {self.max_k_steps}"
+        )
 
-        # Load input sequence - much faster now!
+        # Load input sequence + k target frames
         frames = []
-        for i in range(self.input_length + 1):
+        for i in range(self.input_length + self.max_k_steps):
             fpath = self.file_list[base_idx + i]
             with h5py.File(fpath, "r") as f:
                 data_2d = f["data"][()]  # Already preprocessed 2D data
                 frames.append(data_2d)
 
         # Convert to tensors
-        input_seq = np.stack(frames[:-1], axis=0)  # (input_length, H, W)
-        target = frames[-1]  # (H, W)
+        input_seq = np.stack(frames[: self.input_length], axis=0)  # (input_length, H, W)
+        target_seq = np.stack(frames[self.input_length :], axis=0)  # (max_k_steps, H, W)
 
         # Add channel dimension
         input_seq = input_seq[:, None, :, :]  # (input_length, 1, H, W)
-        target = target[None, :, :]  # (1, H, W)
+        target_seq = target_seq[:, None, :, :]  # (max_k_steps, 1, H, W)
 
         # Add batch dimension like original dataset
         input_seq = torch.from_numpy(input_seq).float().unsqueeze(0)  # (1, input_length, 1, H, W)
-        target = torch.from_numpy(target).float().unsqueeze(0)  # (1, 1, H, W)
+        target_seq = torch.from_numpy(target_seq).float().unsqueeze(0)  # (1, max_k_steps, 1, H, W)
 
         # Structure like original dataset
         data = {"input_seq": input_seq}
-        label = target
+        label = target_seq
 
         return {"description": np.array([description], dtype="<U100"), "data": data, "label": label}
 
 
 if __name__ == "__main__":
     # Test the fast dataset
-    dataset = FastFlowSequence2DDataset(split="train")
+    dataset = FastFlowSequence2DDataset(split="train", max_k_steps=4)
     print(f"Dataset length: {len(dataset)}")
 
     if len(dataset) > 0:
         sample = dataset[0]
         print(f"Input sequence shape: {sample['data']['input_seq'].shape}")
-        print(f"Target shape: {sample['label'].shape}")
+        print(f"Target sequence shape: {sample['label'].shape}")
+        print(f"Expected input shape: (1, input_length={dataset.input_length}, 1, H, W)")
+        print(f"Expected target shape: (1, max_k_steps={dataset.max_k_steps}, 1, H, W)")

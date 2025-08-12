@@ -1,3 +1,4 @@
+import math
 from typing import Any
 
 import torch
@@ -26,53 +27,301 @@ class FlowSwin2DLitModule(BaseLitModule):
         else:
             raise ValueError(f"Unknown loss function: {loss_fn}")
 
+        # Scheduled Sampling configuration
+        self.scheduled_sampling = getattr(cfg, "scheduled_sampling", {})
+        self.ss_enabled = self.scheduled_sampling.get("enabled", False)
+        self.ss_initial_ratio = self.scheduled_sampling.get("initial_teacher_forcing_ratio", 1.0)
+        self.ss_final_ratio = self.scheduled_sampling.get("final_teacher_forcing_ratio", 0.0)
+        self.ss_schedule_type = self.scheduled_sampling.get("schedule_type", "linear")
+        self.ss_decay_epochs = self.scheduled_sampling.get("decay_epochs", 50)
+        self.ss_start_epoch = self.scheduled_sampling.get("start_epoch", 0)
+        self.ss_rollout_only = self.scheduled_sampling.get("rollout_only", True)
+
+        # K-step Rollout configuration
+        self.k_step_rollout = getattr(cfg, "k_step_rollout", {})
+        self.kr_enabled = self.k_step_rollout.get("enabled", False)
+        self.kr_initial_k = self.k_step_rollout.get("initial_k_steps", 1)
+        self.kr_max_k = self.k_step_rollout.get("max_k_steps", 16)
+        self.kr_schedule = self.k_step_rollout.get("k_increase_schedule", "curriculum")
+        self.kr_curriculum_epochs = self.k_step_rollout.get("curriculum_epochs", [10, 20, 30, 40, 50])
+        self.kr_curriculum_k_values = self.k_step_rollout.get("curriculum_k_values", [1, 2, 4, 8, 16])
+        self.kr_rollout_weight = self.k_step_rollout.get("rollout_loss_weight", 1.0)
+        self.kr_single_weight = self.k_step_rollout.get("single_step_loss_weight", 1.0)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
         return self._model_forward(x)
 
+    def get_teacher_forcing_ratio(self, current_epoch: int) -> float:
+        """Calculate current teacher forcing ratio based on scheduled sampling."""
+        if not self.ss_enabled:
+            return 1.0
+
+        # Use global_step instead of epoch since epochs aren't advancing
+        steps_per_epoch = 50
+        effective_epoch = self.global_step // steps_per_epoch
+
+        if effective_epoch < self.ss_start_epoch:
+            return 1.0
+
+        progress = min(1.0, (effective_epoch - self.ss_start_epoch) / self.ss_decay_epochs)
+
+        if self.ss_schedule_type == "linear":
+            ratio = self.ss_initial_ratio - progress * (self.ss_initial_ratio - self.ss_final_ratio)
+        elif self.ss_schedule_type == "exponential":
+            ratio = self.ss_final_ratio + (self.ss_initial_ratio - self.ss_final_ratio) * math.exp(-3 * progress)
+        elif self.ss_schedule_type == "inverse_sigmoid":
+            k = 2.0  # steepness parameter
+            ratio = self.ss_final_ratio + (self.ss_initial_ratio - self.ss_final_ratio) / (
+                1 + math.exp(k * (progress - 0.5))
+            )
+        else:
+            ratio = self.ss_initial_ratio
+
+        return max(self.ss_final_ratio, min(self.ss_initial_ratio, ratio))
+
+    def get_current_k_steps(self, current_epoch: int) -> int:
+        """Calculate current K steps for rollout loss based on curriculum."""
+        if not self.kr_enabled:
+            return 1
+
+        if self.kr_schedule == "fixed":
+            return self.kr_initial_k
+        elif self.kr_schedule == "curriculum":
+            # Use global_step instead of epoch since epochs aren't advancing
+            # Assume ~50 steps per epoch (adjust based on your dataset)
+            steps_per_epoch = 50
+            effective_epoch = self.global_step // steps_per_epoch
+
+            # Find the appropriate k value based on effective epoch
+            k_index = 0  # Start with first k value (k=1)
+            for i, epoch_threshold in enumerate(self.kr_curriculum_epochs):
+                if effective_epoch >= epoch_threshold:
+                    k_index = i + 1  # Move to next k value
+                else:
+                    break  # Found the right threshold
+
+            # Clamp to available k values
+            k_index = min(k_index, len(self.kr_curriculum_k_values) - 1)
+            return self.kr_curriculum_k_values[k_index]
+        else:
+            return self.kr_initial_k
+
+    def rollout_prediction(
+        self, input_seq: torch.Tensor, target_seq: torch.Tensor, k_steps: int, teacher_forcing_ratio: float
+    ) -> tuple:
+        """Perform k-step rollout prediction with scheduled sampling."""
+        batch_size, seq_len, channels, height, width = input_seq.shape
+
+        # Start with the input sequence
+        current_input = input_seq.clone()
+        predictions = []
+        losses = []
+
+        for step in range(k_steps):
+            # Forward pass to predict next frame
+            pred = self.forward(current_input)  # Shape: (B, C, H, W)
+            predictions.append(pred)
+
+            # Calculate loss for this step
+            if step < target_seq.shape[1]:  # Ensure we have target
+                target = target_seq[:, step]  # (B, C, H, W)
+                step_loss = self.loss_fn(pred, target)
+                losses.append(step_loss)
+
+            # Prepare input for next step with scheduled sampling
+            if step < k_steps - 1:  # Not the last step
+                # Use scheduled sampling to decide between teacher forcing and model prediction
+                use_teacher_forcing = torch.rand(1).item() < teacher_forcing_ratio
+
+                if use_teacher_forcing and step < target_seq.shape[1]:
+                    # Use ground truth (teacher forcing)
+                    next_frame = target_seq[:, step].unsqueeze(1)  # (B, 1, C, H, W)
+                else:
+                    # Use model prediction - detach to prevent gradient explosion
+                    next_frame = pred.detach().unsqueeze(1)  # (B, 1, C, H, W)
+
+                # Update current_input: remove oldest frame and add new frame
+                current_input = torch.cat(
+                    [
+                        current_input[:, 1:],  # Remove first frame
+                        next_frame,
+                    ],
+                    dim=1,
+                )
+
+        return predictions, losses
+
     def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
-        """Training step."""
+        """Training step with scheduled sampling and k-step rollout."""
         # Extract data from PyTree structure
         input_seq = batch["data"]["input_seq"]  # (B, T, C, H, W)
-        target = batch["label"]  # (B, C, H, W)
+        target_seq = batch["label"]  # (B, max_k_steps, C, H, W) for k-step rollout
 
-        # Forward pass
-        pred = self.forward(input_seq)
-
-        # Compute loss
-        loss = self.loss_fn(pred, target)
+        # For backward compatibility, get first target frame for single-step loss
+        target = target_seq[:, 0]  # (B, C, H, W)
 
         # Get batch size for logging
         batch_size = target.shape[0]
 
-        # Log metrics
-        self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=batch_size)
+        current_epoch = self.current_epoch
+        teacher_forcing_ratio = self.get_teacher_forcing_ratio(current_epoch)
+        k_steps = self.get_current_k_steps(current_epoch)
 
-        # Compute additional metrics
+        # Debug logging for curriculum - use only on_step for continuous monitoring
+        self.log("debug/current_epoch", float(current_epoch), on_step=True, on_epoch=False, batch_size=batch_size)
+        self.log("debug/global_step", float(self.global_step), on_step=True, on_epoch=False, batch_size=batch_size)
+
+        # Log effective epoch calculated from global_step
+        steps_per_epoch = 50
+        effective_epoch = self.global_step // steps_per_epoch
+        self.log("debug/effective_epoch", float(effective_epoch), on_step=True, on_epoch=False, batch_size=batch_size)
+
+        # Debug k-step curriculum
+        self.log("debug/kr_enabled", float(self.kr_enabled), on_step=True, on_epoch=False, batch_size=batch_size)
+        # Convert schedule type to numeric for logging (curriculum=1, fixed=0)
+        schedule_numeric = 1.0 if self.kr_schedule == "curriculum" else 0.0
+        self.log(
+            "debug/kr_schedule_is_curriculum", schedule_numeric, on_step=True, on_epoch=False, batch_size=batch_size
+        )
+
+        total_loss = 0.0
+
+        # Standard single-step prediction loss
+        if self.kr_single_weight > 0:
+            pred_single = self.forward(input_seq)
+            single_step_loss = self.loss_fn(pred_single, target)
+            total_loss += self.kr_single_weight * single_step_loss
+
+            # Log single step loss
+            self.log("train/single_step_loss", single_step_loss, on_step=True, on_epoch=False, batch_size=batch_size)
+
+        # K-step rollout loss
+        if self.kr_enabled and self.kr_rollout_weight > 0 and k_steps > 1:
+            # Use the actual k-step target sequence from dataset
+            # Limit k_steps to available targets
+            actual_k_steps = min(k_steps, target_seq.shape[1])
+            target_k_seq = target_seq[:, :actual_k_steps]  # (B, actual_k_steps, C, H, W)
+
+            # Perform rollout prediction
+            predictions, rollout_losses = self.rollout_prediction(
+                input_seq, target_k_seq, actual_k_steps, teacher_forcing_ratio
+            )
+
+            if rollout_losses:
+                # Avoid double-counting L1 loss: if k_steps>1 and single_step is enabled,
+                # use only later steps for rollout loss to avoid overlap with single-step loss
+                if self.kr_single_weight > 0 and len(rollout_losses) > 1:
+                    # Use rollout losses from step 1 onwards (skip first step to avoid double counting)
+                    later_losses = rollout_losses[1:]
+                    if later_losses:
+                        rollout_loss = sum(later_losses) / len(later_losses)
+                        total_loss += self.kr_rollout_weight * rollout_loss
+
+                        # Log individual step losses
+                        for i, step_loss in enumerate(rollout_losses):
+                            self.log(
+                                f"train/rollout_step{i + 1}_loss",
+                                step_loss,
+                                on_step=True,
+                                on_epoch=False,
+                                batch_size=batch_size,
+                            )
+                else:
+                    # Use all rollout losses
+                    rollout_loss = sum(rollout_losses) / len(rollout_losses)
+                    total_loss += self.kr_rollout_weight * rollout_loss
+
+                    # Log individual step losses
+                    for i, step_loss in enumerate(rollout_losses):
+                        self.log(
+                            f"train/rollout_step{i + 1}_loss",
+                            step_loss,
+                            on_step=True,
+                            on_epoch=False,
+                            batch_size=batch_size,
+                        )
+
+                # Log average rollout loss
+                avg_rollout_loss = sum(rollout_losses) / len(rollout_losses)
+                self.log("train/rollout_loss", avg_rollout_loss, on_step=True, on_epoch=False, batch_size=batch_size)
+
+        # Always log k_steps when k-step rollout is enabled
+        if self.kr_enabled:
+            self.log("train/k_steps", float(k_steps), on_step=True, on_epoch=False, batch_size=batch_size)
+            # Log additional k-step rollout configuration state
+            self.log("train/kr_max_k_steps", float(self.kr_max_k), on_step=True, on_epoch=False, batch_size=batch_size)
+            self.log(
+                "train/kr_rollout_weight", self.kr_rollout_weight, on_step=True, on_epoch=False, batch_size=batch_size
+            )
+            self.log(
+                "train/kr_single_weight", self.kr_single_weight, on_step=True, on_epoch=False, batch_size=batch_size
+            )
+
+        # If no rollout or single step, fall back to standard prediction
+        if total_loss == 0:
+            pred = self.forward(input_seq)
+            total_loss = self.loss_fn(pred, target)
+
+        # Log total loss and curriculum parameters
+        self.log("train/loss", total_loss, on_step=True, on_epoch=False, prog_bar=True, batch_size=batch_size)
+
+        # Always log teacher forcing ratio when scheduled sampling is enabled
+        if self.ss_enabled:
+            self.log(
+                "train/teacher_forcing_ratio",
+                teacher_forcing_ratio,
+                on_step=True,
+                on_epoch=False,
+                batch_size=batch_size,
+            )
+            # Also log whether teacher forcing is actually being used (only during rollout with k>1)
+            teacher_forcing_active = self.kr_enabled and k_steps > 1
+            self.log(
+                "train/teacher_forcing_active",
+                float(teacher_forcing_active),
+                on_step=True,
+                on_epoch=False,
+                batch_size=batch_size,
+            )
+
+            # Optional: Track teacher forcing usage ratio within this batch (for debugging)
+            if teacher_forcing_active and self.kr_enabled and k_steps > 1:
+                # Estimate how often teacher forcing would be used based on the ratio
+                # This is an approximation since we don't track actual TF usage in rollout_prediction
+                expected_tf_usage = teacher_forcing_ratio * (k_steps - 1) / k_steps  # Roughly
+                self.log(
+                    "train/rollout_expected_tf_usage",
+                    expected_tf_usage,
+                    on_step=True,
+                    on_epoch=False,
+                    batch_size=batch_size,
+                )
+
+        # Compute additional metrics (using single-step prediction for consistency)
         with torch.no_grad():
-            mse = F.mse_loss(pred, target)
-            mae = F.l1_loss(pred, target)
+            pred_for_metrics = self.forward(input_seq)
+            mse = F.mse_loss(pred_for_metrics, target)
+            mae = F.l1_loss(pred_for_metrics, target)
 
             # Relative error (2D version)
-            # Both pred and target are (B, C, H, W)
-            # Flatten spatial dimensions to compute norm
             target_flat = target.flatten(start_dim=2)  # (B, C, H*W)
-            pred_flat = pred.flatten(start_dim=2)
+            pred_flat = pred_for_metrics.flatten(start_dim=2)
             target_norm = torch.norm(target_flat, dim=2, keepdim=True)
             error_norm = torch.norm(pred_flat - target_flat, dim=2, keepdim=True)
             rel_error = (error_norm / (target_norm + 1e-8)).mean()
 
             # Spectral metrics for 2D fields
-            pred_fft = torch.fft.fft2(pred.squeeze(1))  # Remove channel dim for FFT: (B,C,H,W) -> (B,H,W)
+            pred_fft = torch.fft.fft2(pred_for_metrics.squeeze(1))
             target_fft = torch.fft.fft2(target.squeeze(1))
             spectral_error = F.mse_loss(torch.abs(pred_fft), torch.abs(target_fft))
 
-            self.log("train/mse", mse, on_step=True, on_epoch=True, batch_size=batch_size)
-            self.log("train/mae", mae, on_step=True, on_epoch=True, batch_size=batch_size)
-            self.log("train/rel_error", rel_error, on_step=True, on_epoch=True, batch_size=batch_size)
-            self.log("train/spectral_error", spectral_error, on_step=True, on_epoch=True, batch_size=batch_size)
+            self.log("train/mse", mse, on_step=True, on_epoch=False, batch_size=batch_size)
+            self.log("train/mae", mae, on_step=True, on_epoch=False, batch_size=batch_size)
+            self.log("train/rel_error", rel_error, on_step=True, on_epoch=False, batch_size=batch_size)
+            self.log("train/spectral_error", spectral_error, on_step=True, on_epoch=False, batch_size=batch_size)
 
-        return loss
+        return total_loss
 
     def validation_step(self, batch: Any, batch_idx: int) -> dict:
         """Validation step."""
