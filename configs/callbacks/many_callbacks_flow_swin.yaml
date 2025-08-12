@@ -10,6 +10,7 @@ defaults:
   - save_ckpt
   - save_metric
   - save_batch_info
+  - curriculum_logger
   # - viz  # Disabled to avoid matplotlib errors
   - _self_
 

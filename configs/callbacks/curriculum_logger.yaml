@@ -1,0 +1,4 @@
+# Curriculum Learning Logger Callback
+# Logs teacher forcing ratio and k-steps progression to wandb
+
+_target_: src.callbacks.curriculum_logger.CurriculumLogger
