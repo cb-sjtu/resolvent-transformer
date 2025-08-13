@@ -5,7 +5,7 @@ sequence_length: 3
 prediction_horizon: 1
 patch_size: [2, 2]
 embed_dim: 64
-depths: [2, 4, 4, 6, 4, 4, 2]  # encoder: [2,4,4], latent: [6], decoder: [4,4,2]
+depths: [2, 4, 6, 4, 2]  # encoder: [2,4,4], latent: [6], decoder: [4,4,2]
 num_heads: 8
 window_size: [8, 8]
 mlp_ratio: 4.0

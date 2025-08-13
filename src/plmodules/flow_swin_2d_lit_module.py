@@ -113,15 +113,13 @@ class FlowSwin2DLitModule(BaseLitModule):
         """Perform k-step rollout prediction with scheduled sampling."""
         batch_size, seq_len, channels, height, width = input_seq.shape
 
-        # Start with the input sequence
-        current_input = input_seq.clone()
-        predictions = []
+        # Start with the input sequence (no unnecessary clone)
+        current_input = input_seq
         losses = []
 
         for step in range(k_steps):
             # Forward pass to predict next frame
             pred = self.forward(current_input)  # Shape: (B, C, H, W)
-            predictions.append(pred)
 
             # Calculate loss for this step
             if step < target_seq.shape[1]:  # Ensure we have target
@@ -150,7 +148,7 @@ class FlowSwin2DLitModule(BaseLitModule):
                     dim=1,
                 )
 
-        return predictions, losses
+        return losses  # Don't return predictions to save memory
 
     def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         """Training step with scheduled sampling and k-step rollout."""
@@ -327,10 +325,10 @@ class FlowSwin2DLitModule(BaseLitModule):
         """Validation step."""
         # Extract data from PyTree structure
         input_seq = batch["data"]["input_seq"]  # (B, T, C, H, W)
-        target = batch["label"]  # (B, C, H, W)
+        target_seq = batch["label"]  # (B, max_k_steps, C, H, W) for k-step rollout
 
-        # Target should already be (B, C, H, W) from dataset
-        # No reshaping needed
+        # For validation, use the first target frame
+        target = target_seq[:, 0]  # (B, C, H, W)
 
         # Forward pass
         pred = self.forward(input_seq)
@@ -396,10 +394,10 @@ class FlowSwin2DLitModule(BaseLitModule):
         """Test step."""
         # Extract data from PyTree structure
         input_seq = batch["data"]["input_seq"]  # (B, T, C, H, W)
-        target = batch["label"]  # (B, C, H, W)
+        target_seq = batch["label"]  # (B, max_k_steps, C, H, W) for k-step rollout
 
-        # Target should already be (B, C, H, W) from dataset
-        # No reshaping needed
+        # For testing, use the first target frame
+        target = target_seq[:, 0]  # (B, C, H, W)
 
         # Forward pass
         pred = self.forward(input_seq)
