@@ -48,6 +48,14 @@ class FlowSwin2DLitModule(BaseLitModule):
         self.kr_rollout_weight = self.k_step_rollout.get("rollout_loss_weight", 1.0)
         self.kr_single_weight = self.k_step_rollout.get("single_step_loss_weight", 1.0)
 
+    def _steps_per_epoch(self) -> int:
+        """Get dynamic steps per epoch from trainer, fallback to 50."""
+        try:
+            # Lightning will populate this during fit
+            return max(1, int(self.trainer.num_training_batches))
+        except Exception:
+            return 50  # Fallback
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
         return self._model_forward(x)
@@ -58,8 +66,8 @@ class FlowSwin2DLitModule(BaseLitModule):
             return 1.0
 
         # Use global_step instead of epoch since epochs aren't advancing
-        steps_per_epoch = 50
-        effective_epoch = self.global_step // steps_per_epoch
+        steps_per_epoch = self._steps_per_epoch()
+        effective_epoch = int(self.global_step // steps_per_epoch)
 
         if effective_epoch < self.ss_start_epoch:
             return 1.0
@@ -89,8 +97,7 @@ class FlowSwin2DLitModule(BaseLitModule):
             return self.kr_initial_k
         elif self.kr_schedule == "curriculum":
             # Use global_step instead of epoch since epochs aren't advancing
-            # Assume ~50 steps per epoch (adjust based on your dataset)
-            steps_per_epoch = 50
+            steps_per_epoch = self._steps_per_epoch()
             effective_epoch = self.global_step // steps_per_epoch
 
             # Find the appropriate k value based on effective epoch
@@ -109,13 +116,14 @@ class FlowSwin2DLitModule(BaseLitModule):
 
     def rollout_prediction(
         self, input_seq: torch.Tensor, target_seq: torch.Tensor, k_steps: int, teacher_forcing_ratio: float
-    ) -> tuple:
+    ) -> tuple[list, float]:
         """Perform k-step rollout prediction with scheduled sampling."""
         batch_size, seq_len, channels, height, width = input_seq.shape
 
         # Start with the input sequence (no unnecessary clone)
         current_input = input_seq
         losses = []
+        tf_fractions = []  # Track actual teacher forcing fractions
 
         for step in range(k_steps):
             # Forward pass to predict next frame
@@ -129,15 +137,24 @@ class FlowSwin2DLitModule(BaseLitModule):
 
             # Prepare input for next step with scheduled sampling
             if step < k_steps - 1:  # Not the last step
-                # Use scheduled sampling to decide between teacher forcing and model prediction
-                use_teacher_forcing = torch.rand(1).item() < teacher_forcing_ratio
+                # Per-sample teacher forcing decision
+                B = input_seq.size(0)
+                mask = (torch.rand(B, 1, 1, 1, device=input_seq.device) < teacher_forcing_ratio).float()
 
-                if use_teacher_forcing and step < target_seq.shape[1]:
-                    # Use ground truth (teacher forcing)
-                    next_frame = target_seq[:, step].unsqueeze(1)  # (B, 1, C, H, W)
+                if step < target_seq.shape[1]:
+                    # Mix ground truth and prediction based on mask
+                    # Both pred and target[:, step] have shape (B, C, H, W)
+                    # mask is (B, 1, 1, 1), expand to match (B, C, H, W)
+                    mask_expanded = mask.expand(-1, pred.shape[1], pred.shape[2], pred.shape[3])
+                    mixed_frame = mask_expanded * target_seq[:, step] + (1 - mask_expanded) * pred.detach()
+                    next_frame = mixed_frame.unsqueeze(1)  # (B, 1, C, H, W)
+                    # Record actual teacher forcing fraction for this step
+                    tf_frac_step = mask.mean().detach()
+                    tf_fractions.append(tf_frac_step)
                 else:
-                    # Use model prediction - detach to prevent gradient explosion
+                    # Use model prediction when no target available
                     next_frame = pred.detach().unsqueeze(1)  # (B, 1, C, H, W)
+                    tf_fractions.append(torch.tensor(0.0, device=input_seq.device))
 
                 # Update current_input: remove oldest frame and add new frame
                 current_input = torch.cat(
@@ -148,7 +165,12 @@ class FlowSwin2DLitModule(BaseLitModule):
                     dim=1,
                 )
 
-        return losses  # Don't return predictions to save memory
+        # Calculate average teacher forcing fraction
+        avg_tf_fraction = (
+            torch.stack(tf_fractions).mean() if tf_fractions else torch.tensor(0.0, device=input_seq.device)
+        )
+
+        return losses, avg_tf_fraction.item()
 
     def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         """Training step with scheduled sampling and k-step rollout."""
@@ -171,7 +193,7 @@ class FlowSwin2DLitModule(BaseLitModule):
         self.log("debug/global_step", float(self.global_step), on_step=True, on_epoch=False, batch_size=batch_size)
 
         # Log effective epoch calculated from global_step
-        steps_per_epoch = 50
+        steps_per_epoch = self._steps_per_epoch()
         effective_epoch = self.global_step // steps_per_epoch
         self.log("debug/effective_epoch", float(effective_epoch), on_step=True, on_epoch=False, batch_size=batch_size)
 
@@ -185,15 +207,6 @@ class FlowSwin2DLitModule(BaseLitModule):
 
         total_loss = 0.0
 
-        # Standard single-step prediction loss
-        if self.kr_single_weight > 0:
-            pred_single = self.forward(input_seq)
-            single_step_loss = self.loss_fn(pred_single, target)
-            total_loss += self.kr_single_weight * single_step_loss
-
-            # Log single step loss
-            self.log("train/single_step_loss", single_step_loss, on_step=True, on_epoch=False, batch_size=batch_size)
-
         # K-step rollout loss
         if self.kr_enabled and self.kr_rollout_weight > 0 and k_steps > 1:
             # Use the actual k-step target sequence from dataset
@@ -202,32 +215,40 @@ class FlowSwin2DLitModule(BaseLitModule):
             target_k_seq = target_seq[:, :actual_k_steps]  # (B, actual_k_steps, C, H, W)
 
             # Perform rollout prediction
-            predictions, rollout_losses = self.rollout_prediction(
+            rollout_losses, actual_tf_fraction = self.rollout_prediction(
                 input_seq, target_k_seq, actual_k_steps, teacher_forcing_ratio
             )
 
-            if rollout_losses:
-                # Avoid double-counting L1 loss: if k_steps>1 and single_step is enabled,
-                # use only later steps for rollout loss to avoid overlap with single-step loss
-                if self.kr_single_weight > 0 and len(rollout_losses) > 1:
-                    # Use rollout losses from step 1 onwards (skip first step to avoid double counting)
-                    later_losses = rollout_losses[1:]
-                    if later_losses:
-                        rollout_loss = sum(later_losses) / len(later_losses)
-                        total_loss += self.kr_rollout_weight * rollout_loss
+            # Standard single-step prediction loss (use first rollout step to avoid duplicate forward)
+            if self.kr_single_weight > 0 and rollout_losses:
+                single_step_loss = rollout_losses[0]  # Use first step from rollout
+                total_loss += self.kr_single_weight * single_step_loss
+                # Log single step loss
+                self.log(
+                    "train/single_step_loss", single_step_loss, on_step=True, on_epoch=False, batch_size=batch_size
+                )
+        else:
+            # Fallback: Standard single-step prediction loss when k_steps <= 1 or rollout disabled
+            if self.kr_single_weight > 0:
+                pred_single = self.forward(input_seq)
+                single_step_loss = self.loss_fn(pred_single, target)
+                total_loss += self.kr_single_weight * single_step_loss
+                # Log single step loss
+                self.log(
+                    "train/single_step_loss", single_step_loss, on_step=True, on_epoch=False, batch_size=batch_size
+                )
+            rollout_losses = []
+            actual_tf_fraction = 0.0  # No teacher forcing when not using rollout
 
-                        # Log individual step losses
-                        for i, step_loss in enumerate(rollout_losses):
-                            self.log(
-                                f"train/rollout_step{i + 1}_loss",
-                                step_loss,
-                                on_step=True,
-                                on_epoch=False,
-                                batch_size=batch_size,
-                            )
-                else:
-                    # Use all rollout losses
-                    rollout_loss = sum(rollout_losses) / len(rollout_losses)
+        # Process rollout losses (when k_steps > 1)
+        if self.kr_enabled and self.kr_rollout_weight > 0 and k_steps > 1 and rollout_losses:
+            # Avoid double-counting L1 loss: if k_steps>1 and single_step is enabled,
+            # use only later steps for rollout loss to avoid overlap with single-step loss
+            if self.kr_single_weight > 0 and len(rollout_losses) > 1:
+                # Use rollout losses from step 1 onwards (skip first step to avoid double counting)
+                later_losses = rollout_losses[1:]
+                if later_losses:
+                    rollout_loss = sum(later_losses) / len(later_losses)
                     total_loss += self.kr_rollout_weight * rollout_loss
 
                     # Log individual step losses
@@ -239,10 +260,29 @@ class FlowSwin2DLitModule(BaseLitModule):
                             on_epoch=False,
                             batch_size=batch_size,
                         )
+            else:
+                # Use all rollout losses
+                rollout_loss = sum(rollout_losses) / len(rollout_losses)
+                total_loss += self.kr_rollout_weight * rollout_loss
 
-                # Log average rollout loss
-                avg_rollout_loss = sum(rollout_losses) / len(rollout_losses)
-                self.log("train/rollout_loss", avg_rollout_loss, on_step=True, on_epoch=False, batch_size=batch_size)
+                # Log individual step losses
+                for i, step_loss in enumerate(rollout_losses):
+                    self.log(
+                        f"train/rollout_step{i + 1}_loss",
+                        step_loss,
+                        on_step=True,
+                        on_epoch=False,
+                        batch_size=batch_size,
+                    )
+
+            # Log average rollout loss
+            avg_rollout_loss = sum(rollout_losses) / len(rollout_losses)
+            self.log("train/rollout_loss", avg_rollout_loss, on_step=True, on_epoch=False, batch_size=batch_size)
+
+            # Log actual teacher forcing fraction
+            self.log(
+                "train/rollout_tf_actual_frac", actual_tf_fraction, on_step=True, on_epoch=False, batch_size=batch_size
+            )
 
         # Always log k_steps when k-step rollout is enabled
         if self.kr_enabled:
@@ -296,28 +336,8 @@ class FlowSwin2DLitModule(BaseLitModule):
                     batch_size=batch_size,
                 )
 
-        # Compute additional metrics (using single-step prediction for consistency)
-        with torch.no_grad():
-            pred_for_metrics = self.forward(input_seq)
-            mse = F.mse_loss(pred_for_metrics, target)
-            mae = F.l1_loss(pred_for_metrics, target)
-
-            # Relative error (2D version)
-            target_flat = target.flatten(start_dim=2)  # (B, C, H*W)
-            pred_flat = pred_for_metrics.flatten(start_dim=2)
-            target_norm = torch.norm(target_flat, dim=2, keepdim=True)
-            error_norm = torch.norm(pred_flat - target_flat, dim=2, keepdim=True)
-            rel_error = (error_norm / (target_norm + 1e-8)).mean()
-
-            # Spectral metrics for 2D fields
-            pred_fft = torch.fft.fft2(pred_for_metrics.squeeze(1))
-            target_fft = torch.fft.fft2(target.squeeze(1))
-            spectral_error = F.mse_loss(torch.abs(pred_fft), torch.abs(target_fft))
-
-            self.log("train/mse", mse, on_step=True, on_epoch=False, batch_size=batch_size)
-            self.log("train/mae", mae, on_step=True, on_epoch=False, batch_size=batch_size)
-            self.log("train/rel_error", rel_error, on_step=True, on_epoch=False, batch_size=batch_size)
-            self.log("train/spectral_error", spectral_error, on_step=True, on_epoch=False, batch_size=batch_size)
+        # Skip expensive metrics calculation during training to save memory
+        # These metrics are computed during validation/test steps
 
         return total_loss
 
@@ -353,17 +373,20 @@ class FlowSwin2DLitModule(BaseLitModule):
         error_norm = torch.norm(pred_flat - target_flat, dim=2, keepdim=True)
         rel_error = (error_norm / (target_norm + 1e-8)).mean()
 
-        # Spectral metrics
-        pred_fft = torch.fft.fft2(pred.squeeze(2))
-        target_fft = torch.fft.fft2(target.squeeze(2))
+        # Spectral metrics - fix dimension handling
+        # Remove squeeze to handle [B,C,H,W] directly
+        pred_for_fft = pred.squeeze(1) if pred.shape[1] == 1 else pred.mean(dim=1)  # Handle channel dimension properly
+        target_for_fft = target.squeeze(1) if target.shape[1] == 1 else target.mean(dim=1)
+        pred_fft = torch.fft.fft2(pred_for_fft)
+        target_fft = torch.fft.fft2(target_for_fft)
         spectral_error = F.mse_loss(torch.abs(pred_fft), torch.abs(target_fft))
 
         # Additional flow-specific metrics
         # Gradient preservation (important for flow fields)
-        pred_grad_x = torch.gradient(pred.squeeze(2), dim=-1)[0]
-        pred_grad_y = torch.gradient(pred.squeeze(2), dim=-2)[0]
-        target_grad_x = torch.gradient(target.squeeze(2), dim=-1)[0]
-        target_grad_y = torch.gradient(target.squeeze(2), dim=-2)[0]
+        pred_grad_x = torch.gradient(pred_for_fft, dim=-1)[0]
+        pred_grad_y = torch.gradient(pred_for_fft, dim=-2)[0]
+        target_grad_x = torch.gradient(target_for_fft, dim=-1)[0]
+        target_grad_y = torch.gradient(target_for_fft, dim=-2)[0]
 
         grad_error_x = F.mse_loss(pred_grad_x, target_grad_x)
         grad_error_y = F.mse_loss(pred_grad_y, target_grad_y)
@@ -422,16 +445,19 @@ class FlowSwin2DLitModule(BaseLitModule):
         error_norm = torch.norm(pred_flat - target_flat, dim=2, keepdim=True)
         rel_error = (error_norm / (target_norm + 1e-8)).mean()
 
-        # Spectral metrics
-        pred_fft = torch.fft.fft2(pred.squeeze(2))
-        target_fft = torch.fft.fft2(target.squeeze(2))
+        # Spectral metrics - fix dimension handling
+        # Remove squeeze to handle [B,C,H,W] directly
+        pred_for_fft = pred.squeeze(1) if pred.shape[1] == 1 else pred.mean(dim=1)  # Handle channel dimension properly
+        target_for_fft = target.squeeze(1) if target.shape[1] == 1 else target.mean(dim=1)
+        pred_fft = torch.fft.fft2(pred_for_fft)
+        target_fft = torch.fft.fft2(target_for_fft)
         spectral_error = F.mse_loss(torch.abs(pred_fft), torch.abs(target_fft))
 
         # Flow-specific metrics
-        pred_grad_x = torch.gradient(pred.squeeze(2), dim=-1)[0]
-        pred_grad_y = torch.gradient(pred.squeeze(2), dim=-2)[0]
-        target_grad_x = torch.gradient(target.squeeze(2), dim=-1)[0]
-        target_grad_y = torch.gradient(target.squeeze(2), dim=-2)[0]
+        pred_grad_x = torch.gradient(pred_for_fft, dim=-1)[0]
+        pred_grad_y = torch.gradient(pred_for_fft, dim=-2)[0]
+        target_grad_x = torch.gradient(target_for_fft, dim=-1)[0]
+        target_grad_y = torch.gradient(target_for_fft, dim=-2)[0]
 
         grad_error_x = F.mse_loss(pred_grad_x, target_grad_x)
         grad_error_y = F.mse_loss(pred_grad_y, target_grad_y)
@@ -444,7 +470,7 @@ class FlowSwin2DLitModule(BaseLitModule):
             y_norm = F.normalize(y_flat, dim=1)
             return (x_norm * y_norm).sum(dim=1).mean()
 
-        ncc = normalized_cross_correlation(pred.squeeze(2), target.squeeze(2))
+        ncc = normalized_cross_correlation(pred_for_fft, target_for_fft)
 
         self.log("test/mse", mse, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
         self.log("test/mae", mae, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
