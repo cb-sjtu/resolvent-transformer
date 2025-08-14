@@ -12,4 +12,6 @@ When users ask you to do something (even if it's a simple task), don't do it imm
 
 - For analyzing the results of training, refer to the structure of the logs in `guideline/logs-structure.md`.
 
+-For any questions, eapecially the first question, read 'guideline/focus_on.md' to find out which parts of code we are focusing on.
+
 ## Guidelines for This Project
