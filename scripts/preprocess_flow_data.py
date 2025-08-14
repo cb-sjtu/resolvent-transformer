@@ -21,6 +21,7 @@ def extract_flow_data(
     resolution_scale: tuple[int, int, int] = (1, 4, 4),
     y_slice: int = None,
     file_pattern: str = "*.h5",
+    start_file: str = None,
     overwrite: bool = False,
     compress: bool = True,
 ):
@@ -34,6 +35,7 @@ def extract_flow_data(
         resolution_scale: Downsampling factors for (z, y, x) dimensions
         y_slice: Which y-slice to extract (None for middle slice)
         file_pattern: Pattern to match input files
+        start_file: Start processing from this file (e.g., 't00401.h5')
         overwrite: Whether to overwrite existing output files
         compress: Whether to use HDF5 compression
     """
@@ -45,6 +47,21 @@ def extract_flow_data(
     input_files = sorted(glob.glob(os.path.join(input_dir, file_pattern)))
     if not input_files:
         raise ValueError(f"No files found matching pattern {file_pattern} in {input_dir}")
+
+    # Filter files starting from start_file if specified
+    if start_file:
+        start_idx = None
+        for i, file_path in enumerate(input_files):
+            filename = os.path.basename(file_path)
+            if filename >= start_file:
+                start_idx = i
+                break
+
+        if start_idx is not None:
+            input_files = input_files[start_idx:]
+            print(f"Starting from file: {start_file}")
+        else:
+            print(f"Warning: Start file {start_file} not found, processing all files")
 
     print(f"Found {len(input_files)} files to process")
     print(f"Field: {field_name}")
@@ -74,9 +91,11 @@ def extract_flow_data(
     for input_file in tqdm(input_files, desc="Processing files"):
         # Generate output filename
         input_filename = os.path.basename(input_file)
-        output_filename = f"{field_name}_scale{resolution_scale[0]}-"
-        f"{resolution_scale[1]}-{resolution_scale[2]}_"
-        f"yslice{y_slice}_{input_filename}"
+        output_filename = (
+            f"{field_name}_scale{resolution_scale[0]}-"
+            f"{resolution_scale[1]}-{resolution_scale[2]}_"
+            f"yslice{y_slice}_{input_filename}"
+        )
         output_path = os.path.join(output_dir, output_filename)
 
         # Skip if file exists and not overwriting
@@ -291,6 +310,9 @@ def main():
     )
     parser.add_argument("--y_slice", type=int, default=None, help="Y-slice index to extract (default: middle slice)")
     parser.add_argument("--pattern", type=str, default="*.h5", help="File pattern to match (default: *.h5)")
+    parser.add_argument(
+        "--start_file", type=str, default=None, help="Start processing from this file (e.g., t00401.h5)"
+    )
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output files")
     parser.add_argument("--no_compress", action="store_true", help="Disable HDF5 compression")
     parser.add_argument("--create_dataset", action="store_true", help="Create fast dataset class file")
@@ -306,6 +328,7 @@ def main():
             resolution_scale=tuple(args.resolution_scale),
             y_slice=args.y_slice,
             file_pattern=args.pattern,
+            start_file=args.start_file,
             overwrite=args.overwrite,
             compress=not args.no_compress,
         )
