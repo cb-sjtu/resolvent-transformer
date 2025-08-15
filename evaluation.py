@@ -201,6 +201,8 @@ class SimpleModelEvaluator:
             valid_ratio=0.15,
             test_ratio=0.15,
             split="test",
+            norm_stats="norm_stats_u_scale2-3-1_yslice5.json",
+            enable_normalization=True,
         )
 
         print(f"Test dataset loaded with {len(test_dataset)} samples")
@@ -224,6 +226,8 @@ class SimpleModelEvaluator:
             valid_ratio=0.15,
             test_ratio=0.15,
             split="train",
+            norm_stats="norm_stats_u_scale2-3-1_yslice5.json",
+            enable_normalization=True,
         )
 
         print(f"Train dataset loaded with {len(train_dataset)} samples")
@@ -247,6 +251,8 @@ class SimpleModelEvaluator:
             valid_ratio=0.15,
             test_ratio=0.15,
             split="val",
+            norm_stats="norm_stats_u_scale2-3-1_yslice5.json",
+            enable_normalization=True,
         )
 
         print(f"Validation dataset loaded with {len(val_dataset)} samples")
@@ -310,10 +316,15 @@ class SimpleModelEvaluator:
                 # Forward pass
                 pred = self.model(input_seq)
 
-                # Calculate metrics
-                mse = torch.nn.functional.mse_loss(pred, target)
-                mae = torch.nn.functional.l1_loss(pred, target)
-                rel_error = torch.mean(torch.abs(pred - target) / (torch.abs(target) + 1e-8))
+                # IMPORTANT: Denormalize predictions for fair comparison with targets
+                # Both pred and target are normalized, so we need to denormalize both for proper metrics
+                pred_denorm = self.test_dataset.denormalize(pred)
+                target_denorm = self.test_dataset.denormalize(target)
+
+                # Calculate metrics in denormalized space
+                mse = torch.nn.functional.mse_loss(pred_denorm, target_denorm)
+                mae = torch.nn.functional.l1_loss(pred_denorm, target_denorm)
+                rel_error = torch.mean(torch.abs(pred_denorm - target_denorm) / (torch.abs(target_denorm) + 1e-8))
 
                 batch_size = target.shape[0]
                 metrics["mse"] += mse.item() * batch_size
@@ -356,6 +367,9 @@ class SimpleModelEvaluator:
                 # Predict next timestep
                 next_pred = self.model(current_seq)  # Model output shape
 
+                # NOTE: next_pred is normalized, but we keep it normalized for autoregressive feedback
+                # Denormalization happens at the end for evaluation/visualization
+
                 # Debug: Check shapes on first iteration
                 if i == 0:
                     print(f"Input sequence shape: {current_seq.shape}")
@@ -386,9 +400,14 @@ class SimpleModelEvaluator:
         for i in range(num_future + 1):
             if sample_idx + i < len(self.test_dataset):
                 sample = self.test_dataset[sample_idx + i]
-                target_seq = sample["label"].cpu().numpy()[0]  # (max_k_steps, C, H, W)
+                target_seq = sample["label"]  # (1, max_k_steps, C, H, W)
+
+                # IMPORTANT: Denormalize ground truth for proper comparison
+                target_seq_denorm = self.test_dataset.denormalize(target_seq)
+                target_seq_denorm = target_seq_denorm.cpu().numpy()[0]  # (max_k_steps, C, H, W)
+
                 # Take the first target frame
-                target = target_seq[0]  # (C, H, W)
+                target = target_seq_denorm[0]  # (C, H, W)
                 ground_truth_frames.append(target[0])  # Take channel 0
 
                 # Debug: Print shapes for first few frames
@@ -406,9 +425,13 @@ class SimpleModelEvaluator:
         # Generate predictions
         pred_seq = self.generate_sequence_prediction(input_seq, num_future)
 
+        # IMPORTANT: Denormalize both input and predictions for proper visualization
+        input_seq_denorm = self.test_dataset.denormalize(input_seq)
+        pred_seq_denorm = self.test_dataset.denormalize(pred_seq)
+
         # Move to CPU for visualization
-        input_seq = input_seq.cpu().numpy()[0]  # (T, C, H, W)
-        pred_seq = pred_seq.cpu().numpy()[0]  # (T_pred, C, H, W)
+        input_seq = input_seq_denorm.cpu().numpy()[0]  # (T, C, H, W)
+        pred_seq = pred_seq_denorm.cpu().numpy()[0]  # (T_pred, C, H, W)
 
         # Calculate per-timestep colorbar ranges
         # Each timestep gets its own range based on truth vs prediction at that time
@@ -514,15 +537,23 @@ class SimpleModelEvaluator:
         for i in range(num_future + 5):  # Get input + future frames
             if sample_idx + i < len(self.test_dataset):
                 sample = self.test_dataset[sample_idx + i]
-                input_seq = sample["data"]["input_seq"].cpu().numpy()[0]  # (T, C, H, W)
-                target_seq = sample["label"].cpu().numpy()[0]  # (max_k_steps, C, H, W)
+
+                # IMPORTANT: Denormalize ground truth data
+                input_seq_raw = sample["data"]["input_seq"]  # (1, T, C, H, W)
+                target_seq_raw = sample["label"]  # (1, max_k_steps, C, H, W)
+
+                input_seq_denorm = self.test_dataset.denormalize(input_seq_raw).cpu().numpy()[0]  # (T, C, H, W)
+                target_seq_denorm = (
+                    self.test_dataset.denormalize(target_seq_raw).cpu().numpy()[0]
+                )  # (max_k_steps, C, H, W)
+
                 # Take the first target frame
-                target = target_seq[0]  # (C, H, W)
+                target = target_seq_denorm[0]  # (C, H, W)
 
                 if i == 0:
                     # For first sample, add all input frames
-                    for j in range(input_seq.shape[0]):
-                        ground_truth_frames.append(input_seq[j, 0])
+                    for j in range(input_seq_denorm.shape[0]):
+                        ground_truth_frames.append(input_seq_denorm[j, 0])
                 # Add the target frame
                 ground_truth_frames.append(target[0])
             else:
@@ -539,9 +570,13 @@ class SimpleModelEvaluator:
         # Generate predictions
         pred_seq = self.generate_sequence_prediction(input_seq, num_future)
 
+        # IMPORTANT: Denormalize for proper visualization
+        input_seq_denorm = self.test_dataset.denormalize(input_seq)
+        pred_seq_denorm = self.test_dataset.denormalize(pred_seq)
+
         # Move to CPU
-        input_seq = input_seq.cpu().numpy()[0]  # (T, C, H, W)
-        pred_seq = pred_seq.cpu().numpy()[0]  # (T_pred, C, H, W)
+        input_seq = input_seq_denorm.cpu().numpy()[0]  # (T, C, H, W)
+        pred_seq = pred_seq_denorm.cpu().numpy()[0]  # (T_pred, C, H, W)
 
         # Combine input sequence and predictions
         pred_full_sequence = np.concatenate([input_seq, pred_seq], axis=0)
@@ -749,17 +784,93 @@ class SimpleModelEvaluator:
                 # Take the first target frame
                 target = target_seq[:, 0]  # (1, C, H, W)
 
-                # Store ground truth
-                ground_truth_frames.append(target.cpu().numpy()[0, 0])  # (H, W)
+                # IMPORTANT: Denormalize both ground truth and predictions
+                target_denorm = dataset.denormalize(target).cpu().numpy()[0, 0]  # (H, W)
+                ground_truth_frames.append(target_denorm)
 
                 # Predict using ground truth input (teacher forcing)
                 with torch.no_grad():
                     pred = self.model(input_seq)
-                    predictions.append(pred.cpu().numpy()[0, 0])  # (H, W)
+                    pred_denorm = dataset.denormalize(pred).cpu().numpy()[0, 0]  # (H, W)
+                    predictions.append(pred_denorm)
             else:
                 break
 
         return ground_truth_frames, predictions
+
+    def evaluate_with_autoregressive(self, split: str = "train", sample_idx: int = 0, num_future: int = 30):
+        """Evaluate using autoregressive prediction (TFR=0.0) for train/val data.
+
+        Args:
+            split: "train" or "val"
+            sample_idx: Starting sample index
+            num_future: Number of future timesteps to predict
+        """
+        print(f"Evaluating {split} data with autoregressive prediction (TFR=0.0)...")
+
+        if split == "train":
+            dataset = self.train_dataset
+        elif split == "val":
+            dataset = self.val_dataset
+        else:
+            raise ValueError("Only 'train' and 'val' splits supported for autoregressive")
+
+        # Get ground truth frames for the future timesteps
+        ground_truth_frames = []
+        for i in range(num_future + 5):  # Get input + future frames
+            if sample_idx + i < len(dataset):
+                sample = dataset[sample_idx + i]
+
+                # IMPORTANT: Denormalize ground truth data
+                input_seq_raw = sample["data"]["input_seq"]  # (1, T, C, H, W)
+                target_seq_raw = sample["label"]  # (1, max_k_steps, C, H, W)
+
+                input_seq_denorm = dataset.denormalize(input_seq_raw).cpu().numpy()[0]  # (T, C, H, W)
+                target_seq_denorm = dataset.denormalize(target_seq_raw).cpu().numpy()[0]  # (max_k_steps, C, H, W)
+
+                # Take the first target frame
+                target = target_seq_denorm[0]  # (C, H, W)
+
+                if i == 0:
+                    # For first sample, add all input frames
+                    for j in range(input_seq_denorm.shape[0]):
+                        ground_truth_frames.append(input_seq_denorm[j, 0])
+                # Add the target frame
+                ground_truth_frames.append(target[0])
+            else:
+                # If we run out of samples, repeat the last one
+                if ground_truth_frames:
+                    ground_truth_frames.append(ground_truth_frames[-1])
+
+        print(f"Collected {len(ground_truth_frames)} ground truth frames for {split}")
+
+        # Get the initial sample for autoregressive prediction
+        sample = dataset[sample_idx]
+        input_seq = sample["data"]["input_seq"].to(self.device)
+
+        # Generate autoregressive predictions
+        pred_seq = self.generate_sequence_prediction(input_seq, num_future)
+
+        # IMPORTANT: Denormalize predictions for fair comparison
+        input_seq_denorm = dataset.denormalize(input_seq)
+        pred_seq_denorm = dataset.denormalize(pred_seq)
+
+        # Move to CPU
+        input_seq = input_seq_denorm.cpu().numpy()[0]  # (T, C, H, W)
+        pred_seq = pred_seq_denorm.cpu().numpy()[0]  # (T_pred, C, H, W)
+
+        # Combine input sequence and predictions
+        pred_full_sequence = np.concatenate([input_seq, pred_seq], axis=0)
+        input_len = input_seq.shape[0]
+
+        # Trim ground truth to match prediction sequence length
+        ground_truth_frames = ground_truth_frames[: len(pred_full_sequence)]
+
+        # Separate predictions only (exclude input frames)
+        predictions_only = pred_seq[:, 0]  # (T_pred, H, W)
+        ground_truth_pred_only = ground_truth_frames[input_len:]  # Skip input frames
+
+        return ground_truth_pred_only, predictions_only
 
     def visualize_teacher_forcing(self, split: str = "train", sample_idx: int = 0, num_future: int = 30):
         """Visualize teacher forcing results for train/val data."""
@@ -840,6 +951,89 @@ class SimpleModelEvaluator:
             f"{split}/teacher_forcing_prediction",
             save_path,
             f"Teacher forcing prediction for {split} data over {num_future} timesteps",
+        )
+
+        plt.show()
+
+    def visualize_autoregressive(self, split: str = "train", sample_idx: int = 0, num_future: int = 30):
+        """Visualize autoregressive (TFR=0.0) results for train/val data."""
+        print(f"Visualizing {split} data with autoregressive prediction (TFR=0.0)...")
+
+        ground_truth_frames, predictions = self.evaluate_with_autoregressive(split, sample_idx, num_future)
+
+        # Create figure
+        fig, axes = plt.subplots(3, min(len(predictions), 6), figsize=(18, 9))
+        if len(predictions) == 1:
+            axes = axes.reshape(3, 1)
+
+        # Calculate and print quantitative metrics
+        print(f"\n{split.upper()} Autoregressive (TFR=0.0) Results:")
+        print("Step | MSE     | MAE     | Rel Error")
+        print("-" * 35)
+
+        # Calculate per-timestep colorbar ranges for autoregressive visualization
+        num_display = min(len(predictions), 6)
+        ar_timestep_ranges = {}
+        ar_timestep_error_ranges = {}
+
+        for t in range(num_display):
+            data = ground_truth_frames[t]
+            pred_data = predictions[t]
+            error = np.abs(data - pred_data)
+
+            # Calculate range for this timestep (combining truth and prediction)
+            timestep_vmin = min(data.min(), pred_data.min())
+            timestep_vmax = max(data.max(), pred_data.max())
+            ar_timestep_ranges[t] = (timestep_vmin, timestep_vmax)
+
+            # Calculate error range for this timestep
+            ar_timestep_error_ranges[t] = (0, error.max() if error.max() > 0 else 0.1)
+
+        for t in range(num_display):
+            data = ground_truth_frames[t]
+            pred_data = predictions[t]
+            error = np.abs(data - pred_data)
+
+            # Calculate metrics
+            mse = np.mean(error**2)
+            mae = np.mean(error)
+            rel_error = np.mean(error / (np.abs(data) + 1e-8))
+            print(f"t+{t + 1:2d} | {mse:.5f} | {mae:.5f} | {rel_error:.5f}")
+
+            # Get timestep-specific ranges
+            ar_vmin, ar_vmax = ar_timestep_ranges[t]
+            ar_error_vmin, ar_error_vmax = ar_timestep_error_ranges[t]
+
+            # Ground truth (using timestep-specific colorbar range)
+            im1 = axes[0, t].imshow(data, cmap="viridis", aspect="auto", vmin=ar_vmin, vmax=ar_vmax)
+            axes[0, t].set_title(f"True t+{t + 1}")
+            axes[0, t].axis("off")
+            plt.colorbar(im1, ax=axes[0, t], fraction=0.046, pad=0.04)
+
+            # Prediction (using same timestep-specific colorbar range)
+            im2 = axes[1, t].imshow(pred_data, cmap="viridis", aspect="auto", vmin=ar_vmin, vmax=ar_vmax)
+            axes[1, t].set_title(f"Pred t+{t + 1} (AR)")
+            axes[1, t].axis("off")
+            plt.colorbar(im2, ax=axes[1, t], fraction=0.046, pad=0.04)
+
+            # Error (using timestep-specific error range)
+            im3 = axes[2, t].imshow(error, cmap="Reds", aspect="auto", vmin=ar_error_vmin, vmax=ar_error_vmax)
+            axes[2, t].set_title(f"Error t+{t + 1} (MAE: {mae:.4f})")
+            axes[2, t].axis("off")
+            plt.colorbar(im3, ax=axes[2, t], fraction=0.046, pad=0.04)
+
+        plt.tight_layout()
+
+        # Save figure
+        save_path = self.output_dir / f"{split}_autoregressive_prediction.png"
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Autoregressive visualization saved to {save_path}")
+
+        # Log image to wandb
+        self._log_image_to_wandb(
+            f"{split}/autoregressive_prediction",
+            save_path,
+            f"Autoregressive prediction (TFR=0.0) for {split} data over {num_future} timesteps",
         )
 
         plt.show()
@@ -1041,6 +1235,18 @@ class SimpleModelEvaluator:
         self.visualize_teacher_forcing(split="val", sample_idx=0, num_future=30)
         self.create_teacher_forcing_video(split="val", sample_idx=0, num_future=30)
 
+        # NEW: Evaluate training data (autoregressive - TFR=0.0)
+        print("\n" + "=" * 60)
+        print("TRAINING DATA EVALUATION (Autoregressive - TFR=0.0)")
+        print("=" * 60)
+        self.visualize_autoregressive(split="train", sample_idx=0, num_future=30)
+
+        # NEW: Evaluate validation data (autoregressive - TFR=0.0)
+        print("\n" + "=" * 60)
+        print("VALIDATION DATA EVALUATION (Autoregressive - TFR=0.0)")
+        print("=" * 60)
+        self.visualize_autoregressive(split="val", sample_idx=0, num_future=30)
+
         print("\n" + "=" * 60)
         print("EVALUATION COMPLETE!")
         print("=" * 60)
@@ -1048,6 +1254,8 @@ class SimpleModelEvaluator:
         print("- Test (autoregressive): sample_0_prediction.png, sample_0_evolution.mp4")
         print("- Train (teacher forcing): train_teacher_forcing_prediction.png, train_teacher_forcing_evolution.mp4")
         print("- Val (teacher forcing): val_teacher_forcing_prediction.png, val_teacher_forcing_evolution.mp4")
+        print("- Train (autoregressive): train_autoregressive_prediction.png")
+        print("- Val (autoregressive): val_autoregressive_prediction.png")
 
         # Log summary metrics to wandb
         self._log_to_wandb("evaluation/status", "completed")
@@ -1076,7 +1284,7 @@ def main():
     else:
         # Default to the hardcoded path if no argument provided
         checkpoint_path = (
-            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-08-11_22-40-39-792051/checkpoints/last.ckpt"
+            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-08-15_15-18-47-461495/checkpoints/last.ckpt"
         )
 
     if not os.path.exists(checkpoint_path):

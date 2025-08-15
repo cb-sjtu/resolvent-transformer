@@ -13,6 +13,8 @@ dataset:
   valid_ratio: 0.15
   test_ratio: 0.15
   split: "test"
+  norm_stats: ${data.norm_stats}
+  enable_normalization: ${data.enable_normalization}
 
 num_workers: ${data.num_workers}
 pin_memory: ${data.pin_memory}

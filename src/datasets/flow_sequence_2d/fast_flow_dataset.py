@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 
 import h5py
@@ -23,6 +24,8 @@ class FastFlowSequence2DDataset(Dataset):
         valid_ratio: float = 0.15,
         test_ratio: float = 0.15,
         split: str = "train",
+        norm_stats: dict = None,  # Normalization statistics
+        enable_normalization: bool = True,  # Whether to apply normalization
     ):
         """
         Args:
@@ -33,6 +36,8 @@ class FastFlowSequence2DDataset(Dataset):
             valid_ratio: Ratio of data for validation
             test_ratio: Ratio of data for testing
             split: Dataset split ('train', 'val', 'test')
+            norm_stats: Dictionary with 'mean' and 'std' for normalization
+            enable_normalization: Whether to apply normalization
         """
         assert split in ["train", "val", "test"]
         assert abs(train_ratio + valid_ratio + test_ratio - 1.0) < 1e-6
@@ -41,11 +46,15 @@ class FastFlowSequence2DDataset(Dataset):
         self.input_length = input_length
         self.max_k_steps = max_k_steps
         self.split = split
+        self.enable_normalization = enable_normalization
 
         # Metadata from preprocessing
         self.field_name = field_name
         self.resolution_scale = resolution_scale
         self.y_slice = y_slice
+
+        # Setup normalization
+        self._setup_normalization(norm_stats)
 
         # Get all preprocessed files
         pattern = (
@@ -77,6 +86,63 @@ class FastFlowSequence2DDataset(Dataset):
             with h5py.File(self.file_list[0], "r") as f:
                 self.data_shape = f["data"].shape
                 print(f"Data shape per frame: {self.data_shape}")
+
+    def _setup_normalization(self, norm_stats):
+        """Setup normalization parameters."""
+        if not self.enable_normalization or norm_stats is None:
+            self.mean = None
+            self.std = None
+            print(f"Normalization disabled for {self.split} split")
+            return
+
+        # Load from dict or file path
+        if isinstance(norm_stats, str):
+            # Load from JSON file
+            norm_stats_path = norm_stats
+            if not os.path.isabs(norm_stats_path):
+                norm_stats_path = os.path.join(self.data_dir, norm_stats_path)
+
+            try:
+                with open(norm_stats_path) as f:
+                    stats = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                print(f"Warning: Could not load normalization stats from {norm_stats_path}: {e}")
+                print("Normalization will be disabled.")
+                self.mean = None
+                self.std = None
+                return
+        elif isinstance(norm_stats, dict):
+            stats = norm_stats
+        else:
+            raise ValueError(f"norm_stats must be dict or file path, got {type(norm_stats)}")
+
+        # Extract mean and std
+        try:
+            self.mean = float(stats["mean"])
+            self.std = float(stats["std"])
+            print(f"Normalization enabled for {self.split} split: mean={self.mean:.6f}, std={self.std:.6f}")
+
+            # Validate std is not zero
+            if abs(self.std) < 1e-8:
+                print("Warning: Standard deviation is very small, normalization might be unstable")
+
+        except (KeyError, TypeError, ValueError) as e:
+            print(f"Warning: Invalid normalization stats format: {e}")
+            print("Normalization will be disabled.")
+            self.mean = None
+            self.std = None
+
+    def normalize(self, data):
+        """Apply normalization to data."""
+        if self.mean is None or self.std is None:
+            return data
+        return (data - self.mean) / self.std
+
+    def denormalize(self, data):
+        """Apply denormalization to data (for inference)."""
+        if self.mean is None or self.std is None:
+            return data
+        return data * self.std + self.mean
 
     def __len__(self):
         return len(self.indices)
@@ -110,9 +176,21 @@ class FastFlowSequence2DDataset(Dataset):
         input_seq = input_seq[:, None, :, :]  # (input_length, 1, H, W)
         target_seq = target_seq[:, None, :, :]  # (max_k_steps, 1, H, W)
 
+        # Convert to tensors
+        input_seq = torch.from_numpy(input_seq).float()  # (input_length, 1, H, W)
+        target_seq = torch.from_numpy(target_seq).float()  # (max_k_steps, 1, H, W)
+
+        # Apply normalization
+        input_seq = self.normalize(input_seq)
+        # Note: target_seq is NOT normalized here because:
+        # 1. Loss computation should be in normalized space
+        # 2. Model outputs normalized predictions
+        # 3. Denormalization happens during inference/evaluation
+        target_seq = self.normalize(target_seq)
+
         # Add batch dimension like original dataset
-        input_seq = torch.from_numpy(input_seq).float().unsqueeze(0)  # (1, input_length, 1, H, W)
-        target_seq = torch.from_numpy(target_seq).float().unsqueeze(0)  # (1, max_k_steps, 1, H, W)
+        input_seq = input_seq.unsqueeze(0)  # (1, input_length, 1, H, W)
+        target_seq = target_seq.unsqueeze(0)  # (1, max_k_steps, 1, H, W)
 
         # Structure like original dataset
         data = {"input_seq": input_seq}
