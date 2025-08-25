@@ -56,11 +56,11 @@ loss_fn: "mse"
 
 # Scheduled Sampling Configuration
 scheduled_sampling:
-  enabled: true
+  enabled: false
   initial_teacher_forcing_ratio: 1.0
   final_teacher_forcing_ratio: 0.0
   schedule_type: "linear"  # "linear", "exponential", "inverse_sigmoid"
-  decay_epochs: 100
+  decay_epochs: 1000
   start_epoch: 0
   rollout_only: true
 
@@ -70,10 +70,14 @@ k_step_rollout:
   initial_k_steps: 1
   max_k_steps: 16
   k_increase_schedule: "curriculum"  # "curriculum", "fixed"
-  curriculum_epochs: [10, 20, 30, 40, 50]  # Epochs to increase K
-  curriculum_k_values: [1, 2, 2, 3, 3]    # Corresponding K values
+  curriculum_epochs: [80, 120, 160, 200, 300]  # Epochs to increase K
+  curriculum_k_values: [1, 1, 1, 1, 1]    # Corresponding K values
   rollout_loss_weight: 1.0
   single_step_loss_weight: 1.0
+  # Step-wise weights for each rollout step to address gradient dilution
+  # Length should match curriculum_k_values. Each value is the weight for that step.
+  step_weights: [1.0, 1.2, 1.5, 2.0, 2.5]  # Weights for step 1, 2, 3, 4, 5
+  enable_step_weighting: true  # Enable/disable step-wise weighting
 
 # Data configuration with k-step parameter
 data:

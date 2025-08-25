@@ -14,6 +14,7 @@ defaults:
   # - viz  # Disabled to avoid matplotlib errors
   - _self_
 
-# you can amend configs here, for example
-# model_summary:
-#   max_depth: -1
+# Override save_ckpt configuration to fix the ModelCheckpoint error
+save_ckpt:
+  monitor: "val/loss"  # Monitor validation loss
+  mode: "min"  # Lower validation loss is better
