@@ -48,17 +48,267 @@ class FlowSwin2DLitModule(BaseLitModule):
         self.kr_rollout_weight = self.k_step_rollout.get("rollout_loss_weight", 1.0)
         self.kr_single_weight = self.k_step_rollout.get("single_step_loss_weight", 1.0)
 
-    def _steps_per_epoch(self) -> int:
-        """Get dynamic steps per epoch from trainer, fallback to 50."""
-        try:
-            # Lightning will populate this during fit
-            return max(1, int(self.trainer.num_training_batches))
-        except Exception:
-            return 50  # Fallback
+        # Step-wise weighting configuration
+        self.kr_step_weights = self.k_step_rollout.get("step_weights", [1.0, 1.0, 1.0, 1.0, 1.0])
+        self.kr_enable_step_weighting = self.k_step_rollout.get("enable_step_weighting", False)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
-        return self._model_forward(x)
+        # Validate step_weights length matches curriculum_k_values
+        if len(self.kr_step_weights) != len(self.kr_curriculum_k_values):
+            raise ValueError(
+                "Mismatch between lengths: "
+                f"len(curriculum_k_steps)={len(self.kr_curriculum_k_steps)} "
+                f"!= len(curriculum_k_values)={len(self.kr_curriculum_k_values)}"
+            )
+            # Pad or truncate step_weights to match curriculum_k_values
+            if len(self.kr_step_weights) < len(self.kr_curriculum_k_values):
+                # Pad with 1.0
+                self.kr_step_weights.extend([1.0] * (len(self.kr_curriculum_k_values) - len(self.kr_step_weights)))
+            else:
+                # Truncate
+                self.kr_step_weights = self.kr_step_weights[: len(self.kr_curriculum_k_values)]
+
+        # Cache for steps_per_epoch (will be set properly during training setup)
+        self._cached_steps_per_epoch = None
+
+    def _steps_per_epoch(self) -> int:
+        """Calculate steps per epoch from dataset size and batch size."""
+        # Use cached value if available and valid
+        if self._cached_steps_per_epoch is not None and self._cached_steps_per_epoch > 0:
+            return self._cached_steps_per_epoch
+
+        try:
+            # First try to get from trainer (available during training)
+            ntb = getattr(self.trainer, "num_training_batches", None)
+            if ntb is not None and ntb != float("inf") and ntb > 0:
+                num_batches = int(ntb)
+                self._cached_steps_per_epoch = num_batches
+
+            # Second attempt: get from train_dataloader if available
+            if hasattr(self.trainer, "train_dataloader") and self.trainer.train_dataloader is not None:
+                try:
+                    steps = len(self.trainer.train_dataloader)
+                    if steps > 0:
+                        self._cached_steps_per_epoch = steps
+                        return steps
+                except (TypeError, AttributeError) as e:
+                    print(f"Failed to get length from trainer.train_dataloader: {e}")
+                    # Try to get length from underlying dataset if it's a CycleLoader
+                    print("Trying to access underlying dataloader from CycleLoader...")
+                    try:
+                        if hasattr(self.trainer.train_dataloader, "dataloader"):
+                            print("Found .dataloader attribute")
+                            underlying_loader = self.trainer.train_dataloader.dataloader
+                            steps = len(underlying_loader)
+                            print(f"Got length {steps} from underlying dataloader")
+                            if steps > 0:
+                                self._cached_steps_per_epoch = steps
+                                return steps
+                        elif hasattr(self.trainer.train_dataloader, "_dataloader"):
+                            print("Found ._dataloader attribute")
+                            underlying_loader = self.trainer.train_dataloader._dataloader
+                            steps = len(underlying_loader)
+                            print(f"Got length {steps} from underlying _dataloader")
+                            if steps > 0:
+                                self._cached_steps_per_epoch = steps
+                                return steps
+                        else:
+                            print("No .dataloader or ._dataloader attribute found")
+                            # Let's see what attributes it actually has
+                            attrs = [attr for attr in dir(self.trainer.train_dataloader) if not attr.startswith("__")]
+                            print(f"CycleLoader attributes: {attrs[:10]}...")  # Show first 10
+
+                            # Try to access 'loaders' attribute
+                            if hasattr(self.trainer.train_dataloader, "loaders"):
+                                print("Found 'loaders' attribute")
+                                loaders = self.trainer.train_dataloader.loaders
+                                print(f"Loaders type: {type(loaders)}")
+                                # 原：isinstance(loaders, (list, tuple)) and len(loaders) > 0
+                                if isinstance(loaders, list | tuple) and loaders:
+                                    first_loader = loaders[0]
+                                    print(f"First loader type: {type(first_loader)}")
+
+                                    # If it's a dict, examine its contents
+                                    if isinstance(first_loader, dict):
+                                        print(f"First loader is dict with keys: {list(first_loader.keys())}")
+                                        # Look for actual DataLoader in the dict values
+                                        for key, value in first_loader.items():
+                                            print(f"  Key '{key}': {type(value)}")
+                                            try:
+                                                if hasattr(value, "__len__"):
+                                                    val_len = len(value)
+                                                    print(f"    Length of '{key}': {val_len}")
+                                                    if val_len > 10:  # Reasonable threshold for real dataset
+                                                        print(f"Found reasonable length {val_len} for key '{key}'")
+                                                        self._cached_steps_per_epoch = val_len
+                                                        return val_len
+                                            except Exception as e4:
+                                                print(f"    Failed to get length of '{key}': {e4}")
+                                    else:
+                                        # Not a dict, try to get length directly
+                                        try:
+                                            steps = len(first_loader)
+                                            print(f"Got length {steps} from first loader")
+                                            if steps > 0:
+                                                self._cached_steps_per_epoch = steps
+                                                return steps
+                                        except Exception as e3:
+                                            print(f"Failed to get length from first loader: {e3}")
+                    except (TypeError, AttributeError) as e2:
+                        print(f"Failed to get length from underlying dataloader: {e2}")
+                    pass
+
+            # Third attempt: calculate from datamodule
+            if hasattr(self.trainer, "datamodule") and self.trainer.datamodule is not None:
+                try:
+                    train_dataloader = self.trainer.datamodule.train_dataloader()
+                    if train_dataloader is not None:
+                        steps = len(train_dataloader)
+                        if steps > 0:
+                            self._cached_steps_per_epoch = steps
+                            return steps
+                except (TypeError, AttributeError) as e:
+                    print(f"Failed to get length from datamodule.train_dataloader(): {e}")
+                    # Try to get length from underlying dataset if it's a CycleLoader
+                    try:
+                        train_dataloader = self.trainer.datamodule.train_dataloader()
+                        if hasattr(train_dataloader, "dataloader"):
+                            underlying_loader = train_dataloader.dataloader
+                            steps = len(underlying_loader)
+                            if steps > 0:
+                                self._cached_steps_per_epoch = steps
+                                return steps
+                        elif hasattr(train_dataloader, "_dataloader"):
+                            underlying_loader = train_dataloader._dataloader
+                            steps = len(underlying_loader)
+                            if steps > 0:
+                                self._cached_steps_per_epoch = steps
+                                return steps
+                    except (TypeError, AttributeError) as e2:
+                        print(f"Failed to get length from underlying dataloader: {e2}")
+                    pass
+
+            # Fourth attempt: calculate from dataset directly
+            print("Attempting to calculate from dataset directly...")
+            if hasattr(self.trainer, "datamodule") and self.trainer.datamodule is not None:
+                try:
+                    print("Datamodule exists, checking for train_dataset...")
+                    # Try to get dataset size and batch size directly
+                    if hasattr(self.trainer.datamodule, "train_dataset"):
+                        print("Found train_dataset attribute")
+                        dataset_size = len(self.trainer.datamodule.train_dataset)
+                        batch_size = getattr(self.trainer.datamodule, "batch_size_per_device", 8)  # default to 8
+                        steps = dataset_size // batch_size
+                        print(
+                            f"Calculated from dataset: {dataset_size} samples / {batch_size} batch_size = {steps} steps"
+                        )
+                        if steps > 0:
+                            self._cached_steps_per_epoch = steps
+                            return steps
+                    else:
+                        print("No train_dataset attribute found")
+                        # Let's see what the datamodule has
+                        attrs = [attr for attr in dir(self.trainer.datamodule) if not attr.startswith("__")]
+                        print(f"Datamodule attributes: {attrs[:15]}...")  # Show first 15
+
+                        # Try to get dataset using the available method
+                        if hasattr(self.trainer.datamodule, "get_train_dataset_from_cfg"):
+                            print("Found get_train_dataset_from_cfg method")
+                            try:
+                                train_dataset = self.trainer.datamodule.get_train_dataset_from_cfg()
+                                if train_dataset is not None:
+                                    # This should give us the 1094 value from len(self.indices)
+                                    dataset_size = len(train_dataset)
+                                    print(f"Train dataset size (len(indices)): {dataset_size}")
+
+                                    # Get batch_size_per_device from datamodule's configuration
+                                    batch_size_per_device = None
+                                    if hasattr(self.trainer.datamodule, "cfg"):
+                                        batch_size_per_device = getattr(
+                                            self.trainer.datamodule.cfg, "batch_size_per_device", None
+                                        )
+
+                                    if batch_size_per_device is None:
+                                        # Try direct attribute access
+                                        batch_size_per_device = getattr(
+                                            self.trainer.datamodule, "batch_size_per_device", None
+                                        )
+
+                                    if batch_size_per_device is not None:
+                                        steps = dataset_size // batch_size_per_device
+                                        print(
+                                            f"Calculated steps_per_epoch: {dataset_size} samples / "
+                                            f"{batch_size_per_device} batch_size = {steps} steps"
+                                        )
+                                        if steps > 0:
+                                            self._cached_steps_per_epoch = steps
+                                            return steps
+                                    else:
+                                        print("Could not find batch_size_per_device in datamodule configuration")
+                            except Exception as e_dataset:
+                                print(f"Failed to get dataset via get_train_dataset_from_cfg: {e_dataset}")
+                except (TypeError, AttributeError) as e:
+                    print(f"Failed to calculate from dataset directly: {e}")
+                    pass
+            else:
+                print("No datamodule found")
+
+            # If all methods failed, provide detailed diagnostic info
+            debug_info = []
+            try:
+                if hasattr(self.trainer, "num_training_batches"):
+                    debug_info.append(f"trainer.num_training_batches = {self.trainer.num_training_batches}")
+            except Exception:
+                debug_info.append("trainer.num_training_batches = <error accessing>")
+
+            try:
+                if hasattr(self.trainer, "train_dataloader"):
+                    debug_info.append(f"trainer.train_dataloader exists = {self.trainer.train_dataloader is not None}")
+            except Exception:
+                debug_info.append("trainer.train_dataloader = <error accessing>")
+
+            try:
+                if hasattr(self.trainer, "datamodule"):
+                    debug_info.append(f"trainer.datamodule exists = {self.trainer.datamodule is not None}")
+            except Exception:
+                debug_info.append("trainer.datamodule = <error accessing>")
+
+            raise RuntimeError(
+                "Failed to calculate steps_per_epoch. Unable to get training batch count from trainer, "
+                f"train_dataloader, or datamodule. Debug info: {'; '.join(debug_info)}"
+            )
+        except Exception as e:
+            raise RuntimeError(f"Error calculating steps_per_epoch: {e}") from e
+
+    def on_train_start(self) -> None:
+        """Called when the train begins."""
+        super().on_train_start()
+        # Force recalculation of steps_per_epoch now that trainer is fully set up
+        self._cached_steps_per_epoch = None
+        actual_steps = self._steps_per_epoch()
+        print(f"Training started with {actual_steps} steps per epoch")
+        print(f"=== CALCULATED STEPS_PER_EPOCH: {actual_steps} ===")
+
+    def forward(self, x: torch.Tensor, return_delta: bool = False) -> torch.Tensor:
+        """Forward pass with residual prediction.
+
+        Args:
+            x: Input sequence [B, T, C, H, W] (normalized)
+            return_delta: If True, return delta prediction. If False, return absolute prediction.
+
+        Returns:
+            If return_delta=True: Delta prediction Δu (residual)
+            If return_delta=False: Absolute prediction u_{t+1} = u_t + Δu
+        """
+        # Model outputs delta prediction Δu in normalized space
+        delta_pred = self._model_forward(x)  # [B, C, H, W]
+
+        if return_delta:
+            return delta_pred
+        else:
+            # Residual composition: u_{t+1} = u_t + Δu
+            x_last = x[:, -1]  # Last frame u_t [B, C, H, W]
+            y_hat = x_last + delta_pred  # u_{t+1} = u_t + Δu
+            return y_hat
 
     def get_teacher_forcing_ratio(self, current_epoch: int) -> float:
         """Calculate current teacher forcing ratio based on scheduled sampling."""
@@ -117,7 +367,7 @@ class FlowSwin2DLitModule(BaseLitModule):
     def rollout_prediction(
         self, input_seq: torch.Tensor, target_seq: torch.Tensor, k_steps: int, teacher_forcing_ratio: float
     ) -> tuple[list, float]:
-        """Perform k-step rollout prediction with scheduled sampling."""
+        """Perform k-step rollout prediction with scheduled sampling using residual prediction."""
         batch_size, seq_len, channels, height, width = input_seq.shape
 
         # Start with the input sequence (no unnecessary clone)
@@ -126,8 +376,10 @@ class FlowSwin2DLitModule(BaseLitModule):
         tf_fractions = []  # Track actual teacher forcing fractions
 
         for step in range(k_steps):
-            # Forward pass to predict next frame
-            pred = self.forward(current_input)  # Shape: (B, C, H, W)
+            # Residual prediction: model outputs Δu, then compose u_{t+1} = u_t + Δu
+            x_last = current_input[:, -1]  # Last frame u_t [B, C, H, W]
+            delta_pred = self.forward(current_input, return_delta=True)  # Δu [B, C, H, W]
+            pred = x_last + delta_pred  # u_{t+1} = u_t + Δu [B, C, H, W]
 
             # Calculate loss for this step
             if step < target_seq.shape[1]:  # Ensure we have target
@@ -230,7 +482,8 @@ class FlowSwin2DLitModule(BaseLitModule):
         else:
             # Fallback: Standard single-step prediction loss when k_steps <= 1 or rollout disabled
             if self.kr_single_weight > 0:
-                pred_single = self.forward(input_seq)
+                # Use residual prediction: u_{t+1} = u_t + Δu
+                pred_single = self.forward(input_seq, return_delta=False)  # Get composed prediction
                 single_step_loss = self.loss_fn(pred_single, target)
                 total_loss += self.kr_single_weight * single_step_loss
                 # Log single step loss
@@ -242,16 +495,35 @@ class FlowSwin2DLitModule(BaseLitModule):
 
         # Process rollout losses (when k_steps > 1)
         if self.kr_enabled and self.kr_rollout_weight > 0 and k_steps > 1 and rollout_losses:
+            # Get current K curriculum index to determine step weights
+            # current_k_index = 0
+            for _, k_val in enumerate(self.kr_curriculum_k_values):
+                if k_steps <= k_val:
+                    # current_k_index = i
+                    break
+
             # Avoid double-counting L1 loss: if k_steps>1 and single_step is enabled,
             # use only later steps for rollout loss to avoid overlap with single-step loss
             if self.kr_single_weight > 0 and len(rollout_losses) > 1:
                 # Use rollout losses from step 1 onwards (skip first step to avoid double counting)
                 later_losses = rollout_losses[1:]
                 if later_losses:
-                    rollout_loss = sum(later_losses) / len(later_losses)
+                    if self.kr_enable_step_weighting:
+                        # Apply step-wise weighting from configuration
+                        weighted_losses = []
+                        for i, step_loss in enumerate(later_losses):
+                            step_idx = i + 1  # step 2, 3, 4, ... (0-indexed in later_losses)
+                            # Use configured weights, fallback to 1.0
+                            weight = self.kr_step_weights[min(step_idx, len(self.kr_step_weights) - 1)]
+                            weighted_losses.append(weight * step_loss)
+
+                        rollout_loss = sum(weighted_losses) / len(weighted_losses)
+                    else:
+                        rollout_loss = sum(later_losses) / len(later_losses)
+
                     total_loss += self.kr_rollout_weight * rollout_loss
 
-                    # Log individual step losses
+                    # Log individual step losses and weights
                     for i, step_loss in enumerate(rollout_losses):
                         self.log(
                             f"train/rollout_step{i + 1}_loss",
@@ -260,12 +532,33 @@ class FlowSwin2DLitModule(BaseLitModule):
                             on_epoch=False,
                             batch_size=batch_size,
                         )
+                        # Log step weights when enabled
+                        if self.kr_enable_step_weighting and i > 0:  # skip first step
+                            weight = self.kr_step_weights[min(i, len(self.kr_step_weights) - 1)]
+                            self.log(
+                                f"train/rollout_step{i + 1}_weight",
+                                weight,
+                                on_step=True,
+                                on_epoch=False,
+                                batch_size=batch_size,
+                            )
             else:
                 # Use all rollout losses
-                rollout_loss = sum(rollout_losses) / len(rollout_losses)
+                if self.kr_enable_step_weighting:
+                    # Apply step-wise weighting from configuration
+                    weighted_losses = []
+                    for i, step_loss in enumerate(rollout_losses):
+                        # Use configured weights, fallback to 1.0
+                        weight = self.kr_step_weights[min(i, len(self.kr_step_weights) - 1)]
+                        weighted_losses.append(weight * step_loss)
+
+                    rollout_loss = sum(weighted_losses) / len(weighted_losses)
+                else:
+                    rollout_loss = sum(rollout_losses) / len(rollout_losses)
+
                 total_loss += self.kr_rollout_weight * rollout_loss
 
-                # Log individual step losses
+                # Log individual step losses and weights
                 for i, step_loss in enumerate(rollout_losses):
                     self.log(
                         f"train/rollout_step{i + 1}_loss",
@@ -274,6 +567,16 @@ class FlowSwin2DLitModule(BaseLitModule):
                         on_epoch=False,
                         batch_size=batch_size,
                     )
+                    # Log step weights when enabled
+                    if self.kr_enable_step_weighting:
+                        weight = self.kr_step_weights[min(i, len(self.kr_step_weights) - 1)]
+                        self.log(
+                            f"train/rollout_step{i + 1}_weight",
+                            weight,
+                            on_step=True,
+                            on_epoch=False,
+                            batch_size=batch_size,
+                        )
 
             # Log average rollout loss
             avg_rollout_loss = sum(rollout_losses) / len(rollout_losses)
@@ -298,7 +601,7 @@ class FlowSwin2DLitModule(BaseLitModule):
 
         # If no rollout or single step, fall back to standard prediction
         if total_loss == 0:
-            pred = self.forward(input_seq)
+            pred = self.forward(input_seq, return_delta=False)  # Use residual prediction
             total_loss = self.loss_fn(pred, target)
 
         # Log total loss and curriculum parameters
@@ -351,7 +654,7 @@ class FlowSwin2DLitModule(BaseLitModule):
         target = target_seq[:, 0]  # (B, C, H, W)
 
         # Forward pass
-        pred = self.forward(input_seq)
+        pred = self.forward(input_seq, return_delta=False)  # Use residual prediction
 
         # Compute loss
         loss = self.loss_fn(pred, target)
@@ -423,7 +726,7 @@ class FlowSwin2DLitModule(BaseLitModule):
         target = target_seq[:, 0]  # (B, C, H, W)
 
         # Forward pass
-        pred = self.forward(input_seq)
+        pred = self.forward(input_seq, return_delta=False)  # Use residual prediction
 
         # Compute loss
         loss = self.loss_fn(pred, target)

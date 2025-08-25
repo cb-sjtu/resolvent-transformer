@@ -258,35 +258,54 @@ class PatchMerging2D(nn.Module):
 
 
 class PatchExpand2D(nn.Module):
-    """Patch Expanding Layer for U-net decoder."""
+    """Patch Expanding Layer for U-Net decoder (sub-pixel upsampling).
+    Upscales spatial size by `dim_scale` and reduces channels by the same factor.
 
-    def __init__(self, input_resolution, dim, dim_scale=2, norm_layer=nn.LayerNorm):
+    Input:  x: (B, H*W, dim)
+    Output: x: (B, (dim_scale**2)*H*W, dim // dim_scale)
+    """
+
+    def __init__(self, input_resolution, dim, dim_scale=2, norm_layer=nn.LayerNorm, out_dim=None):
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
         self.dim_scale = dim_scale
-        self.expand = nn.Linear(dim, 2 * dim, bias=False) if dim_scale == 2 else nn.Identity()
-        self.norm = norm_layer(dim // dim_scale)
+
+        # 默认把通道按 dim_scale 降，确保可整除
+        if out_dim is None:
+            assert dim % dim_scale == 0, f"dim ({dim}) must be divisible by dim_scale ({dim_scale})"
+            out_dim = dim // dim_scale
+        self.out_dim = out_dim
+
+        # 先线性映射到 s^2 * C_out，再做子像素重排
+        self.expand = nn.Linear(dim, (dim_scale**2) * out_dim, bias=False)
+        self.norm = norm_layer(out_dim)
 
     def forward(self, x):
         """
         Args:
-            x: (B, H*W, C)
+            x: (B, H*W, dim)
         Returns:
-            (B, 4*H*W, C//2)
+            (B, (dim_scale**2)*H*W, out_dim)
         """
         H, W = self.input_resolution
+        B, L, Cin = x.shape
+        assert L == H * W, f"input feature has wrong size: L={L}, H*W={H * W}"
+        assert Cin == self.dim, f"channel mismatch: Cin={Cin}, expected {self.dim}"
+
+        # (B, H*W, s^2 * C_out)
         x = self.expand(x)
-        B, L, C = x.shape
-        assert L == H * W, "input feature has wrong size"
 
-        x = x.view(B, H, W, C)
-        x = x.view(B, H, W, 2, 2, C // 4)
-        x = x.permute(0, 1, 3, 2, 4, 5)  # B, H, 2, W, 2, C//4
-        x = x.contiguous().view(B, H * 2, W * 2, C // 4)
-        x = x.view(B, -1, C // 4)
+        # -> (B, H, W, s, s, C_out)
+        x = x.view(B, H, W, self.dim_scale, self.dim_scale, self.out_dim)
+
+        # 子像素重排: (H, W, s, s) -> (H*s, W*s)
+        # (B, H, s, W, s, C_out) -> (B, H*s, W*s, C_out)
+        x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H * self.dim_scale, W * self.dim_scale, self.out_dim)
+
+        # 展平成 token 序列，再做 LN
+        x = x.view(B, -1, self.out_dim)
         x = self.norm(x)
-
         return x
 
 
@@ -523,7 +542,7 @@ class SwinTransformer2DWithMerging(nn.Module):
             self.up = PatchExpand2D(
                 input_resolution=(self.patch_H, self.patch_W),
                 dim=embed_dim,
-                dim_scale=patch_size[0],
+                dim_scale=patch_size[0],  # Assuming square patches
                 norm_layer=norm_layer,
             )
             self.output = nn.Conv2d(
@@ -856,7 +875,7 @@ if __name__ == "__main__":
     print("\n1. Testing with patch merging enabled:")
     model_with_merging = SwinTransformer2D(
         input_shape=(64, 48),  # Smaller for testing
-        sequence_length=3,
+        sequence_length=5,
         prediction_horizon=1,
         embed_dim=48,
         depths=(2, 2),
@@ -879,7 +898,7 @@ if __name__ == "__main__":
     print("\n2. Testing without patch merging (original behavior):")
     model_without_merging = SwinTransformer2D(
         input_shape=(64, 48),
-        sequence_length=3,
+        sequence_length=5,
         prediction_horizon=1,
         embed_dim=48,
         depths=(2, 2),
