@@ -127,27 +127,30 @@ class SimpleModelEvaluator:
             # Use default parameters based on config
             print("Using default parameters")
 
-        # Create model with parameters from config
-        print("Instantiating model from config...")
-        model = hydra.utils.instantiate(self.model_cfg)
+        # Load the full Lightning module instead of just the base model
+        print("Loading full Lightning module from checkpoint...")
+        from src.plmodules.flow_swin_2d_lit_module import FlowSwin2DLitModule
 
-        # Load state dict
-        if "state_dict" in checkpoint:
-            state_dict = checkpoint["state_dict"]
-            # Remove 'net.' prefix if present
-            new_state_dict = {}
-            for key, value in state_dict.items():
-                if key.startswith("net."):
-                    new_key = key[4:]  # Remove 'net.' prefix
-                    new_state_dict[new_key] = value
-                else:
-                    new_state_dict[key] = value
-
-            model.load_state_dict(new_state_dict)
-            print("Model weights loaded successfully!")
+        # Extract hyperparameters from checkpoint to recreate the module
+        if "hyper_parameters" in checkpoint:
+            # Create the Lightning module with the same config
+            model = FlowSwin2DLitModule.load_from_checkpoint(self.checkpoint_path, map_location="cpu")
         else:
-            print("No state_dict found in checkpoint")
+            # Fallback: create module with current config
+            print("No hyperparameters found, using current config...")
+            # Create a minimal config for the module
+            from omegaconf import OmegaConf
 
+            # Create a config that includes the model
+            module_cfg = OmegaConf.create({"model": self.model_cfg, "loss_fn": "mse"})
+            model = FlowSwin2DLitModule(module_cfg)
+
+            # Load the state dict manually
+            if "state_dict" in checkpoint:
+                model.load_state_dict(checkpoint["state_dict"])
+                print("Model weights loaded successfully!")
+
+        model.eval()  # Set to evaluation mode
         model.to(self.device)
         return model
 
@@ -191,7 +194,7 @@ class SimpleModelEvaluator:
 
         test_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=3,
+            input_length=10,
             max_k_steps=1,  # For evaluation, we only need single frame targets
             field_name="u",
             file_pattern="*.h5",
@@ -216,7 +219,7 @@ class SimpleModelEvaluator:
 
         train_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=3,
+            input_length=10,
             max_k_steps=1,  # For evaluation, we only need single frame targets
             field_name="u",
             file_pattern="*.h5",
@@ -241,7 +244,7 @@ class SimpleModelEvaluator:
 
         val_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=3,
+            input_length=10,
             max_k_steps=1,  # For evaluation, we only need single frame targets
             field_name="u",
             file_pattern="*.h5",
@@ -271,7 +274,7 @@ class SimpleModelEvaluator:
         if self.wandb_run is not None:
             wandb.log({key: wandb.Image(str(image_path), caption=caption)})
 
-    def evaluate_model(self, num_samples: int = 100) -> dict[str, float]:
+    def evaluate_model(self, num_samples: int = 100, debug_comparison: bool = False) -> dict[str, float]:
         """Evaluate the model on test data.
 
         Args:
@@ -288,11 +291,11 @@ class SimpleModelEvaluator:
             input_seqs = []
             targets = []
             for item in batch:
-                # Remove the extra batch dimension that the dataset adds
-                input_seq = item["data"]["input_seq"].squeeze(0)  # (input_length, 1, H, W)
-                target_seq = item["label"].squeeze(0)  # (max_k_steps, 1, H, W)
+                # Dataset returns (1, T, C, H, W) for input_seq and (1, max_k_steps, C, H, W) for label
+                input_seq = item["data"]["input_seq"][0]  # Remove outer batch dim: (T, C, H, W)
+                target_seq = item["label"][0]  # Remove outer batch dim: (max_k_steps, C, H, W)
                 # For evaluation, take only the first target frame
-                target = target_seq[0]  # (1, H, W)
+                target = target_seq[0]  # (C, H, W)
                 input_seqs.append(input_seq)
                 targets.append(target)
 
@@ -300,21 +303,56 @@ class SimpleModelEvaluator:
 
         # Create dataloader
         dataloader = torch.utils.data.DataLoader(
-            self.test_dataset, batch_size=8, shuffle=False, num_workers=0, collate_fn=collate_fn
+            self.test_dataset, batch_size=16, shuffle=False, num_workers=0, collate_fn=collate_fn
         )
 
         metrics = {"mse": 0.0, "mae": 0.0, "rel_error": 0.0, "count": 0}
 
+        # Debug comparison: test single sample vs batch processing
+        if debug_comparison:
+            print("=== DEBUG COMPARISON ===")
+            # Test single sample like train/val
+            sample = self.test_dataset[0]
+            input_seq_single = sample["data"]["input_seq"].to(self.device)  # (1, T, C, H, W)
+            target_single = sample["label"][:, 0].to(self.device)  # (1, C, H, W)
+
+            with torch.no_grad():
+                pred_single = self.model(input_seq_single, return_delta=False)
+                pred_single_denorm = self.test_dataset.denormalize(pred_single)
+                target_single_denorm = self.test_dataset.denormalize(target_single)
+                mae_single = torch.nn.functional.l1_loss(pred_single_denorm, target_single_denorm)
+                print(f"Single sample MAE: {mae_single.item():.6f}")
+
+            # Test batch processing
+            first_batch = next(iter(dataloader))
+            input_seq_batch, target_batch = first_batch
+            input_seq_batch = input_seq_batch.to(self.device)
+            target_batch = target_batch.to(self.device)
+
+            with torch.no_grad():
+                pred_batch = self.model(input_seq_batch, return_delta=False)
+                pred_batch_denorm = self.test_dataset.denormalize(pred_batch)
+                target_batch_denorm = self.test_dataset.denormalize(target_batch)
+                mae_batch = torch.nn.functional.l1_loss(pred_batch_denorm[0:1], target_batch_denorm[0:1])
+                print(f"First batch sample MAE: {mae_batch.item():.6f}")
+
+                # Check if data is the same
+                print(f"Input shapes - Single: {input_seq_single.shape}, Batch: {input_seq_batch[0:1].shape}")
+                print(f"Target shapes - Single: {target_single.shape}, Batch: {target_batch[0:1].shape}")
+                print(f"Input data close: {torch.allclose(input_seq_single, input_seq_batch[0:1], atol=1e-6)}")
+                print(f"Target data close: {torch.allclose(target_single, target_batch[0:1], atol=1e-6)}")
+            print("=== END DEBUG ===\n")
+
         with torch.no_grad():
-            for _i, (input_seq, target) in enumerate(dataloader):
+            for _, (input_seq, target) in enumerate(dataloader):
                 if metrics["count"] >= num_samples:
                     break
 
                 input_seq = input_seq.to(self.device)
                 target = target.to(self.device)
 
-                # Forward pass
-                pred = self.model(input_seq)
+                # Forward pass with residual prediction
+                pred = self.model(input_seq, return_delta=False)  # Get composed prediction u_{t+1} = u_t + Δu
 
                 # IMPORTANT: Denormalize predictions for fair comparison with targets
                 # Both pred and target are normalized, so we need to denormalize both for proper metrics
@@ -350,7 +388,7 @@ class SimpleModelEvaluator:
         return metrics
 
     def generate_sequence_prediction(self, input_seq: torch.Tensor, num_predictions: int = 10) -> torch.Tensor:
-        """Generate autoregressive predictions.
+        """Generate autoregressive predictions using residual prediction.
 
         Args:
             input_seq: Input sequence of shape (B, T, C, H, W)
@@ -364,8 +402,8 @@ class SimpleModelEvaluator:
 
         with torch.no_grad():
             for i in range(num_predictions):
-                # Predict next timestep
-                next_pred = self.model(current_seq)  # Model output shape
+                # Residual prediction: model outputs u_{t+1} = u_t + Δu
+                next_pred = self.model(current_seq, return_delta=False)  # u_{t+1} [B, C, H, W]
 
                 # NOTE: next_pred is normalized, but we keep it normalized for autoregressive feedback
                 # Denormalization happens at the end for evaluation/visualization
@@ -373,9 +411,9 @@ class SimpleModelEvaluator:
                 # Debug: Check shapes on first iteration
                 if i == 0:
                     print(f"Input sequence shape: {current_seq.shape}")
-                    print(f"Model output shape: {next_pred.shape}")
+                    print(f"Prediction shape: {next_pred.shape}")
                     print(f"Input sequence data range: [{current_seq.min():.4f}, {current_seq.max():.4f}]")
-                    print(f"Model output data range: [{next_pred.min():.4f}, {next_pred.max():.4f}]")
+                    print(f"Prediction data range: [{next_pred.min():.4f}, {next_pred.max():.4f}]")
 
                 # Ensure next_pred has the right shape for concatenation
                 if len(next_pred.shape) == 4:  # (B, C, H, W)
@@ -395,28 +433,51 @@ class SimpleModelEvaluator:
         """Visualize a sample prediction with ground truth comparison."""
         print(f"Visualizing sample {sample_idx}...")
 
-        # Get multiple consecutive samples to get ground truth for future timesteps
+        # Get ground truth from the same sequence (consecutive timesteps)
+        # We need to get a longer sequence from the dataset that contains all future timesteps
         ground_truth_frames = []
-        for i in range(num_future + 1):
-            if sample_idx + i < len(self.test_dataset):
-                sample = self.test_dataset[sample_idx + i]
-                target_seq = sample["label"]  # (1, max_k_steps, C, H, W)
 
-                # IMPORTANT: Denormalize ground truth for proper comparison
-                target_seq_denorm = self.test_dataset.denormalize(target_seq)
-                target_seq_denorm = target_seq_denorm.cpu().numpy()[0]  # (max_k_steps, C, H, W)
+        # Try to get a sample with longer max_k_steps if available, otherwise use consecutive samples
+        sample = self.test_dataset[sample_idx]
+        target_seq = sample["label"]  # (1, max_k_steps, C, H, W)
 
-                # Take the first target frame
-                target = target_seq_denorm[0]  # (C, H, W)
-                ground_truth_frames.append(target[0])  # Take channel 0
+        if target_seq.shape[1] >= num_future:
+            # If we have enough future steps in this sample, use them
+            target_seq_denorm = self.test_dataset.denormalize(target_seq)
+            target_seq_denorm = target_seq_denorm.cpu().numpy()[0]  # (max_k_steps, C, H, W)
 
-                # Debug: Print shapes for first few frames
-                if i < 3:
-                    print(f"Ground truth {i} shape: {target[0].shape}")
-                    print(f"Ground truth {i} data range: [{target[0].min():.4f}, {target[0].max():.4f}]")
-            else:
-                # If we run out of samples, repeat the last one
-                ground_truth_frames.append(ground_truth_frames[-1])
+            for i in range(num_future + 1):
+                if i < target_seq_denorm.shape[0]:
+                    ground_truth_frames.append(target_seq_denorm[i, 0])  # (H, W)
+                else:
+                    # Repeat last frame if not enough
+                    ground_truth_frames.append(ground_truth_frames[-1])
+        else:
+            # Fallback: use consecutive samples (original approach)
+            # But note this is not ideal for autoregressive evaluation
+            print("WARNING: Using consecutive samples as ground truth - not true autoregressive evaluation!")
+            for i in range(num_future + 1):
+                if sample_idx + i < len(self.test_dataset):
+                    sample_i = self.test_dataset[sample_idx + i]
+                    target_seq_i = sample_i["label"]  # (1, max_k_steps, C, H, W)
+
+                    # IMPORTANT: Denormalize ground truth for proper comparison
+                    target_seq_denorm_i = self.test_dataset.denormalize(target_seq_i)
+                    target_seq_denorm_i = target_seq_denorm_i.cpu().numpy()[0]  # (max_k_steps, C, H, W)
+
+                    # Take the first target frame
+                    target = target_seq_denorm_i[0]  # (C, H, W)
+                    ground_truth_frames.append(target[0])  # Take channel 0
+                else:
+                    # If we run out of samples, repeat the last one
+                    ground_truth_frames.append(ground_truth_frames[-1])
+
+        # Debug: Print shapes for first few frames
+        for i in range(min(10, len(ground_truth_frames))):
+            print(f"Ground truth {i} shape: {ground_truth_frames[i].shape}")
+            print(
+                f"Ground truth {i} data range: [{ground_truth_frames[i].min():.4f}, {ground_truth_frames[i].max():.4f}]"
+            )
 
         # Get the initial sample for prediction
         sample = self.test_dataset[sample_idx]
@@ -790,7 +851,7 @@ class SimpleModelEvaluator:
 
                 # Predict using ground truth input (teacher forcing)
                 with torch.no_grad():
-                    pred = self.model(input_seq)
+                    pred = self.model(input_seq, return_delta=False)  # Use residual prediction
                     pred_denorm = dataset.denormalize(pred).cpu().numpy()[0, 0]  # (H, W)
                     predictions.append(pred_denorm)
             else:
@@ -878,9 +939,10 @@ class SimpleModelEvaluator:
 
         ground_truth_frames, predictions = self.evaluate_with_teacher_forcing(split, sample_idx, num_future)
 
-        # Create figure
-        fig, axes = plt.subplots(3, min(len(predictions), 6), figsize=(18, 9))
-        if len(predictions) == 1:
+        # Create figure - display all predictions (up to reasonable limit)
+        num_display = min(len(predictions), 30)  # Show up to 12 steps instead of 6
+        fig, axes = plt.subplots(3, num_display, figsize=(3 * num_display, 9))
+        if num_display == 1:
             axes = axes.reshape(3, 1)
 
         # Calculate and print quantitative metrics
@@ -889,7 +951,6 @@ class SimpleModelEvaluator:
         print("-" * 35)
 
         # Calculate per-timestep colorbar ranges for teacher forcing visualization
-        num_display = min(len(predictions), 6)
         tf_timestep_ranges = {}
         tf_timestep_error_ranges = {}
 
@@ -961,9 +1022,10 @@ class SimpleModelEvaluator:
 
         ground_truth_frames, predictions = self.evaluate_with_autoregressive(split, sample_idx, num_future)
 
-        # Create figure
-        fig, axes = plt.subplots(3, min(len(predictions), 6), figsize=(18, 9))
-        if len(predictions) == 1:
+        # Create figure - display all predictions (up to reasonable limit)
+        num_display = min(len(predictions), 30)  # Show up to 12 steps instead of 6
+        fig, axes = plt.subplots(3, num_display, figsize=(3 * num_display, 9))
+        if num_display == 1:
             axes = axes.reshape(3, 1)
 
         # Calculate and print quantitative metrics
@@ -972,7 +1034,6 @@ class SimpleModelEvaluator:
         print("-" * 35)
 
         # Calculate per-timestep colorbar ranges for autoregressive visualization
-        num_display = min(len(predictions), 6)
         ar_timestep_ranges = {}
         ar_timestep_error_ranges = {}
 
@@ -1204,7 +1265,7 @@ class SimpleModelEvaluator:
         print("\n" + "=" * 60)
         print("TEST DATA EVALUATION (Autoregressive)")
         print("=" * 60)
-        metrics = self.evaluate_model(num_samples=50)
+        metrics = self.evaluate_model(num_samples=50, debug_comparison=True)
 
         # Save test results
         results_path = self.output_dir / "evaluation_results.txt"
@@ -1284,7 +1345,7 @@ def main():
     else:
         # Default to the hardcoded path if no argument provided
         checkpoint_path = (
-            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-08-15_15-18-47-461495/checkpoints/last.ckpt"
+            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-08-25_18-18-22-222585/checkpoints/step_21500.ckpt"
         )
 
     if not os.path.exists(checkpoint_path):
