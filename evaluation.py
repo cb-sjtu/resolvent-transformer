@@ -9,6 +9,7 @@ import sys
 import warnings
 from pathlib import Path
 
+import h5py
 import hydra
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -39,16 +40,18 @@ from src.datasets.flow_sequence_2d.fast_flow_dataset import FastFlowSequence2DDa
 class SimpleModelEvaluator:
     """Simple evaluator for the 2D Flow Swin Transformer model."""
 
-    def __init__(self, checkpoint_path: str, model_cfg: DictConfig):
+    def __init__(self, checkpoint_path: str, model_cfg: DictConfig, save_predictions: bool = False):
         """Initialize the evaluator.
 
         Args:
             checkpoint_path: Path to the model checkpoint
             model_cfg: Model configuration from Hydra
+            save_predictions: Whether to save prediction results as H5 files
         """
         self.checkpoint_path = checkpoint_path
         self.model_cfg = model_cfg
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.save_predictions = save_predictions
 
         # Load model weights
         self.model = self._load_model()
@@ -63,6 +66,17 @@ class SimpleModelEvaluator:
         log_dir_name = self._extract_log_dir_name()
         self.output_dir = Path(f"evaluation_results/evaluation_results_{log_dir_name}")
         self.output_dir.mkdir(exist_ok=True, parents=True)
+
+        # Create predictions save directory if needed
+        if self.save_predictions:
+            # Save predictions in the same logs directory as the checkpoint
+            checkpoint_path = Path(self.checkpoint_path)
+            self.logs_dir = checkpoint_path.parent.parent  # logs/flow_swin_2d/runs/{run_name}
+            self.predictions_dir = self.logs_dir / "predictions"
+            self.predictions_dir.mkdir(exist_ok=True, parents=True)
+            print(f"Predictions will be saved to: {self.predictions_dir}")
+        else:
+            self.predictions_dir = None
 
         # Initialize wandb for evaluation logging
         if WANDB_AVAILABLE:
@@ -194,7 +208,7 @@ class SimpleModelEvaluator:
 
         test_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=10,
+            input_length=5,
             max_k_steps=1,  # For evaluation, we only need single frame targets
             field_name="u",
             file_pattern="*.h5",
@@ -219,7 +233,7 @@ class SimpleModelEvaluator:
 
         train_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=10,
+            input_length=5,
             max_k_steps=1,  # For evaluation, we only need single frame targets
             field_name="u",
             file_pattern="*.h5",
@@ -244,7 +258,7 @@ class SimpleModelEvaluator:
 
         val_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=10,
+            input_length=5,
             max_k_steps=1,  # For evaluation, we only need single frame targets
             field_name="u",
             file_pattern="*.h5",
@@ -273,6 +287,66 @@ class SimpleModelEvaluator:
         """Log an image file to wandb if available."""
         if self.wandb_run is not None:
             wandb.log({key: wandb.Image(str(image_path), caption=caption)})
+
+    def _save_prediction_as_h5(self, prediction: np.ndarray, split: str, sample_idx: int, timestep: int):
+        """Save prediction result as H5 file in the same format as original data.
+
+        Args:
+            prediction: Prediction data array with shape (H, W)
+            split: Data split ('train', 'val', 'test')
+            sample_idx: Sample index
+            timestep: Timestep number (1-based)
+        """
+        if not self.save_predictions or self.predictions_dir is None:
+            return
+
+        # Create split directory
+        split_dir = self.predictions_dir / split
+        split_dir.mkdir(exist_ok=True, parents=True)
+
+        # Generate filename based on original data format
+        # Original format: u_scale2-3-1_yslice5_t{timestep:05d}.h5
+        # Prediction format: pred_u_scale2-3-1_yslice5_s{sample_idx:05d}_t{timestep:05d}.h5
+        filename = f"pred_u_scale2-3-1_yslice5_s{sample_idx:05d}_t{timestep:05d}.h5"
+        filepath = split_dir / filename
+
+        # Save as H5 file with same structure as original data
+        with h5py.File(filepath, "w") as f:
+            # Ensure prediction is in the right format (H, W) and dtype
+            if prediction.ndim == 2:
+                data_to_save = prediction.astype(np.float32)
+            else:
+                # If prediction has extra dimensions, take the first channel
+                data_to_save = (
+                    prediction[0].astype(np.float32) if prediction.ndim > 2 else prediction.astype(np.float32)
+                )
+
+            # Save with 'data' key to match original format
+            f.create_dataset("data", data=data_to_save, dtype=np.float32)
+
+        print(f"Saved prediction: {filepath}")
+
+    def _save_predictions_batch(self, predictions: np.ndarray, split: str, start_sample_idx: int, start_timestep: int):
+        """Save a batch of predictions as H5 files.
+
+        Args:
+            predictions: Prediction data array with shape (batch_size, timesteps, H, W) or (batch_size, H, W)
+            split: Data split ('train', 'val', 'test')
+            start_sample_idx: Starting sample index
+            start_timestep: Starting timestep number (1-based)
+        """
+        if not self.save_predictions or self.predictions_dir is None:
+            return
+
+        if predictions.ndim == 3:
+            # Single timestep predictions: (batch_size, H, W)
+            for i in range(predictions.shape[0]):
+                self._save_prediction_as_h5(predictions[i], split, start_sample_idx + i, start_timestep)
+        elif predictions.ndim == 4:
+            # Multi timestep predictions: (batch_size, timesteps, H, W)
+            for i in range(predictions.shape[0]):
+                for t in range(predictions.shape[1]):
+                    self._save_prediction_as_h5(predictions[i, t], split, start_sample_idx + i, start_timestep + t)
 
     def evaluate_model(self, num_samples: int = 100, debug_comparison: bool = False) -> dict[str, float]:
         """Evaluate the model on test data.
@@ -344,12 +418,11 @@ class SimpleModelEvaluator:
             print("=== END DEBUG ===\n")
 
         with torch.no_grad():
-            for _, (input_seq, target) in enumerate(dataloader):
-                if metrics["count"] >= num_samples:
-                    break
-
-                input_seq = input_seq.to(self.device)
-                target = target.to(self.device)
+            # Use direct dataset iteration to get original indices
+            for idx in range(min(num_samples, len(self.test_dataset))):
+                sample = self.test_dataset[idx]
+                input_seq = sample["data"]["input_seq"].to(self.device)  # (1, T, C, H, W)
+                target = sample["label"][:, 0].to(self.device)  # (1, C, H, W)
 
                 # Forward pass with residual prediction
                 pred = self.model(input_seq, return_delta=False)  # Get composed prediction u_{t+1} = u_t + Δu
@@ -359,16 +432,29 @@ class SimpleModelEvaluator:
                 pred_denorm = self.test_dataset.denormalize(pred)
                 target_denorm = self.test_dataset.denormalize(target)
 
+                # Save predictions as H5 files if enabled
+                if self.save_predictions:
+                    pred_np = pred_denorm.cpu().numpy()  # Shape: (1, C, H, W)
+                    # Get the real timestep from the dataset indices
+                    real_timestep = (
+                        self.test_dataset.indices[idx] + self.test_dataset.input_length + 1
+                    )  # +1 because prediction is next timestep
+                    self._save_prediction_as_h5(
+                        pred_np[0, 0],  # Take first batch and first channel (H, W)
+                        "test",
+                        real_timestep,  # Use real timestep as sample index
+                        1,  # Single timestep prediction
+                    )
+
                 # Calculate metrics in denormalized space
                 mse = torch.nn.functional.mse_loss(pred_denorm, target_denorm)
                 mae = torch.nn.functional.l1_loss(pred_denorm, target_denorm)
                 rel_error = torch.mean(torch.abs(pred_denorm - target_denorm) / (torch.abs(target_denorm) + 1e-8))
 
-                batch_size = target.shape[0]
-                metrics["mse"] += mse.item() * batch_size
-                metrics["mae"] += mae.item() * batch_size
-                metrics["rel_error"] += rel_error.item() * batch_size
-                metrics["count"] += batch_size
+                metrics["mse"] += mse.item()
+                metrics["mae"] += mae.item()
+                metrics["rel_error"] += rel_error.item()
+                metrics["count"] += 1
 
         # Average metrics
         for key in ["mse", "mae", "rel_error"]:
@@ -387,7 +473,7 @@ class SimpleModelEvaluator:
 
         return metrics
 
-    def generate_sequence_prediction(self, input_seq: torch.Tensor, num_predictions: int = 10) -> torch.Tensor:
+    def generate_sequence_prediction(self, input_seq: torch.Tensor, num_predictions: int = 5) -> torch.Tensor:
         """Generate autoregressive predictions using residual prediction.
 
         Args:
@@ -473,7 +559,7 @@ class SimpleModelEvaluator:
                     ground_truth_frames.append(ground_truth_frames[-1])
 
         # Debug: Print shapes for first few frames
-        for i in range(min(10, len(ground_truth_frames))):
+        for i in range(min(5, len(ground_truth_frames))):
             print(f"Ground truth {i} shape: {ground_truth_frames[i].shape}")
             print(
                 f"Ground truth {i} data range: [{ground_truth_frames[i].min():.4f}, {ground_truth_frames[i].max():.4f}]"
@@ -854,6 +940,17 @@ class SimpleModelEvaluator:
                     pred = self.model(input_seq, return_delta=False)  # Use residual prediction
                     pred_denorm = dataset.denormalize(pred).cpu().numpy()[0, 0]  # (H, W)
                     predictions.append(pred_denorm)
+
+                    # Save prediction as H5 file if enabled
+                    if self.save_predictions:
+                        # Get the real timestep from the dataset indices
+                        real_timestep = dataset.indices[sample_idx + i] + dataset.input_length + 1
+                        self._save_prediction_as_h5(
+                            pred_denorm,
+                            split,
+                            real_timestep,  # Use real timestep as sample index
+                            i + 1,  # Timestep 1-based for prediction sequence
+                        )
             else:
                 break
 
@@ -915,6 +1012,19 @@ class SimpleModelEvaluator:
         # IMPORTANT: Denormalize predictions for fair comparison
         input_seq_denorm = dataset.denormalize(input_seq)
         pred_seq_denorm = dataset.denormalize(pred_seq)
+
+        # Save autoregressive predictions as H5 files if enabled
+        if self.save_predictions:
+            pred_seq_np = pred_seq_denorm.cpu().numpy()[0]  # (T_pred, C, H, W)
+            # Get the real starting timestep for this sample
+            base_real_timestep = dataset.indices[sample_idx] + dataset.input_length + 1
+            for t in range(pred_seq_np.shape[0]):
+                self._save_prediction_as_h5(
+                    pred_seq_np[t, 0],  # Take first channel (H, W)
+                    f"{split}_autoregressive",  # Distinguish from teacher forcing
+                    base_real_timestep + t,  # Use real timestep sequence
+                    t + 1,  # Timestep 1-based for prediction sequence
+                )
 
         # Move to CPU
         input_seq = input_seq_denorm.cpu().numpy()[0]  # (T, C, H, W)
@@ -1335,6 +1445,9 @@ def main():
     # Parse command line arguments BEFORE Hydra initialization
     parser = argparse.ArgumentParser(description="Evaluate Flow Swin 2D model")
     parser.add_argument("checkpoint_path", nargs="?", default=None, help="Path to model checkpoint")
+    parser.add_argument(
+        "--save-predictions", action="store_true", help="Save prediction results as H5 files in logs directory"
+    )
 
     # Parse known args to separate our checkpoint path from Hydra overrides
     args, hydra_overrides = parser.parse_known_args()
@@ -1356,7 +1469,7 @@ def main():
     with hydra.initialize(version_base="1.3", config_path="configs"):
         cfg = hydra.compose(config_name="train_flow_swin_2d", overrides=hydra_overrides)
 
-        evaluator = SimpleModelEvaluator(checkpoint_path, cfg.model)
+        evaluator = SimpleModelEvaluator(checkpoint_path, cfg.model, save_predictions=args.save_predictions)
         try:
             evaluator.run_evaluation()
         finally:
