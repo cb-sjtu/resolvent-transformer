@@ -208,9 +208,9 @@ class SimpleModelEvaluator:
 
         test_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=5,
+            input_length=3,
             max_k_steps=1,  # For evaluation, we only need single frame targets
-            field_name="u",
+            field_names=["u", "v", "w"],  # Use 3-channel uvw data
             file_pattern="*.h5",
             resolution_scale=[2, 3, 1],
             y_slice=5,
@@ -218,7 +218,7 @@ class SimpleModelEvaluator:
             valid_ratio=0.15,
             test_ratio=0.15,
             split="test",
-            norm_stats="norm_stats_u_scale2-3-1_yslice5.json",
+            norm_stats="norm_stats_u-v-w_scale2-3-1_yslice5.json",
             enable_normalization=True,
         )
 
@@ -233,9 +233,9 @@ class SimpleModelEvaluator:
 
         train_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=5,
+            input_length=3,
             max_k_steps=1,  # For evaluation, we only need single frame targets
-            field_name="u",
+            field_names=["u", "v", "w"],  # Use 3-channel uvw data
             file_pattern="*.h5",
             resolution_scale=[2, 3, 1],
             y_slice=5,
@@ -243,7 +243,7 @@ class SimpleModelEvaluator:
             valid_ratio=0.15,
             test_ratio=0.15,
             split="train",
-            norm_stats="norm_stats_u_scale2-3-1_yslice5.json",
+            norm_stats="norm_stats_u-v-w_scale2-3-1_yslice5.json",
             enable_normalization=True,
         )
 
@@ -258,9 +258,9 @@ class SimpleModelEvaluator:
 
         val_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=5,
+            input_length=3,
             max_k_steps=1,  # For evaluation, we only need single frame targets
-            field_name="u",
+            field_names=["u", "v", "w"],  # Use 3-channel uvw data
             file_pattern="*.h5",
             resolution_scale=[2, 3, 1],
             y_slice=5,
@@ -268,7 +268,7 @@ class SimpleModelEvaluator:
             valid_ratio=0.15,
             test_ratio=0.15,
             split="val",
-            norm_stats="norm_stats_u_scale2-3-1_yslice5.json",
+            norm_stats="norm_stats_u-v-w_scale2-3-1_yslice5.json",
             enable_normalization=True,
         )
 
@@ -288,11 +288,95 @@ class SimpleModelEvaluator:
         if self.wandb_run is not None:
             wandb.log({key: wandb.Image(str(image_path), caption=caption)})
 
+    def _compute_velocity_magnitude(self, velocity_data: np.ndarray) -> np.ndarray:
+        """Compute velocity magnitude from u, v, w components.
+
+        Args:
+            velocity_data: Velocity data with shape (C, H, W) where C >= 3 for u, v, w
+
+        Returns:
+            Velocity magnitude with shape (H, W)
+        """
+        if velocity_data.ndim != 3 or velocity_data.shape[0] < 3:
+            raise ValueError(f"Expected 3D array with at least 3 channels, got shape {velocity_data.shape}")
+
+        u, v, w = velocity_data[0], velocity_data[1], velocity_data[2]
+        magnitude = np.sqrt(u**2 + v**2 + w**2)
+        return magnitude
+
+    def _compute_smart_relative_error(self, pred, target, channel_names=None):
+        """Compute smart relative error that handles different channel magnitudes properly.
+
+        Args:
+            pred: Predicted tensor (C, H, W) or (..., C, H, W)
+            target: Target tensor (same shape as pred)
+            channel_names: List of channel names for reference
+
+        Returns:
+            dict with per-channel and overall relative errors
+        """
+        if channel_names is None:
+            channel_names = ["u", "v", "w"]
+
+        # Convert to torch tensors if needed
+        if isinstance(pred, np.ndarray):
+            pred = torch.from_numpy(pred)
+        if isinstance(target, np.ndarray):
+            target = torch.from_numpy(target)
+
+        # Ensure we have the right shapes
+        if len(pred.shape) > 3:
+            pred = pred.view(-1, *pred.shape[-3:])  # Flatten to (N, C, H, W)
+            target = target.view(-1, *target.shape[-3:])
+            pred = pred.mean(0)  # Average over batch dimension -> (C, H, W)
+            target = target.mean(0)
+
+        results = {}
+
+        for c in range(min(pred.shape[0], len(channel_names))):
+            channel_name = channel_names[c]
+            pred_c = pred[c]
+            target_c = target[c]
+
+            # Compute absolute error
+            abs_error = torch.abs(pred_c - target_c)
+
+            # Compute different types of relative error
+            # 1. Traditional relative error (can be problematic for small values)
+            traditional_rel_error = torch.mean(abs_error / (torch.abs(target_c) + 1e-8))
+
+            # 2. RMS-normalized relative error (more stable for small values)
+            target_rms = torch.sqrt(torch.mean(target_c**2))
+            rms_rel_error = torch.mean(abs_error) / (target_rms + 1e-8)
+
+            # 3. Range-normalized relative error
+            target_range = torch.max(target_c) - torch.min(target_c)
+            range_rel_error = torch.mean(abs_error) / (target_range + 1e-8)
+
+            results[channel_name] = {
+                "traditional": traditional_rel_error.item(),
+                "rms_normalized": rms_rel_error.item(),
+                "range_normalized": range_rel_error.item(),
+                "mae": torch.mean(abs_error).item(),
+                "mse": torch.mean(abs_error**2).item(),
+            }
+
+        # Overall relative error using L2 norm (consistent with training)
+        pred_flat = pred.flatten(start_dim=1)  # (C, H*W)
+        target_flat = target.flatten(start_dim=1)
+        target_norm = torch.norm(target_flat, dim=1, keepdim=True)
+        error_norm = torch.norm(pred_flat - target_flat, dim=1, keepdim=True)
+        overall_rel_error = (error_norm / (target_norm + 1e-8)).mean()
+
+        results["overall"] = {"l2_normalized": overall_rel_error.item()}
+
+        return results
+
     def _save_prediction_as_h5(self, prediction: np.ndarray, split: str, sample_idx: int, timestep: int):
         """Save prediction result as H5 file in the same format as original data.
 
         Args:
-            prediction: Prediction data array with shape (H, W)
+            prediction: Prediction data array with shape (C, H, W) for 3-channel or (H, W) for single channel
             split: Data split ('train', 'val', 'test')
             sample_idx: Sample index
             timestep: Timestep number (1-based)
@@ -304,15 +388,36 @@ class SimpleModelEvaluator:
         split_dir = self.predictions_dir / split
         split_dir.mkdir(exist_ok=True, parents=True)
 
-        # Generate filename based on original data format
-        # Original format: u_scale2-3-1_yslice5_t{timestep:05d}.h5
-        # Prediction format: pred_u_scale2-3-1_yslice5_s{sample_idx:05d}_t{timestep:05d}.h5
-        filename = f"pred_u_scale2-3-1_yslice5_s{sample_idx:05d}_t{timestep:05d}.h5"
-        filepath = split_dir / filename
+        # Handle multi-channel data (C, H, W)
+        if prediction.ndim == 3 and prediction.shape[0] == 3:
+            # Save 3-channel data as combined file
+            filename = f"pred_u-v-w_scale2-3-1_yslice5_s{sample_idx:05d}_t{timestep:05d}.h5"
+            filepath = split_dir / filename
 
-        # Save as H5 file with same structure as original data
-        with h5py.File(filepath, "w") as f:
-            # Ensure prediction is in the right format (H, W) and dtype
+            with h5py.File(filepath, "w") as f:
+                data_to_save = prediction.astype(np.float32)  # (C, H, W)
+                f.create_dataset("data", data=data_to_save, dtype=np.float32)
+                f.attrs["field_names"] = ["u", "v", "w"]
+                f.attrs["num_channels"] = 3
+
+            print(f"Saved 3-channel prediction: {filepath}")
+
+            # Also save individual channels
+            channel_names = ["u", "v", "w"]
+            for i, channel_name in enumerate(channel_names):
+                channel_filename = f"pred_{channel_name}_scale2-3-1_yslice5_s{sample_idx:05d}_t{timestep:05d}.h5"
+                channel_filepath = split_dir / channel_filename
+
+                with h5py.File(channel_filepath, "w") as f:
+                    data_to_save = prediction[i].astype(np.float32)  # (H, W)
+                    f.create_dataset("data", data=data_to_save, dtype=np.float32)
+                    f.attrs["field_names"] = [channel_name]
+                    f.attrs["num_channels"] = 1
+
+                print(f"Saved {channel_name} channel: {channel_filepath}")
+
+        else:
+            # Handle legacy single channel data
             if prediction.ndim == 2:
                 data_to_save = prediction.astype(np.float32)
             else:
@@ -321,16 +426,20 @@ class SimpleModelEvaluator:
                     prediction[0].astype(np.float32) if prediction.ndim > 2 else prediction.astype(np.float32)
                 )
 
-            # Save with 'data' key to match original format
-            f.create_dataset("data", data=data_to_save, dtype=np.float32)
+            # Use legacy filename for backward compatibility
+            filename = f"pred_u_scale2-3-1_yslice5_s{sample_idx:05d}_t{timestep:05d}.h5"
+            filepath = split_dir / filename
 
-        print(f"Saved prediction: {filepath}")
+            with h5py.File(filepath, "w") as f:
+                f.create_dataset("data", data=data_to_save, dtype=np.float32)
+
+            print(f"Saved legacy single-channel prediction: {filepath}")
 
     def _save_predictions_batch(self, predictions: np.ndarray, split: str, start_sample_idx: int, start_timestep: int):
         """Save a batch of predictions as H5 files.
 
         Args:
-            predictions: Prediction data array with shape (batch_size, timesteps, H, W) or (batch_size, H, W)
+            predictions: Prediction data array with shape (batch_size, timesteps, C, H, W) or (batch_size, C, H, W)
             split: Data split ('train', 'val', 'test')
             start_sample_idx: Starting sample index
             start_timestep: Starting timestep number (1-based)
@@ -338,15 +447,19 @@ class SimpleModelEvaluator:
         if not self.save_predictions or self.predictions_dir is None:
             return
 
-        if predictions.ndim == 3:
-            # Single timestep predictions: (batch_size, H, W)
+        if predictions.ndim == 4:
+            # Single timestep predictions: (batch_size, C, H, W)
             for i in range(predictions.shape[0]):
                 self._save_prediction_as_h5(predictions[i], split, start_sample_idx + i, start_timestep)
-        elif predictions.ndim == 4:
-            # Multi timestep predictions: (batch_size, timesteps, H, W)
+        elif predictions.ndim == 5:
+            # Multi timestep predictions: (batch_size, timesteps, C, H, W)
             for i in range(predictions.shape[0]):
                 for t in range(predictions.shape[1]):
                     self._save_prediction_as_h5(predictions[i, t], split, start_sample_idx + i, start_timestep + t)
+        elif predictions.ndim == 3:
+            # Legacy single channel: (batch_size, H, W)
+            for i in range(predictions.shape[0]):
+                self._save_prediction_as_h5(predictions[i], split, start_sample_idx + i, start_timestep)
 
     def evaluate_model(self, num_samples: int = 100, debug_comparison: bool = False) -> dict[str, float]:
         """Evaluate the model on test data.
@@ -440,16 +553,21 @@ class SimpleModelEvaluator:
                         self.test_dataset.indices[idx] + self.test_dataset.input_length + 1
                     )  # +1 because prediction is next timestep
                     self._save_prediction_as_h5(
-                        pred_np[0, 0],  # Take first batch and first channel (H, W)
+                        pred_np[0],  # Take first batch, keep all channels (C, H, W)
                         "test",
-                        real_timestep,  # Use real timestep as sample index
-                        1,  # Single timestep prediction
+                        idx,  # Use sample index
+                        real_timestep,  # Use real timestep as timestep
                     )
 
                 # Calculate metrics in denormalized space
                 mse = torch.nn.functional.mse_loss(pred_denorm, target_denorm)
                 mae = torch.nn.functional.l1_loss(pred_denorm, target_denorm)
-                rel_error = torch.mean(torch.abs(pred_denorm - target_denorm) / (torch.abs(target_denorm) + 1e-8))
+                # Use the same relative error calculation as training (global L2 norm)
+                target_flat = target_denorm.flatten(start_dim=2)
+                pred_flat = pred_denorm.flatten(start_dim=2)
+                target_norm = torch.norm(target_flat, dim=2, keepdim=True)
+                error_norm = torch.norm(pred_flat - target_flat, dim=2, keepdim=True)
+                rel_error = (error_norm / (target_norm + 1e-8)).mean()
 
                 metrics["mse"] += mse.item()
                 metrics["mae"] += mae.item()
@@ -501,6 +619,16 @@ class SimpleModelEvaluator:
                     print(f"Input sequence data range: [{current_seq.min():.4f}, {current_seq.max():.4f}]")
                     print(f"Prediction data range: [{next_pred.min():.4f}, {next_pred.max():.4f}]")
 
+                    # Debug: Check delta prediction to understand the issue
+                    x_last = current_seq[:, -1]  # Last frame
+                    delta_pred = self.model(current_seq, return_delta=True)  # Get delta only
+                    print(f"Last frame (u_t) range: [{x_last.min():.4f}, {x_last.max():.4f}]")
+                    print(f"Delta prediction (Δu) range: [{delta_pred.min():.4f}, {delta_pred.max():.4f}]")
+                    print(
+                        f"Expected next_pred = u_t + Δu: "
+                        f"[{(x_last + delta_pred).min():.4f}, {(x_last + delta_pred).max():.4f}]"
+                    )
+
                 # Ensure next_pred has the right shape for concatenation
                 if len(next_pred.shape) == 4:  # (B, C, H, W)
                     next_pred = next_pred.unsqueeze(1)  # (B, 1, C, H, W)
@@ -516,11 +644,10 @@ class SimpleModelEvaluator:
         return torch.cat(predictions, dim=1)  # (B, num_predictions, C, H, W)
 
     def visualize_sample_prediction(self, sample_idx: int = 0, num_future: int = 30):
-        """Visualize a sample prediction with ground truth comparison."""
-        print(f"Visualizing sample {sample_idx}...")
+        """Visualize a sample prediction with ground truth comparison showing u, v, w components and magnitude."""
+        print(f"Visualizing sample {sample_idx} with multi-channel support...")
 
         # Get ground truth from the same sequence (consecutive timesteps)
-        # We need to get a longer sequence from the dataset that contains all future timesteps
         ground_truth_frames = []
 
         # Try to get a sample with longer max_k_steps if available, otherwise use consecutive samples
@@ -534,13 +661,12 @@ class SimpleModelEvaluator:
 
             for i in range(num_future + 1):
                 if i < target_seq_denorm.shape[0]:
-                    ground_truth_frames.append(target_seq_denorm[i, 0])  # (H, W)
+                    ground_truth_frames.append(target_seq_denorm[i])  # Keep all channels (C, H, W)
                 else:
                     # Repeat last frame if not enough
                     ground_truth_frames.append(ground_truth_frames[-1])
         else:
             # Fallback: use consecutive samples (original approach)
-            # But note this is not ideal for autoregressive evaluation
             print("WARNING: Using consecutive samples as ground truth - not true autoregressive evaluation!")
             for i in range(num_future + 1):
                 if sample_idx + i < len(self.test_dataset):
@@ -553,21 +679,14 @@ class SimpleModelEvaluator:
 
                     # Take the first target frame
                     target = target_seq_denorm_i[0]  # (C, H, W)
-                    ground_truth_frames.append(target[0])  # Take channel 0
+                    ground_truth_frames.append(target)  # Keep all channels
                 else:
                     # If we run out of samples, repeat the last one
                     ground_truth_frames.append(ground_truth_frames[-1])
 
-        # Debug: Print shapes for first few frames
-        for i in range(min(5, len(ground_truth_frames))):
-            print(f"Ground truth {i} shape: {ground_truth_frames[i].shape}")
-            print(
-                f"Ground truth {i} data range: [{ground_truth_frames[i].min():.4f}, {ground_truth_frames[i].max():.4f}]"
-            )
-
         # Get the initial sample for prediction
         sample = self.test_dataset[sample_idx]
-        input_seq = sample["data"]["input_seq"].to(self.device)  # Already has batch dimension
+        input_seq = sample["data"]["input_seq"].to(self.device)
 
         # Generate predictions
         pred_seq = self.generate_sequence_prediction(input_seq, num_future)
@@ -580,97 +699,135 @@ class SimpleModelEvaluator:
         input_seq = input_seq_denorm.cpu().numpy()[0]  # (T, C, H, W)
         pred_seq = pred_seq_denorm.cpu().numpy()[0]  # (T_pred, C, H, W)
 
-        # Calculate per-timestep colorbar ranges
-        # Each timestep gets its own range based on truth vs prediction at that time
-        timestep_ranges = {}
-        timestep_error_ranges = {}
+        # Limit display to reasonable number of timesteps
+        display_steps = min(num_future + 1, 10)
 
-        for t in range(num_future + 1):
-            if t == 0:
-                # Last input timestep
-                data = input_seq[-1, 0]
-                pred_data = data  # Same as ground truth for input
-                error = np.zeros_like(data)
-            else:
-                # Ground truth and predictions
-                data = ground_truth_frames[t]
-                pred_data = pred_seq[t - 1, 0]
-                error = np.abs(data - pred_data)
+        # Create figure with 5 rows: u, v, w, magnitude, error_magnitude
+        fig, axes = plt.subplots(5, display_steps, figsize=(3 * display_steps, 15))
+        if display_steps == 1:
+            axes = axes.reshape(5, 1)
 
-            # Calculate range for this timestep (combining truth and prediction)
-            timestep_vmin = min(data.min(), pred_data.min())
-            timestep_vmax = max(data.max(), pred_data.max())
-            timestep_ranges[t] = (timestep_vmin, timestep_vmax)
+        channel_names = ["u", "v", "w"]
+        print(f"\nQuantitative Results for channels {channel_names} (Per-channel normalization):")
+        print("Step | Channel | MSE     | MAE     | RMS-Rel Error")
+        print("-" * 50)
 
-            # Calculate error range for this timestep
-            timestep_error_ranges[t] = (0, error.max() if error.max() > 0 else 0.1)
-
-        # Create figure
-        fig, axes = plt.subplots(3, num_future + 1, figsize=(3 * (num_future + 1), 9))
-
-        # Calculate and print quantitative metrics
-        print("\nQuantitative Results:")
-        print("Step | MSE     | MAE     | Rel Error")
-        print("-" * 35)
-
-        for t in range(num_future + 1):
+        for t in range(display_steps):
             if t == 0:
                 # Show last input timestep
-                data = input_seq[-1, 0]  # Last input frame
-                title_prefix = "Last Input"
-                pred_data = data  # Same as ground truth for input
-                error = np.zeros_like(data)
+                truth_data = input_seq[-1]  # (C, H, W)
+                pred_data = truth_data  # Same as ground truth for input
+                title_suffix = "Last Input"
             else:
                 # Show ground truth and predictions
-                data = ground_truth_frames[t]  # Ground truth for t+t
-                pred_data = pred_seq[t - 1, 0]  # Prediction for t+t
-                error = np.abs(data - pred_data)
-                title_prefix = f"True t+{t}"
+                truth_data = ground_truth_frames[t]  # (C, H, W)
+                pred_data = pred_seq[t - 1]  # (C, H, W)
+                title_suffix = f"t+{t}"
 
-                # Calculate metrics for this timestep
-                mse = np.mean(error**2)
-                mae = np.mean(error)
-                rel_error = np.mean(error / (np.abs(data) + 1e-8))
-                print(f"t+{t:2d} | {mse:.5f} | {mae:.5f} | {rel_error:.5f}")
+                # Calculate metrics for each channel using smart relative error
+                smart_errors = self._compute_smart_relative_error(
+                    torch.from_numpy(pred_data), torch.from_numpy(truth_data), channel_names
+                )
 
-            # Get timestep-specific ranges
-            vmin, vmax = timestep_ranges[t]
-            error_vmin, error_vmax = timestep_error_ranges[t]
+                for _c, channel_name in enumerate(channel_names):
+                    if channel_name in smart_errors:
+                        error_info = smart_errors[channel_name]
+                        print(
+                            f"t+{t:2d} | {channel_name:7s} | {error_info['mse']:.5f} | "
+                            f"{error_info['mae']:.5f} | {error_info['rms_normalized']:.5f}"
+                        )
 
-            # Ground truth (using timestep-specific colorbar range)
-            im1 = axes[0, t].imshow(data, cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax)
-            axes[0, t].set_title(title_prefix)
-            axes[0, t].axis("off")
-            plt.colorbar(im1, ax=axes[0, t], fraction=0.046, pad=0.04)
+            # Plot u, v, w channels separately
+            for c, channel_name in enumerate(channel_names):
+                if c < truth_data.shape[0] and c < pred_data.shape[0]:
+                    # Truth vs prediction for this channel
+                    truth_channel = truth_data[c]
+                    pred_channel = pred_data[c]
 
-            # Prediction (using same timestep-specific colorbar range)
-            im2 = axes[1, t].imshow(pred_data, cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax)
-            axes[1, t].set_title(f"Pred t+{t}" if t > 0 else "Last Input")
-            axes[1, t].axis("off")
-            plt.colorbar(im2, ax=axes[1, t], fraction=0.046, pad=0.04)
+                    # Calculate channel-specific colorbar range
+                    vmin = min(truth_channel.min(), pred_channel.min())
+                    vmax = max(truth_channel.max(), pred_channel.max())
 
-            # Error (using timestep-specific error range)
-            im3 = axes[2, t].imshow(error, cmap="Reds", aspect="auto", vmin=error_vmin, vmax=error_vmax)
-            if t > 0:
-                axes[2, t].set_title(f"Error t+{t} (MAE: {np.mean(error):.4f})")
+                    # Show ground truth
+                    if t == 0:
+                        im = axes[c, t].imshow(truth_channel, cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax)
+                        axes[c, t].set_title(f"{channel_name.upper()}: {title_suffix}")
+                    else:
+                        # Show prediction
+                        im = axes[c, t].imshow(pred_channel, cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax)
+                        axes[c, t].set_title(f"{channel_name.upper()}: Pred {title_suffix}")
+
+                    axes[c, t].axis("off")
+                    plt.colorbar(im, ax=axes[c, t], fraction=0.046, pad=0.04)
+                else:
+                    axes[c, t].axis("off")
+                    axes[c, t].set_title(f"{channel_name.upper()}: N/A")
+
+            # Plot velocity magnitude
+            if truth_data.shape[0] >= 3 and pred_data.shape[0] >= 3:
+                truth_magnitude = self._compute_velocity_magnitude(truth_data)
+                pred_magnitude = self._compute_velocity_magnitude(pred_data)
+
+                # Calculate magnitude colorbar range
+                mag_vmin = min(truth_magnitude.min(), pred_magnitude.min())
+                mag_vmax = max(truth_magnitude.max(), pred_magnitude.max())
+
+                if t == 0:
+                    im_mag = axes[3, t].imshow(
+                        truth_magnitude,
+                        cmap="plasma",
+                        aspect="auto",
+                        vmin=mag_vmin,
+                        vmax=mag_vmax,
+                    )
+                    axes[3, t].set_title(f"Magnitude: {title_suffix}")
+                else:
+                    im_mag = axes[3, t].imshow(
+                        pred_magnitude,
+                        cmap="plasma",
+                        aspect="auto",
+                        vmin=mag_vmin,
+                        vmax=mag_vmax,
+                    )
+                    axes[3, t].set_title(f"Magnitude: Pred {title_suffix}")
+
+                axes[3, t].axis("off")
+                plt.colorbar(im_mag, ax=axes[3, t], fraction=0.046, pad=0.04)
+
+                # Plot magnitude error
+                if t > 0:
+                    mag_error = np.abs(truth_magnitude - pred_magnitude)
+                    axes[4, t].imshow(mag_error, cmap="Reds", aspect="auto", vmin=0, vmax=mag_error.max())
+                    mae_mag = np.mean(mag_error)
+                    axes[4, t].set_title(f"Mag Error {title_suffix} (MAE: {mae_mag:.4f})")
+                    print(
+                        f"t+{t:2d} | {'Mag':7s} | {np.mean(mag_error**2):.5f} | {mae_mag:.5f} | "
+                        f"{np.mean(mag_error / (truth_magnitude + 1e-8)):.5f}"
+                    )
+                else:
+                    axes[4, t].imshow(np.zeros_like(truth_magnitude), cmap="Reds", aspect="auto", vmin=0, vmax=0.1)
+                    axes[4, t].set_title("Mag Error (0)")
+
+                axes[4, t].axis("off")
+                plt.colorbar(axes[4, t].images[0], ax=axes[4, t], fraction=0.046, pad=0.04)
             else:
-                axes[2, t].set_title("Error (0)")
-            axes[2, t].axis("off")
-            plt.colorbar(im3, ax=axes[2, t], fraction=0.046, pad=0.04)
+                axes[3, t].axis("off")
+                axes[3, t].set_title("Magnitude: N/A")
+                axes[4, t].axis("off")
+                axes[4, t].set_title("Mag Error: N/A")
 
         plt.tight_layout()
 
         # Save figure
-        save_path = self.output_dir / f"sample_{sample_idx}_prediction.png"
+        save_path = self.output_dir / f"sample_{sample_idx}_multi_channel_prediction.png"
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Visualization saved to {save_path}")
-        print("Per-timestep ranges used (allows better temporal visualization):")
+        print(f"Multi-channel visualization saved to {save_path}")
 
         # Log image to wandb
         self._log_image_to_wandb(
-            f"test/sample_{sample_idx}_prediction",
+            f"test/sample_{sample_idx}_multi_channel_prediction",
             save_path,
-            f"Autoregressive prediction for sample {sample_idx} over {num_future} timesteps",
+            f"Multi-channel (u,v,w,magnitude) prediction for sample {sample_idx} over {display_steps - 1} timesteps",
         )
 
         plt.show()
@@ -700,9 +857,9 @@ class SimpleModelEvaluator:
                 if i == 0:
                     # For first sample, add all input frames
                     for j in range(input_seq_denorm.shape[0]):
-                        ground_truth_frames.append(input_seq_denorm[j, 0])
+                        ground_truth_frames.append(input_seq_denorm[j])  # Keep all channels (C, H, W)
                 # Add the target frame
-                ground_truth_frames.append(target[0])
+                ground_truth_frames.append(target)  # Keep all channels (C, H, W)
             else:
                 # If we run out of samples, repeat the last one
                 if ground_truth_frames:
@@ -737,13 +894,23 @@ class SimpleModelEvaluator:
         frame_error_ranges = {}
 
         for frame_idx in range(len(ground_truth_frames)):
-            truth_data = ground_truth_frames[frame_idx]
-            pred_data = pred_full_sequence[frame_idx, 0]
-            error = np.abs(truth_data - pred_data)
+            truth_data = ground_truth_frames[frame_idx]  # (C, H, W)
+            pred_data = pred_full_sequence[frame_idx]  # (C, H, W)
 
-            # Calculate range for this frame (combining truth and prediction)
-            frame_vmin = min(truth_data.min(), pred_data.min())
-            frame_vmax = max(truth_data.max(), pred_data.max())
+            # Compute velocity magnitude for visualization
+            if truth_data.shape[0] >= 3 and pred_data.shape[0] >= 3:
+                truth_magnitude = self._compute_velocity_magnitude(truth_data)  # (H, W)
+                pred_magnitude = self._compute_velocity_magnitude(pred_data)  # (H, W)
+            else:
+                # Fallback to first channel if not enough channels
+                truth_magnitude = truth_data[0] if truth_data.ndim == 3 else truth_data
+                pred_magnitude = pred_data[0] if pred_data.ndim == 3 else pred_data
+
+            error = np.abs(truth_magnitude - pred_magnitude)
+
+            # Calculate range for this frame (combining truth and prediction magnitude)
+            frame_vmin = min(truth_magnitude.min(), pred_magnitude.min())
+            frame_vmax = max(truth_magnitude.max(), pred_magnitude.max())
             frame_ranges[frame_idx] = (frame_vmin, frame_vmax)
 
             # Calculate error range for this frame
@@ -758,22 +925,33 @@ class SimpleModelEvaluator:
         frame_0_vmin, frame_0_vmax = frame_ranges[0]
         frame_0_error_vmin, frame_0_error_vmax = frame_error_ranges[0]
 
+        # Compute initial velocity magnitude for display
+        truth_data_0 = ground_truth_frames[0]  # (C, H, W)
+        pred_data_0 = pred_full_sequence[0]  # (C, H, W)
+
+        if truth_data_0.shape[0] >= 3 and pred_data_0.shape[0] >= 3:
+            initial_truth_magnitude = self._compute_velocity_magnitude(truth_data_0)
+            initial_pred_magnitude = self._compute_velocity_magnitude(pred_data_0)
+        else:
+            initial_truth_magnitude = truth_data_0[0] if truth_data_0.ndim == 3 else truth_data_0
+            initial_pred_magnitude = pred_data_0[0] if pred_data_0.ndim == 3 else pred_data_0
+
         im1 = axes[0].imshow(
-            ground_truth_frames[0], cmap="viridis", aspect="auto", vmin=frame_0_vmin, vmax=frame_0_vmax
+            initial_truth_magnitude, cmap="viridis", aspect="auto", vmin=frame_0_vmin, vmax=frame_0_vmax
         )
-        axes[0].set_title("Ground Truth")
+        axes[0].set_title("Ground Truth (Velocity Magnitude)")
         axes[0].axis("off")
         cb1 = plt.colorbar(im1, ax=axes[0], fraction=0.046, pad=0.04)
 
         im2 = axes[1].imshow(
-            pred_full_sequence[0, 0], cmap="viridis", aspect="auto", vmin=frame_0_vmin, vmax=frame_0_vmax
+            initial_pred_magnitude, cmap="viridis", aspect="auto", vmin=frame_0_vmin, vmax=frame_0_vmax
         )
-        axes[1].set_title("Prediction")
+        axes[1].set_title("Prediction (Velocity Magnitude)")
         axes[1].axis("off")
         cb2 = plt.colorbar(im2, ax=axes[1], fraction=0.046, pad=0.04)
 
         # Error plot with first frame error range
-        initial_error = np.abs(ground_truth_frames[0] - pred_full_sequence[0, 0])
+        initial_error = np.abs(initial_truth_magnitude - initial_pred_magnitude)
         im3 = axes[2].imshow(
             initial_error, cmap="Reds", aspect="auto", vmin=frame_0_error_vmin, vmax=frame_0_error_vmax
         )
@@ -789,25 +967,36 @@ class SimpleModelEvaluator:
             frame_vmin, frame_vmax = frame_ranges[frame]
             frame_error_vmin, frame_error_vmax = frame_error_ranges[frame]
 
-            # Update ground truth with dynamic per-frame ranges
-            truth_data = ground_truth_frames[frame].copy()
-            im1.set_array(truth_data)
+            # Get multi-channel data
+            truth_data = ground_truth_frames[frame]  # (C, H, W)
+            pred_data = pred_full_sequence[frame]  # (C, H, W)
+
+            # Compute velocity magnitude for display
+            if truth_data.shape[0] >= 3 and pred_data.shape[0] >= 3:
+                truth_magnitude = self._compute_velocity_magnitude(truth_data)  # (H, W)
+                pred_magnitude = self._compute_velocity_magnitude(pred_data)  # (H, W)
+            else:
+                # Fallback to first channel
+                truth_magnitude = truth_data[0] if truth_data.ndim == 3 else truth_data
+                pred_magnitude = pred_data[0] if pred_data.ndim == 3 else pred_data
+
+            # Update ground truth with velocity magnitude
+            im1.set_array(truth_magnitude)
             im1.set_clim(vmin=frame_vmin, vmax=frame_vmax)
 
-            # Update prediction with SAME per-frame ranges (crucial for comparison)
-            pred_data = pred_full_sequence[frame, 0].copy()
-            im2.set_array(pred_data)
-            im2.set_clim(vmin=frame_vmin, vmax=frame_vmax)  # Same range as ground truth
+            # Update prediction with velocity magnitude (same range as ground truth)
+            im2.set_array(pred_magnitude)
+            im2.set_clim(vmin=frame_vmin, vmax=frame_vmax)
 
             # Update error with frame-specific error range
-            error = np.abs(truth_data - pred_data)
+            error = np.abs(truth_magnitude - pred_magnitude)
             im3.set_array(error.copy())
             im3.set_clim(vmin=frame_error_vmin, vmax=frame_error_vmax)
 
-            # Update colorbars to reflect the new ranges
-            cb1.set_clim(vmin=frame_vmin, vmax=frame_vmax)
-            cb2.set_clim(vmin=frame_vmin, vmax=frame_vmax)  # Same range as cb1
-            cb3.set_clim(vmin=frame_error_vmin, vmax=frame_error_vmax)
+            # Update colorbars to reflect the new ranges (use mappable instead of colorbar)
+            cb1.mappable.set_clim(vmin=frame_vmin, vmax=frame_vmax)
+            cb2.mappable.set_clim(vmin=frame_vmin, vmax=frame_vmax)  # Same range as cb1
+            cb3.mappable.set_clim(vmin=frame_error_vmin, vmax=frame_error_vmax)
 
             # Update title with range information
             if frame < input_len:
@@ -938,15 +1127,15 @@ class SimpleModelEvaluator:
                 # Predict using ground truth input (teacher forcing)
                 with torch.no_grad():
                     pred = self.model(input_seq, return_delta=False)  # Use residual prediction
-                    pred_denorm = dataset.denormalize(pred).cpu().numpy()[0, 0]  # (H, W)
-                    predictions.append(pred_denorm)
+                    pred_denorm = dataset.denormalize(pred).cpu().numpy()[0]  # (C, H, W)
+                    predictions.append(pred_denorm[0])  # Store first channel for visualization compatibility
 
                     # Save prediction as H5 file if enabled
                     if self.save_predictions:
                         # Get the real timestep from the dataset indices
                         real_timestep = dataset.indices[sample_idx + i] + dataset.input_length + 1
                         self._save_prediction_as_h5(
-                            pred_denorm,
+                            pred_denorm,  # Save all channels (C, H, W)
                             split,
                             real_timestep,  # Use real timestep as sample index
                             i + 1,  # Timestep 1-based for prediction sequence
@@ -992,9 +1181,9 @@ class SimpleModelEvaluator:
                 if i == 0:
                     # For first sample, add all input frames
                     for j in range(input_seq_denorm.shape[0]):
-                        ground_truth_frames.append(input_seq_denorm[j, 0])
+                        ground_truth_frames.append(input_seq_denorm[j])  # Keep all channels (C, H, W)
                 # Add the target frame
-                ground_truth_frames.append(target[0])
+                ground_truth_frames.append(target)  # Keep all channels (C, H, W)
             else:
                 # If we run out of samples, repeat the last one
                 if ground_truth_frames:
@@ -1020,7 +1209,7 @@ class SimpleModelEvaluator:
             base_real_timestep = dataset.indices[sample_idx] + dataset.input_length + 1
             for t in range(pred_seq_np.shape[0]):
                 self._save_prediction_as_h5(
-                    pred_seq_np[t, 0],  # Take first channel (H, W)
+                    pred_seq_np[t],  # Save all channels (C, H, W)
                     f"{split}_autoregressive",  # Distinguish from teacher forcing
                     base_real_timestep + t,  # Use real timestep sequence
                     t + 1,  # Timestep 1-based for prediction sequence
@@ -1038,8 +1227,8 @@ class SimpleModelEvaluator:
         ground_truth_frames = ground_truth_frames[: len(pred_full_sequence)]
 
         # Separate predictions only (exclude input frames)
-        predictions_only = pred_seq[:, 0]  # (T_pred, H, W)
-        ground_truth_pred_only = ground_truth_frames[input_len:]  # Skip input frames
+        predictions_only = pred_seq  # Keep all channels (T_pred, C, H, W)
+        ground_truth_pred_only = ground_truth_frames[input_len:]  # Skip input frames, keep all channels
 
         return ground_truth_pred_only, predictions_only
 
@@ -1139,36 +1328,63 @@ class SimpleModelEvaluator:
             axes = axes.reshape(3, 1)
 
         # Calculate and print quantitative metrics
-        print(f"\n{split.upper()} Autoregressive (TFR=0.0) Results:")
-        print("Step | MSE     | MAE     | Rel Error")
-        print("-" * 35)
+        print(f"\n{split.upper()} Autoregressive (TFR=0.0) Results (Per-channel normalization):")
+        print("Step | MSE     | MAE     | RMS-Rel Error")
+        print("-" * 40)
 
         # Calculate per-timestep colorbar ranges for autoregressive visualization
         ar_timestep_ranges = {}
         ar_timestep_error_ranges = {}
 
         for t in range(num_display):
-            data = ground_truth_frames[t]
-            pred_data = predictions[t]
-            error = np.abs(data - pred_data)
+            data = ground_truth_frames[t]  # (C, H, W)
+            pred_data = predictions[t]  # (C, H, W)
 
-            # Calculate range for this timestep (combining truth and prediction)
-            timestep_vmin = min(data.min(), pred_data.min())
-            timestep_vmax = max(data.max(), pred_data.max())
+            # Compute velocity magnitude for visualization
+            if data.shape[0] >= 3 and pred_data.shape[0] >= 3:
+                data_magnitude = self._compute_velocity_magnitude(data)  # (H, W)
+                pred_magnitude = self._compute_velocity_magnitude(pred_data)  # (H, W)
+            else:
+                # Fallback to first channel
+                data_magnitude = data[0] if data.ndim == 3 else data
+                pred_magnitude = pred_data[0] if pred_data.ndim == 3 else pred_data
+
+            error = np.abs(data_magnitude - pred_magnitude)
+
+            # Calculate range for this timestep (combining truth and prediction magnitude)
+            timestep_vmin = min(data_magnitude.min(), pred_magnitude.min())
+            timestep_vmax = max(data_magnitude.max(), pred_magnitude.max())
             ar_timestep_ranges[t] = (timestep_vmin, timestep_vmax)
 
             # Calculate error range for this timestep
             ar_timestep_error_ranges[t] = (0, error.max() if error.max() > 0 else 0.1)
 
         for t in range(num_display):
-            data = ground_truth_frames[t]
-            pred_data = predictions[t]
-            error = np.abs(data - pred_data)
+            data = ground_truth_frames[t]  # (C, H, W)
+            pred_data = predictions[t]  # (C, H, W)
 
-            # Calculate metrics
+            # Compute velocity magnitude for visualization
+            if data.shape[0] >= 3 and pred_data.shape[0] >= 3:
+                data_magnitude = self._compute_velocity_magnitude(data)  # (H, W)
+                pred_magnitude = self._compute_velocity_magnitude(pred_data)  # (H, W)
+            else:
+                # Fallback to first channel
+                data_magnitude = data[0] if data.ndim == 3 else data
+                pred_magnitude = pred_data[0] if pred_data.ndim == 3 else pred_data
+
+            error = np.abs(data_magnitude - pred_magnitude)
+
+            # Calculate metrics using smart relative error for per-channel analysis
+            # smart_errors = self._compute_smart_relative_error(
+            #     torch.from_numpy(pred_data), torch.from_numpy(data), ["u", "v", "w"]
+            # )
+
+            # For magnitude, calculate traditional metrics
             mse = np.mean(error**2)
             mae = np.mean(error)
-            rel_error = np.mean(error / (np.abs(data) + 1e-8))
+            # Use RMS-normalized relative error for magnitude (more stable)
+            magnitude_rms = np.sqrt(np.mean(data_magnitude**2))
+            rel_error = mae / (magnitude_rms + 1e-8)
             print(f"t+{t + 1:2d} | {mse:.5f} | {mae:.5f} | {rel_error:.5f}")
 
             # Get timestep-specific ranges
@@ -1176,14 +1392,14 @@ class SimpleModelEvaluator:
             ar_error_vmin, ar_error_vmax = ar_timestep_error_ranges[t]
 
             # Ground truth (using timestep-specific colorbar range)
-            im1 = axes[0, t].imshow(data, cmap="viridis", aspect="auto", vmin=ar_vmin, vmax=ar_vmax)
-            axes[0, t].set_title(f"True t+{t + 1}")
+            im1 = axes[0, t].imshow(data_magnitude, cmap="viridis", aspect="auto", vmin=ar_vmin, vmax=ar_vmax)
+            axes[0, t].set_title(f"True t+{t + 1} (Magnitude)")
             axes[0, t].axis("off")
             plt.colorbar(im1, ax=axes[0, t], fraction=0.046, pad=0.04)
 
             # Prediction (using same timestep-specific colorbar range)
-            im2 = axes[1, t].imshow(pred_data, cmap="viridis", aspect="auto", vmin=ar_vmin, vmax=ar_vmax)
-            axes[1, t].set_title(f"Pred t+{t + 1} (AR)")
+            im2 = axes[1, t].imshow(pred_magnitude, cmap="viridis", aspect="auto", vmin=ar_vmin, vmax=ar_vmax)
+            axes[1, t].set_title(f"Pred t+{t + 1} (AR Magnitude)")
             axes[1, t].axis("off")
             plt.colorbar(im2, ax=axes[1, t], fraction=0.046, pad=0.04)
 
@@ -1283,10 +1499,10 @@ class SimpleModelEvaluator:
             im3.set_array(error)
             im3.set_clim(vmin=tf_frame_error_vmin, vmax=tf_frame_error_vmax)
 
-            # Update colorbars to reflect the new ranges
-            tf_cb1.set_clim(vmin=tf_frame_vmin, vmax=tf_frame_vmax)
-            tf_cb2.set_clim(vmin=tf_frame_vmin, vmax=tf_frame_vmax)  # Same range as tf_cb1
-            tf_cb3.set_clim(vmin=tf_frame_error_vmin, vmax=tf_frame_error_vmax)
+            # Update colorbars to reflect the new ranges (use mappable instead of colorbar)
+            tf_cb1.mappable.set_clim(vmin=tf_frame_vmin, vmax=tf_frame_vmax)
+            tf_cb2.mappable.set_clim(vmin=tf_frame_vmin, vmax=tf_frame_vmax)  # Same range as tf_cb1
+            tf_cb3.mappable.set_clim(vmin=tf_frame_error_vmin, vmax=tf_frame_error_vmax)
 
             # Update title with range information
             mae = np.mean(error)
@@ -1458,7 +1674,7 @@ def main():
     else:
         # Default to the hardcoded path if no argument provided
         checkpoint_path = (
-            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-08-25_18-18-22-222585/checkpoints/step_21500.ckpt"
+            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-09-09_11-35-33-106383/checkpoints/step_29000.ckpt"
         )
 
     if not os.path.exists(checkpoint_path):
