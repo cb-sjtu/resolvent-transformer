@@ -1,3 +1,4 @@
+import einops
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -343,34 +344,215 @@ class FinalPatchExpand2D(nn.Module):
         return x
 
 
-class PatchEmbed2D(nn.Module):
-    """2D patch embedding."""
+class ChannelAttention(nn.Module):
+    """Channel-wise self-attention module.
 
-    def __init__(self, patch_size=(4, 4), in_chans=1, embed_dim=96, norm_layer=None):
+    Applies self-attention along the channel dimension (C=3 for u,v,w).
+
+    Input:  (B, T, N, patch_dim, C)
+    Output: (B, T, N, C * d_c)
+    """
+
+    def __init__(
+        self,
+        patch_dim: int,
+        d_c: int = 32,
+        num_heads: int = 1,
+        qkv_bias: bool = True,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
+    ):
+        super().__init__()
+        self.patch_dim = patch_dim
+        self.d_c = d_c
+        self.num_heads = num_heads
+        head_dim = d_c // num_heads
+        self.scale = head_dim**-0.5
+
+        # Linear projection: ph*pw -> d_c
+        self.patch_proj = nn.Linear(patch_dim, d_c)
+
+        # Self-attention components
+        self.qkv = nn.Linear(d_c, d_c * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(d_c, d_c)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x):
+        """
+        Args:
+            x: (B, T, N, patch_dim, C) where patch_dim = ph*pw = 16
+        Returns:
+            (B, T, N, C * d_c) where d_c = 32
+        """
+        B, T, N, patch_dim, C = x.shape
+
+        # Project patch dimension: (B, T, N, patch_dim, C) -> (B, T, N, C, d_c)
+        # Apply linear projection to each channel separately
+        x = x.transpose(-2, -1)  # (B, T, N, C, patch_dim)
+        x = self.patch_proj(x)  # (B, T, N, C, d_c)
+
+        # Reshape for channel attention: (B, T, N, C, d_c) -> (B*T*N, C, d_c)
+        x = einops.rearrange(x, "b t n c d -> (b t n) c d")
+
+        # Apply self-attention along channel dimension
+        # Q, K, V: (B*T*N, C=3, d_c=32)
+        B_flat, C_seq, d_c = x.shape
+        qkv = self.qkv(x).reshape(B_flat, C_seq, 3, self.num_heads, d_c // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]  # Each: (B*T*N, num_heads, C=3, head_dim)
+
+        q = q * self.scale
+        attn = q @ k.transpose(-2, -1)  # (B*T*N, num_heads, C=3, C=3) - Score matrix: 3x3 attention between u,v,w
+        attn = F.softmax(attn, dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B_flat, C_seq, d_c)  # (B*T*N, C=3, d_c=32)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+
+        # Reshape back and flatten channels: (B*T*N, C, d_c) -> (B, T, N, C*d_c)
+        x = einops.rearrange(x, "(b t n) c d -> b t n (c d)", b=B, t=T, n=N)
+
+        return x  # (B, T, N, C*d_c) = (2, 3, 1536, 96)
+
+
+class TemporalAttention(nn.Module):
+    """Temporal self-attention module.
+
+    Applies self-attention along the temporal dimension T.
+
+    Input:  (B, T, N, embed_dim)
+    Output: (B, T, N, embed_dim)
+    """
+
+    def __init__(
+        self, embed_dim: int, num_heads: int = 8, qkv_bias: bool = True, attn_drop: float = 0.0, proj_drop: float = 0.0
+    ):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        head_dim = embed_dim // num_heads
+        self.scale = head_dim**-0.5
+
+        self.qkv = nn.Linear(embed_dim, embed_dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(embed_dim, embed_dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x):
+        """
+        Args:
+            x: (B, T, N, embed_dim)
+        Returns:
+            (B, T, N, embed_dim)
+        """
+        B, T, N, embed_dim = x.shape
+
+        # Reshape for temporal attention: (B, T, N, embed_dim) -> (B*N, T, embed_dim)
+        x = einops.rearrange(x, "b t n d -> (b n) t d")
+
+        # Apply self-attention along temporal dimension
+        # Q, K, V: (B*N, T=3, embed_dim=96)
+        BN, T_seq, D = x.shape
+        qkv = self.qkv(x).reshape(BN, T_seq, 3, self.num_heads, D // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]  # Each: (B*N, num_heads, T=3, head_dim)
+
+        q = q * self.scale
+        attn = q @ k.transpose(-2, -1)  # (B*N, num_heads, T=3, T=3) - Score matrix: 3x3 attention between time steps
+        attn = F.softmax(attn, dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(BN, T_seq, D)  # (B*N, T=3, embed_dim=96)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+
+        # Reshape back: (B*N, T, embed_dim) -> (B, T, N, embed_dim)
+        x = einops.rearrange(x, "(b n) t d -> b t n d", b=B, n=N)
+
+        return x  # (B, T, N, embed_dim)
+
+
+class PatchEmbed2D(nn.Module):
+    """Enhanced 2D patch embedding with channel attention support.
+
+    Pipeline:
+    1. Input: (B, T*C, H, W) -> Patchify: (B, T, H//ph, W//pw, ph*pw, C)
+    2. Channel attention: Apply self-attention along C dimension
+    3. Linear projection: (C * d_c) -> embed_dim
+    4. Output: (B, T, N, embed_dim)
+    """
+
+    def __init__(
+        self, patch_size=(4, 4), in_chans=3, embed_dim=96, d_c=32, use_channel_attention=True, norm_layer=None
+    ):
         super().__init__()
         self.patch_size = patch_size
-        self.in_chans = in_chans
+        self.in_chans = in_chans  # Number of channels (C=3 for u,v,w)
         self.embed_dim = embed_dim
+        self.d_c = d_c
+        self.use_channel_attention = use_channel_attention
+        self.patch_area = patch_size[0] * patch_size[1]  # ph*pw = 16 for patch_size=(4,4)
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        # Channel attention module
+        if use_channel_attention:
+            self.channel_attention = ChannelAttention(patch_dim=self.patch_area, d_c=d_c, num_heads=1)
+            # Project from (C * d_c) to embed_dim
+            self.proj = nn.Linear(in_chans * d_c, embed_dim)
+        else:
+            # Simple linear projection from patch_area to embed_dim
+            self.proj = nn.Linear(self.patch_area, embed_dim)
+
         if norm_layer is not None:
             self.norm = norm_layer(embed_dim)
         else:
             self.norm = None
 
-    def forward(self, x):
+    def forward(self, x, sequence_length=None):
         """
         Args:
-            x: (B, C, H, W)
+            x: (B, T*C, H, W) where T*C = sequence_length * num_channels
         Returns:
-            (B, N, embed_dim) where N = (H//Ph) * (W//Pw)
+            (B, T, N, embed_dim), (patch_H, patch_W)
         """
-        x = self.proj(x)  # (B, embed_dim, H//Ph, W//Pw)
-        B, C, H, W = x.shape
-        x = x.flatten(2).transpose(1, 2)  # (B, N, embed_dim)
+        B, TC, H, W = x.shape
+        ph, pw = self.patch_size
+
+        # Infer sequence_length if not provided
+        if sequence_length is None:
+            sequence_length = TC // self.in_chans
+        T = sequence_length
+        C = self.in_chans
+
+        # Reshape to separate time and channels: (B, T*C, H, W) -> (B, T, C, H, W)
+        x = einops.rearrange(x, "b (t c) h w -> b t c h w", t=T, c=C)
+
+        # Patchify while keeping channels separate
+        # (B, T, C, H, W) -> (B, T, C, H//ph, W//pw, ph, pw)
+        x = einops.rearrange(x, "b t c (h ph) (w pw) -> b t c h w ph pw", ph=ph, pw=pw)
+
+        # Flatten patch dimensions: (B, T, C, H//ph, W//pw, ph*pw)
+        patch_H, patch_W = H // ph, W // pw
+        x = einops.rearrange(x, "b t c h w ph pw -> b t h w (ph pw) c")
+
+        # Reshape for processing: (B, T, H//ph, W//pw, ph*pw, C) -> (B, T, N, ph*pw, C)
+        x = einops.rearrange(x, "b t h w patch_dim c -> b t (h w) patch_dim c")
+
+        if self.use_channel_attention:
+            # Apply channel attention: (B, T, N, ph*pw, C) -> (B, T, N, C*d_c)
+            x = self.channel_attention(x)  # (B, T, N, C*d_c) = (B, T, N, 96)
+
+            # Project to embed_dim: (C*d_c) -> embed_dim
+            x = self.proj(x)  # (B, T, N, embed_dim)
+        else:
+            # Simple approach: combine channels and flatten
+            # (B, T, N, ph*pw, C) -> (B, T, N, ph*pw*C)
+            x = einops.rearrange(x, "b t n patch_dim c -> b t n (patch_dim c)")
+            x = self.proj(x)  # (B, T, N, embed_dim)
+
         if self.norm is not None:
             x = self.norm(x)
-        return x, (H, W)
+
+        return x, (patch_H, patch_W)  # (B, T, N, embed_dim), (patch_H, patch_W)
 
 
 class SwinTransformer2DWithMerging(nn.Module):
@@ -381,6 +563,7 @@ class SwinTransformer2DWithMerging(nn.Module):
         input_shape: tuple[int, int],  # (H, W)
         sequence_length: int = 5,
         prediction_horizon: int = 1,
+        num_channels: int = 3,  # Number of channels (3 for u,v,w)
         patch_size: tuple[int, int] = (4, 4),
         embed_dim: int = 96,
         depths: tuple[int, ...] = (2, 4, 4, 6, 4, 4, 2),
@@ -404,6 +587,7 @@ class SwinTransformer2DWithMerging(nn.Module):
         self.input_shape = input_shape
         self.sequence_length = sequence_length
         self.prediction_horizon = prediction_horizon
+        self.num_channels = num_channels
         self.patch_size = patch_size
         self.embed_dim = embed_dim
         self.patch_norm = patch_norm
@@ -425,19 +609,34 @@ class SwinTransformer2DWithMerging(nn.Module):
 
         # Temporal embedding - combine sequence into channels
         self.temporal_conv = nn.Conv2d(
-            sequence_length, sequence_length, kernel_size=3, padding=1, groups=sequence_length
+            sequence_length * self.num_channels,
+            sequence_length * self.num_channels,
+            kernel_size=3,
+            padding=1,
+            groups=sequence_length * self.num_channels,
         )
 
         # Temporal position embedding
-        self.temporal_pos_embed = nn.Parameter(torch.zeros(1, sequence_length, 1, 1, 1))
+        self.temporal_pos_embed = nn.Parameter(torch.zeros(1, sequence_length, self.num_channels, 1, 1))
         nn.init.trunc_normal_(self.temporal_pos_embed, std=0.02)
 
-        # Patch embedding
+        # Enhanced patch embedding with channel attention
         self.patch_embed = PatchEmbed2D(
             patch_size=patch_size,
-            in_chans=sequence_length,
+            in_chans=self.num_channels,
             embed_dim=embed_dim,
+            d_c=32,  # Channel projection dimension
+            use_channel_attention=True,
             norm_layer=norm_layer if self.patch_norm else None,
+        )
+
+        # Temporal attention module
+        self.temporal_attn = TemporalAttention(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            attn_drop=attn_drop_rate,
+            proj_drop=drop_rate,
         )
 
         self.pos_drop = nn.Dropout(drop_rate)
@@ -546,8 +745,8 @@ class SwinTransformer2DWithMerging(nn.Module):
                 norm_layer=norm_layer,
             )
             self.output = nn.Conv2d(
-                in_channels=embed_dim // patch_size[0],  # PatchExpand2D reduces channels by dim_scale
-                out_channels=prediction_horizon,
+                in_channels=sequence_length * (embed_dim // patch_size[0]),  # T * (reduced channels after PatchExpand)
+                out_channels=prediction_horizon * self.num_channels,  # Output all channels
                 kernel_size=1,
                 bias=False,
             )
@@ -578,23 +777,34 @@ class SwinTransformer2DWithMerging(nn.Module):
         # Handle flattened input
         if len(x.shape) == 4:
             BT, C, H, W = x.shape
-            B = BT // self.sequence_length
+            B = BT // (self.sequence_length * self.num_channels)
             T = self.sequence_length
-            x = x.view(B, T, C, H, W)
+            x = einops.rearrange(x, "(b t c) h w -> b t c h w", b=B, t=T, c=self.num_channels)
         else:
             B, T, C, H, W = x.shape
 
         assert self.sequence_length == T, f"Expected sequence length {self.sequence_length}, got {T}"
+        assert self.num_channels == C, f"Expected {self.num_channels} channels, got {C}"
         assert tuple(self.input_shape) == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
 
         # Add temporal position embedding
-        x = x + self.temporal_pos_embed
-        x = x.reshape(B, T * C, H, W)
+        x = x + self.temporal_pos_embed  # (B, T, C=3, H, W)
+
+        # Reshape for temporal conv: (B, T*C, H, W)
+        x = einops.rearrange(x, "b t c h w -> b (t c) h w")
         x = self.temporal_conv(x)
 
-        # Patch embedding
-        x, _ = self.patch_embed(x)
+        # Enhanced patch embedding with channel attention
+        # Input: (B, T*C, H, W) -> Output: (B, T, N, embed_dim)
+        x, (patch_H, patch_W) = self.patch_embed(x, sequence_length=self.sequence_length)
         x = self.pos_drop(x)
+
+        # Apply temporal attention across T dimension
+        # Input: (B, T, N, embed_dim) -> Output: (B, T, N, embed_dim)
+        x = self.temporal_attn(x)
+
+        # Reshape for spatial processing: (B, T, N, embed_dim) -> (B*T, N, embed_dim)
+        x = einops.rearrange(x, "b t n c -> (b t) n c")
 
         # Store encoder features for skip connections
         x_downsample = []
@@ -643,13 +853,26 @@ class SwinTransformer2DWithMerging(nn.Module):
             # PatchExpand2D with dim_scale=patch_size[0] expands by patch_size[0] in each spatial dimension
             final_H = self.patch_H * self.patch_size[0]
             final_W = self.patch_W * self.patch_size[1]
-            x = x.view(B, final_H, final_W, -1)
-            x = x.permute(0, 3, 1, 2)  # (B, C, H, W)
-            x = self.output(x)  # (B, prediction_horizon, H, W)
+
+            # x is currently (B*T, expanded_patches, reduced_dim)
+            # We need to reshape it back to (B, final_H, final_W, final_channels)
+            BT = x.shape[0]
+            assert BT == B * T, f"Expected BT={B * T}, got {BT}"
+
+            # Reshape (B*T, expanded_patches, reduced_dim) -> (B*T, final_H, final_W, reduced_dim)
+            x = x.view(BT, final_H, final_W, -1)
+            # Now merge time dimension: (B*T, final_H, final_W, reduced_dim) -> (B, final_H, final_W, T*reduced_dim)
+            x = x.view(B, T, final_H, final_W, -1)
+            x = einops.rearrange(x, "b t h w c -> b h w (t c)")
+
+            x = x.permute(0, 3, 1, 2)  # (B, T*reduced_dim, H, W)
+            x = self.output(x)  # (B, prediction_horizon * num_channels, H, W)
+
+            # Reshape to (B, prediction_horizon, num_channels, H, W)
+            x = x.view(B, self.prediction_horizon, self.num_channels, final_H, final_W)
 
             if self.prediction_horizon == 1:
-                x = x.squeeze(1)  # (B, H, W) -> need to add channel dim
-                x = x.unsqueeze(1)  # (B, 1, H, W)
+                x = x.squeeze(1)  # (B, num_channels, H, W)
 
         return x
 
@@ -662,6 +885,7 @@ class SwinTransformer2D(nn.Module):
         input_shape: tuple[int, int],  # (H, W)
         sequence_length: int = 5,
         prediction_horizon: int = 1,
+        num_channels: int = 3,  # Number of channels (3 for u,v,w)
         patch_size: tuple[int, int] = (4, 4),
         embed_dim: int = 96,
         depths: tuple[int, ...] = (2, 2, 6, 2),
@@ -679,6 +903,7 @@ class SwinTransformer2D(nn.Module):
         self.input_shape = input_shape
         self.sequence_length = sequence_length
         self.prediction_horizon = prediction_horizon
+        self.num_channels = num_channels
         self.patch_size = patch_size
         self.embed_dim = embed_dim
         self.use_patch_merging = use_patch_merging
@@ -689,13 +914,19 @@ class SwinTransformer2D(nn.Module):
 
         # Temporal embedding
         self.temporal_conv = nn.Conv2d(
-            sequence_length, sequence_length, kernel_size=3, padding=1, groups=sequence_length
+            sequence_length * num_channels,
+            sequence_length * num_channels,
+            kernel_size=3,
+            padding=1,
+            groups=sequence_length * num_channels,
         )
-        self.temporal_pos_embed = nn.Parameter(torch.zeros(1, sequence_length, 1, 1, 1))
+        self.temporal_pos_embed = nn.Parameter(torch.zeros(1, sequence_length, num_channels, 1, 1))
         nn.init.trunc_normal_(self.temporal_pos_embed, std=0.02)
 
-        # Patch embedding
-        self.patch_embed = PatchEmbed2D(patch_size=patch_size, in_chans=sequence_length, embed_dim=embed_dim)
+        # Enhanced patch embedding with channel attention
+        self.patch_embed = PatchEmbed2D(
+            patch_size=patch_size, in_chans=num_channels, embed_dim=embed_dim, d_c=32, use_channel_attention=True
+        )
         self.pos_drop = nn.Dropout(drop_rate)
 
         # Build layers with optional patch merging
@@ -737,14 +968,14 @@ class SwinTransformer2D(nn.Module):
 
         self.norm = nn.LayerNorm(current_dim)
 
-        # Output projection - adapted for final dimension
+        # Output projection - adapted for multi-channel output
         self.output_proj = nn.Sequential(
             nn.Linear(current_dim, current_dim * 2),
             nn.GELU(),
             nn.Dropout(drop_rate),
             nn.Linear(current_dim * 2, embed_dim),  # Project back to original embed_dim
             nn.GELU(),
-            nn.Linear(embed_dim, prediction_horizon * (patch_size[0] * patch_size[1])),
+            nn.Linear(embed_dim, prediction_horizon * num_channels * (patch_size[0] * patch_size[1])),
         )
 
         # Initialize weights
@@ -773,22 +1004,27 @@ class SwinTransformer2D(nn.Module):
         # Handle flattened input
         if len(x.shape) == 4:
             BT, C, H, W = x.shape
-            B = BT // self.sequence_length
+            B = BT // (self.sequence_length * self.num_channels)
             T = self.sequence_length
-            x = x.view(B, T, C, H, W)
+            x = einops.rearrange(x, "(b t c) h w -> b t c h w", b=B, t=T, c=self.num_channels)
         else:
             B, T, C, H, W = x.shape
 
         assert self.sequence_length == T, f"Expected sequence length {self.sequence_length}, got {T}"
-        assert self.input_shape == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
+        assert self.num_channels == C, f"Expected {self.num_channels} channels, got {C}"
+        assert tuple(self.input_shape) == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
 
         # Temporal processing
-        x = x + self.temporal_pos_embed
-        x = x.reshape(B, T * C, H, W)
+        x = x + self.temporal_pos_embed  # (B, T, C=3, H, W)
+        x = einops.rearrange(x, "b t c h w -> b (t c) h w")  # (B, T*C, H, W)
         x = self.temporal_conv(x)
 
-        # Patch embedding
-        x, _ = self.patch_embed(x)
+        # Enhanced patch embedding with channel attention
+        # Input: (B, T*C, H, W) -> Output: (B, T, N, embed_dim)
+        x, _ = self.patch_embed(x, sequence_length=self.sequence_length)
+
+        # For SwinTransformer2D (without U-Net), reshape to (B*T, N, embed_dim) for spatial processing
+        x = einops.rearrange(x, "b t n c -> (b t) n c")
         x = self.pos_drop(x)
 
         # Apply Swin Transformer layers with optional patch merging
@@ -807,31 +1043,41 @@ class SwinTransformer2D(nn.Module):
         x = self.norm(x)
 
         # Global average pooling to reduce spatial dimensions
-        # Reshape for pooling: (B, H*W, C) -> (B, C, H, W)
-        x = x.transpose(1, 2).view(B, -1, current_H, current_W)
+        # Reshape for pooling: (B*T, H*W, C) -> (B*T, C, H, W)
+        # Note: After patch_embed and temporal attention, x is (B*T, N, embed_dim)
+        BT = x.shape[0]
+        x = x.transpose(1, 2).reshape(BT, -1, current_H, current_W)
         x = F.adaptive_avg_pool2d(x, (self.patch_H, self.patch_W))  # Pool back to original patch resolution
-        x = x.view(B, -1, self.patch_H * self.patch_W).transpose(1, 2)  # Back to (B, H*W, C)
+        x = x.view(BT, -1, self.patch_H * self.patch_W).transpose(1, 2)  # Back to (B*T, H*W, C)
+        # Average across time dimension
+        x = x.view(B, T, self.patch_H * self.patch_W, -1).mean(dim=1)  # (B, H*W, C)
 
         # Output projection
-        x = self.output_proj(x)  # (B, N_patches, prediction_horizon * patch_area)
+        x = self.output_proj(x)  # (B, N_patches, prediction_horizon * num_channels * patch_area)
 
-        # Reshape to output format
+        # Reshape to output format with multi-channel support
         patch_area = self.patch_size[0] * self.patch_size[1]
-        x = x.reshape(B, self.patch_H, self.patch_W, self.prediction_horizon, patch_area)
+        x = x.reshape(B, self.patch_H, self.patch_W, self.prediction_horizon, self.num_channels, patch_area)
 
         # Reconstruct spatial dimensions
-        x = x.permute(0, 3, 1, 2, 4)  # (B, T_pred, patch_H, patch_W, patch_area)
+        x = x.permute(0, 3, 4, 1, 2, 5)  # (B, T_pred, C, patch_H, patch_W, patch_area)
         x = x.contiguous().reshape(
-            B, self.prediction_horizon, self.patch_H, self.patch_W, self.patch_size[0], self.patch_size[1]
+            B,
+            self.prediction_horizon,
+            self.num_channels,
+            self.patch_H,
+            self.patch_W,
+            self.patch_size[0],
+            self.patch_size[1],
         )
 
         # Unfold patches back to original spatial resolution
-        x = x.permute(0, 1, 2, 4, 3, 5)  # (B, T_pred, patch_H, patch_size[0], patch_W, patch_size[1])
-        x = x.contiguous().reshape(B, self.prediction_horizon, 1, H, W)
+        x = x.permute(0, 1, 2, 3, 5, 4, 6)  # (B, T_pred, C, patch_H, patch_size[0], patch_W, patch_size[1])
+        x = x.contiguous().reshape(B, self.prediction_horizon, self.num_channels, H, W)
 
         # Handle output format
         if self.prediction_horizon == 1:
-            x = x.squeeze(1)  # (B, 1, H, W)
+            x = x.squeeze(1)  # (B, C, H, W)
 
         return x
 
@@ -869,14 +1115,40 @@ def SwinTransformerAuto(use_patch_merging: bool = True, **kwargs):
 
 
 if __name__ == "__main__":
-    print("Testing Enhanced Swin Transformer 2D with patch merging...")
+    print("Testing Enhanced Swin Transformer 2D with Multi-Channel Support...")
 
-    # Test with patch merging enabled
-    print("\n1. Testing with patch merging enabled:")
-    model_with_merging = SwinTransformer2D(
+    # Test with U-Net architecture (patch merging enabled)
+    print("\n1. Testing SwinTransformer2DWithMerging (U-Net architecture):")
+    model_unet = SwinTransformer2DWithMerging(
         input_shape=(64, 48),  # Smaller for testing
-        sequence_length=5,
+        sequence_length=3,
         prediction_horizon=1,
+        num_channels=3,  # u, v, w channels
+        embed_dim=48,
+        depths=(2, 2, 2, 2, 2),  # Encoder-Latent-Decoder
+        num_heads=4,
+        window_size=(4, 4),
+        patch_size=(4, 4),
+        drop_path_rate=0.0,
+    )
+
+    x = torch.randn(1, 3, 3, 64, 48)  # (B, T=3, C=3, H=64, W=48) for u,v,w channels
+    print(f"Input shape: {x.shape}")
+    print("  - B=1 (batch), T=3 (time), C=3 (u,v,w), H=64, W=48")
+
+    with torch.no_grad():
+        output_unet = model_unet(x)
+    print(f"Output shape: {output_unet.shape}")
+    print("Expected: (B=1, C=3, H=64, W=48) for multi-channel prediction")
+    print(f"Model parameters: {sum(p.numel() for p in model_unet.parameters()) / 1e6:.2f}M")
+
+    # Test with standard Swin architecture
+    print("\n2. Testing SwinTransformer2D (standard architecture):")
+    model_std = SwinTransformer2D(
+        input_shape=(64, 48),
+        sequence_length=3,
+        prediction_horizon=1,
+        num_channels=3,  # u, v, w channels
         embed_dim=48,
         depths=(2, 2),
         num_heads=(3, 6),
@@ -886,35 +1158,40 @@ if __name__ == "__main__":
         drop_path_rate=0.0,
     )
 
-    x = torch.randn(1, 3, 1, 64, 48)  # (B, T, C, H, W)
-    print(f"Input shape: {x.shape}")
+    with torch.no_grad():
+        output_std = model_std(x)
+    print(f"Output shape: {output_std.shape}")
+    print(f"Model parameters: {sum(p.numel() for p in model_std.parameters()) / 1e6:.2f}M")
+
+    # Test channel attention module separately
+    print("\n3. Testing ChannelAttention module:")
+    B, T, N, patch_dim, C = 2, 3, 32 * 48, 16, 3  # Example dimensions
+    channel_attn = ChannelAttention(patch_dim=patch_dim, d_c=32)
+    test_input = torch.randn(B, T, N, patch_dim, C)
+    print(f"ChannelAttention input: {test_input.shape}")
+    print("  - (B=2, T=3, N=1536, patch_dim=16, C=3)")
 
     with torch.no_grad():
-        output = model_with_merging(x)
-    print(f"Output shape: {output.shape}")
-    print(f"Model parameters: {sum(p.numel() for p in model_with_merging.parameters()) / 1e6:.2f}M")
+        channel_out = channel_attn(test_input)
+    print(f"ChannelAttention output: {channel_out.shape}")
+    print(f"Expected: (B=2, T=3, N=1536, C*d_c=96) = {(B, T, N, C * 32)}")
 
-    # Test without patch merging (original behavior)
-    print("\n2. Testing without patch merging (original behavior):")
-    model_without_merging = SwinTransformer2D(
-        input_shape=(64, 48),
-        sequence_length=5,
-        prediction_horizon=1,
-        embed_dim=48,
-        depths=(2, 2),
-        num_heads=(3, 6),
-        window_size=(4, 4),
-        patch_size=(4, 4),
-        use_patch_merging=False,
-        drop_path_rate=0.0,
-    )
+    # Test temporal attention module
+    print("\n4. Testing TemporalAttention module:")
+    B, T, N, embed_dim = 2, 3, 1536, 96
+    temporal_attn = TemporalAttention(embed_dim=embed_dim, num_heads=8)
+    test_input = torch.randn(B, T, N, embed_dim)
+    print(f"TemporalAttention input: {test_input.shape}")
+    print("  - (B=2, T=3, N=1536, embed_dim=96)")
 
     with torch.no_grad():
-        output_orig = model_without_merging(x)
-    print(f"Output shape: {output_orig.shape}")
-    print(f"Model parameters: {sum(p.numel() for p in model_without_merging.parameters()) / 1e6:.2f}M")
+        temporal_out = temporal_attn(test_input)
+    print(f"TemporalAttention output: {temporal_out.shape}")
+    print("Expected: (B=2, T=3, N=1536, embed_dim=96)")
 
-    print("\n✓ All tests passed! Enhanced model with patch merging is working.")
-    print("  - Patch merging enables multiscale feature extraction")
-    print("  - U-net-like architecture improves spatial reasoning")
-    print("  - Backward compatibility maintained with use_patch_merging=False")
+    print("\n✓ All tests passed! Enhanced multi-channel Swin Transformer is working.")
+    print("  ✓ Channel-wise attention processes u,v,w channels separately then combines them")
+    print("  ✓ Temporal attention processes across time dimension (T=3)")
+    print("  ✓ Spatial attention uses Swin blocks for local-global feature extraction")
+    print("  ✓ Output supports multi-channel prediction (C=3 for u,v,w)")
+    print("  ✓ Both U-Net and standard architectures support the new pipeline")

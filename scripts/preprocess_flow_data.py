@@ -17,7 +17,7 @@ from tqdm import tqdm
 def extract_flow_data(
     input_dir: str,
     output_dir: str,
-    field_name: str = "u",
+    field_names: list[str] = None,
     resolution_scale: tuple[int, int, int] = (1, 4, 4),
     y_slice: int = None,
     file_pattern: str = "*.h5",
@@ -31,7 +31,7 @@ def extract_flow_data(
     Args:
         input_dir: Directory containing original large HDF5 files
         output_dir: Directory to save extracted smaller files
-        field_name: Field to extract ('u', 'v', 'w', 'p')
+        field_names: List of fields to extract (e.g., ['u', 'v', 'w'])
         resolution_scale: Downsampling factors for (z, y, x) dimensions
         y_slice: Which y-slice to extract (None for middle slice)
         file_pattern: Pattern to match input files
@@ -39,6 +39,8 @@ def extract_flow_data(
         overwrite: Whether to overwrite existing output files
         compress: Whether to use HDF5 compression
     """
+    if field_names is None:
+        field_names = ["u", "v", "w"]
 
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
@@ -64,7 +66,7 @@ def extract_flow_data(
             print(f"Warning: Start file {start_file} not found, processing all files")
 
     print(f"Found {len(input_files)} files to process")
-    print(f"Field: {field_name}")
+    print(f"Fields: {field_names}")
     print(f"Resolution scale: {resolution_scale}")
     print(f"Y-slice: {y_slice} (None means middle slice)")
     print(f"Output directory: {output_dir}")
@@ -73,7 +75,8 @@ def extract_flow_data(
     # Determine y_slice from first file if not specified
     if y_slice is None:
         with h5py.File(input_files[0], "r") as f:
-            original_shape = f["data"][field_name].shape
+            first_field = field_names[0]
+            original_shape = f["data"][first_field].shape
             # Calculate y_slice AFTER downsampling
             downsampled_y_size = original_shape[2] // resolution_scale[2]
             y_slice = downsampled_y_size // 2  # Middle slice in downsampled y-direction
@@ -91,8 +94,9 @@ def extract_flow_data(
     for input_file in tqdm(input_files, desc="Processing files"):
         # Generate output filename
         input_filename = os.path.basename(input_file)
+        field_names_str = "-".join(field_names)
         output_filename = (
-            f"{field_name}_scale{resolution_scale[0]}-"
+            f"{field_names_str}_scale{resolution_scale[0]}-"
             f"{resolution_scale[1]}-{resolution_scale[2]}_"
             f"yslice{y_slice}_{input_filename}"
         )
@@ -104,17 +108,29 @@ def extract_flow_data(
             continue
 
         try:
-            # Load and process data
+            # Load and process data for all fields
             with h5py.File(input_file, "r") as f_in:
-                # Get original data
-                original_data = f_in["data"][field_name][()]
-                original_shape = original_data.shape
+                channel_data_list = []
+                original_shape = None
 
-                # Apply downsampling
-                downsampled_data = original_data[:: resolution_scale[0], :: resolution_scale[1], :: resolution_scale[2]]
+                # Extract each field
+                for field_name in field_names:
+                    # Get original data
+                    original_data = f_in["data"][field_name][()]
+                    if original_shape is None:
+                        original_shape = original_data.shape
 
-                # Extract 2D slice (y-slice, result is (z, x))
-                data_2d = downsampled_data[:, :, y_slice]
+                    # Apply downsampling
+                    downsampled_data = original_data[
+                        :: resolution_scale[0], :: resolution_scale[1], :: resolution_scale[2]
+                    ]
+
+                    # Extract 2D slice (y-slice, result is (z, x))
+                    data_2d = downsampled_data[:, :, y_slice]
+                    channel_data_list.append(data_2d)
+
+                # Stack all channels together: (C, H, W)
+                multi_channel_data = np.stack(channel_data_list, axis=0)
 
                 # Get file sizes for comparison
                 original_size = os.path.getsize(input_file)
@@ -124,15 +140,16 @@ def extract_flow_data(
             compression_opts = {"compression": "gzip", "compression_opts": 9} if compress else {}
 
             with h5py.File(output_path, "w") as f_out:
-                # Save the 2D extracted data
-                f_out.create_dataset("data", data=data_2d, dtype=np.float32, **compression_opts)
+                # Save the multi-channel 2D extracted data
+                f_out.create_dataset("data", data=multi_channel_data, dtype=np.float32, **compression_opts)
 
                 # Save metadata
-                f_out.attrs["original_field"] = field_name
+                f_out.attrs["field_names"] = field_names
+                f_out.attrs["num_channels"] = len(field_names)
                 f_out.attrs["original_shape"] = original_shape
                 f_out.attrs["resolution_scale"] = resolution_scale
                 f_out.attrs["y_slice"] = y_slice
-                f_out.attrs["extracted_shape"] = data_2d.shape
+                f_out.attrs["extracted_shape"] = multi_channel_data.shape
                 f_out.attrs["source_file"] = input_filename
 
             # Track saved size
@@ -142,7 +159,7 @@ def extract_flow_data(
             # Print progress info
             reduction_ratio = saved_size / original_size if original_size > 0 else 0
             print(
-                f"  {input_filename}: {original_shape} -> {data_2d.shape}, "
+                f"  {input_filename}: {original_shape} -> {multi_channel_data.shape}, "
                 f"{original_size / 1024 / 1024:.1f}MB -> {saved_size / 1024 / 1024:.1f}MB "
                 f"({reduction_ratio:.3f}x)"
             )
@@ -162,7 +179,7 @@ def extract_flow_data(
         print(f"Total size reduction: {total_reduction:.4f}x ({100 * (1 - total_reduction):.1f}% smaller)")
 
 
-def create_fast_dataset_class(output_dir: str, field_name: str, resolution_scale: tuple, y_slice: int) -> str:
+def create_fast_dataset_class(output_dir: str, field_names: list[str], resolution_scale: tuple, y_slice: int) -> str:
     """Create a fast dataset class for the preprocessed data."""
 
     dataset_code = f'''import glob
@@ -202,12 +219,14 @@ class FastFlowSequence2DDataset(Dataset):
         self.split = split
 
         # Metadata from preprocessing
-        self.field_name = "{field_name}"
+        self.field_names = {field_names}
+        self.num_channels = {len(field_names)}
         self.resolution_scale = {resolution_scale}
         self.y_slice = {y_slice}
 
         # Get all preprocessed files
-        pattern = f"{field_name}_scale{resolution_scale[0]}-"
+        field_names_str = "-".join(self.field_names)
+        pattern = f"{{field_names_str}}_scale{resolution_scale[0]}-"
         f"{resolution_scale[1]}-{resolution_scale[2]}_yslice{y_slice}_*.h5"
         self.file_list = sorted(glob.glob(os.path.join(data_dir, pattern)))
         self.num_frames = len(self.file_list)
@@ -247,27 +266,23 @@ class FastFlowSequence2DDataset(Dataset):
                 - "label": target frame
         """
         base_idx = self.indices[idx]
-        description = f"dataset: FastFlowSequence2DDataset, idx: {{idx}}, field: {{self.field_name}}"
+        description = f"dataset: FastFlowSequence2DDataset, idx: {{idx}}, fields: {{self.field_names}}"
 
         # Load input sequence - much faster now!
         frames = []
         for i in range(self.input_length + 1):
             fpath = self.file_list[base_idx + i]
             with h5py.File(fpath, "r") as f:
-                data_2d = f["data"][()]  # Already preprocessed 2D data
-                frames.append(data_2d)
+                data_multi_channel = f["data"][()]  # Already preprocessed multi-channel 2D data (C, H, W)
+                frames.append(data_multi_channel)
 
         # Convert to tensors
-        input_seq = np.stack(frames[:-1], axis=0)  # (input_length, H, W)
-        target = frames[-1]  # (H, W)
-
-        # Add channel dimension
-        input_seq = input_seq[:, None, :, :]  # (input_length, 1, H, W)
-        target = target[None, :, :]  # (1, H, W)
+        input_seq = np.stack(frames[:-1], axis=0)  # (input_length, C, H, W)
+        target = frames[-1]  # (C, H, W)
 
         # Add batch dimension like original dataset
-        input_seq = torch.from_numpy(input_seq).float().unsqueeze(0)  # (1, input_length, 1, H, W)
-        target = torch.from_numpy(target).float().unsqueeze(0)  # (1, 1, H, W)
+        input_seq = torch.from_numpy(input_seq).float().unsqueeze(0)  # (1, input_length, C, H, W)
+        target = torch.from_numpy(target).float().unsqueeze(0)  # (1, C, H, W)
 
         # Structure like original dataset
         data = {{"input_seq": input_seq}}
@@ -299,7 +314,12 @@ def main():
     parser.add_argument("--input_dir", type=str, required=True, help="Input directory with large HDF5 files")
     parser.add_argument("--output_dir", type=str, required=True, help="Output directory for extracted files")
     parser.add_argument(
-        "--field", type=str, default="u", choices=["u", "v", "w", "p"], help="Field to extract (default: u)"
+        "--fields",
+        type=str,
+        nargs="+",
+        default=["u", "v", "w"],
+        choices=["u", "v", "w", "p"],
+        help="Fields to extract (default: u v w)",
     )
     parser.add_argument(
         "--resolution_scale",
@@ -324,7 +344,7 @@ def main():
         extract_flow_data(
             input_dir=args.input_dir,
             output_dir=args.output_dir,
-            field_name=args.field,
+            field_names=args.fields,
             resolution_scale=tuple(args.resolution_scale),
             y_slice=args.y_slice,
             file_pattern=args.pattern,
@@ -336,7 +356,7 @@ def main():
         # Create fast dataset class if requested
         if args.create_dataset:
             dataset_code = create_fast_dataset_class(
-                args.output_dir, args.field, tuple(args.resolution_scale), args.y_slice or "middle"
+                args.output_dir, args.fields, tuple(args.resolution_scale), args.y_slice or "middle"
             )
 
             dataset_file = os.path.join(args.output_dir, "fast_flow_dataset.py")

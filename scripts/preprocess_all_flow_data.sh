@@ -7,10 +7,10 @@ set -e
 
 INPUT_DIR="/home/sh/CB/RE550_test"
 OUTPUT_DIR="/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
-FIELD="u"
+FIELDS="u v w"
 RESOLUTION_SCALE="2 3 1"
 Y_SLICE="5"
-START_FILE="t00401.h5"
+START_FILE="t00001.h5"
 LOG_FILE="/home/sh/CB/icon-thewell-dev/logs/preprocessing.log"
 
 # Parse command line arguments
@@ -45,7 +45,7 @@ mkdir -p "$(dirname "$LOG_FILE")"
 echo "Starting flow data preprocessing..."
 echo "Input directory: $INPUT_DIR"
 echo "Output directory: $OUTPUT_DIR"
-echo "Field: $FIELD"
+echo "Fields: $FIELDS"
 echo "Resolution scale: $RESOLUTION_SCALE"
 if [[ -n "$Y_SLICE" ]]; then
     echo "Y-slice: $Y_SLICE"
@@ -59,7 +59,7 @@ echo "Log file: $LOG_FILE"
 PYTHON_CMD="nohup python scripts/preprocess_flow_data.py \
     --input_dir \"$INPUT_DIR\" \
     --output_dir \"$OUTPUT_DIR\" \
-    --field \"$FIELD\" \
+    --fields $FIELDS \
     --resolution_scale $RESOLUTION_SCALE \
     --pattern \"$PATTERN\" \
     --create_dataset \
@@ -91,6 +91,7 @@ echo $PREPROCESS_PID > /tmp/preprocessing_pid.txt
 
 echo ""
 echo "Expected benefits after preprocessing:"
+echo "- Multi-channel data: u, v, w fields combined into single files"
 echo "- File size reduction: ~7000x smaller (2.3GB -> 0.3MB per file)"
 echo "- Faster data loading: No need to downsample during training"
 echo "- Reduced disk I/O bottleneck"
