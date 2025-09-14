@@ -13,8 +13,8 @@ defaults:
   - _self_
 
 data_folder: /home/sh/CB/RE550_test/
-batch_size_per_device: 32
+batch_size_per_device: 16
 
 # Normalization settings
 enable_normalization: true
-norm_stats: "norm_stats_u_scale2-3-1_yslice5.json"  # Path to normalization stats file
+norm_stats: "norm_stats_u-v-w_scale2-3-1_yslice5.json"  # Path to multi-channel normalization stats file
