@@ -208,7 +208,7 @@ class SimpleModelEvaluator:
 
         test_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=3,
+            input_length=5,
             max_k_steps=1,  # For evaluation, we only need single frame targets
             field_names=["u", "v", "w"],  # Use 3-channel uvw data
             file_pattern="*.h5",
@@ -233,7 +233,7 @@ class SimpleModelEvaluator:
 
         train_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=3,
+            input_length=5,
             max_k_steps=1,  # For evaluation, we only need single frame targets
             field_names=["u", "v", "w"],  # Use 3-channel uvw data
             file_pattern="*.h5",
@@ -258,7 +258,7 @@ class SimpleModelEvaluator:
 
         val_dataset = FastFlowSequence2DDataset(
             data_dir=data_dir,
-            input_length=3,
+            input_length=5,
             max_k_steps=1,  # For evaluation, we only need single frame targets
             field_names=["u", "v", "w"],  # Use 3-channel uvw data
             file_pattern="*.h5",

@@ -1,0 +1,18 @@
+# Requirements for flow data visualization scripts
+
+# Core scientific computing
+numpy>=1.21.0
+matplotlib>=3.5.0
+h5py>=3.7.0
+
+# Progress bars
+tqdm>=4.62.0
+
+# Optional: for better video encoding
+# ffmpeg (system package, not Python)
+# pillow>=8.3.0  # for GIF fallback
+
+# Note: Install ffmpeg system package for MP4 video output:
+# Ubuntu/Debian: sudo apt install ffmpeg
+# macOS: brew install ffmpeg
+# Windows: Download from https://ffmpeg.org/
