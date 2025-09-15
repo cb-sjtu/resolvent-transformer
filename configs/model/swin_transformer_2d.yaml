@@ -1,7 +1,7 @@
 _target_: src.models.base.swin_transformer.SwinTransformerAuto
 
 input_shape: [256, 256]  # 2D shape (z, x) - z=512/4=128, x=384/4=96
-sequence_length: 3
+sequence_length: 5
 prediction_horizon: 1
 patch_size: [4, 4]
 embed_dim: 128

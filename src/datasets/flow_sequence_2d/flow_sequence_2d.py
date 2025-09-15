@@ -247,7 +247,7 @@ if __name__ == "__main__":
     # Test multi-channel dataset (u, v, w)
     dataset_multi = FlowSequence2DDataset(
         data_dir="/media/sh/Seagate Basic/RE550/",
-        input_length=3,
+        input_length=5,
         field_names=["u", "v", "w"],  # Multi-channel
         resolution_scale=(1, 4, 4),  # No z downsampling, 4x downsample in y,x
         split="train",

@@ -45,7 +45,7 @@ class VideoCreator:
         sample = dataset[sample_idx]
 
         input_seq = sample["input_seq"]  # (1, input_length, C, H, W)
-        ground_truth_seq = sample["target_seq"] if "target_seq" in sample else None
+        ground_truth_seq = sample.get("target_seq", None)
 
         # Run autoregressive prediction
         predictions = self._run_autoregressive_prediction(evaluator.model, input_seq, num_future)
@@ -72,7 +72,7 @@ class VideoCreator:
         current_seq = input_seq.clone()  # (1, input_length, C, H, W)
 
         with torch.no_grad():
-            for step in range(num_steps):
+            for _step in range(num_steps):
                 # Predict next frame
                 next_pred = model(current_seq)  # (1, C, H, W) or (1, 1, C, H, W)
 
@@ -158,19 +158,19 @@ class VideoCreator:
         im1 = axes[0, 0].imshow(truth_mag_0, cmap="plasma", aspect="auto", vmin=global_vmin, vmax=global_vmax)
         axes[0, 0].set_title("Ground Truth")
         axes[0, 0].axis("off")
-        cb1 = plt.colorbar(im1, ax=axes[0, 0], fraction=0.046, pad=0.04)
+        plt.colorbar(im1, ax=axes[0, 0], fraction=0.046, pad=0.04)
 
         im2 = axes[0, 1].imshow(pred_mag_0, cmap="plasma", aspect="auto", vmin=global_vmin, vmax=global_vmax)
         axes[0, 1].set_title("Prediction")
         axes[0, 1].axis("off")
-        cb2 = plt.colorbar(im2, ax=axes[0, 1], fraction=0.046, pad=0.04)
+        plt.colorbar(im2, ax=axes[0, 1], fraction=0.046, pad=0.04)
 
         # Error plot
         error_0 = np.abs(truth_mag_0 - pred_mag_0)
         im3 = axes[1, 0].imshow(error_0, cmap="Reds", aspect="auto", vmin=0, vmax=error_0.max())
         axes[1, 0].set_title("Absolute Error")
         axes[1, 0].axis("off")
-        cb3 = plt.colorbar(im3, ax=axes[1, 0], fraction=0.046, pad=0.04)
+        plt.colorbar(im3, ax=axes[1, 0], fraction=0.046, pad=0.04)
 
         # Text info
         axes[1, 1].axis("off")

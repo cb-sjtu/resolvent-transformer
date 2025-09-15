@@ -104,7 +104,7 @@ class TimeSeriesMonitor:
         magnitude = compute_velocity_magnitude(data)
 
         # Extract values at each monitoring point
-        for i, (z_idx, x_idx) in enumerate(self.monitor_points):
+        for _i, (z_idx, x_idx) in enumerate(self.monitor_points):
             # Ensure indices are within bounds
             z_idx = min(z_idx, data.shape[1] - 1)
             x_idx = min(x_idx, data.shape[2] - 1)

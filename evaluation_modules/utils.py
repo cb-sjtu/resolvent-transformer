@@ -60,12 +60,12 @@ def format_metrics_string(metrics_dict: dict, precision: int = 5) -> str:
             # Nested dictionary
             nested_parts = []
             for nested_key, nested_value in value.items():
-                if isinstance(nested_value, (int, float)):
+                if isinstance(nested_value, int | float):
                     nested_parts.append(f"{nested_key}: {nested_value:.{precision}f}")
                 else:
                     nested_parts.append(f"{nested_key}: {nested_value}")
             formatted_parts.append(f"{key}: {{{', '.join(nested_parts)}}}")
-        elif isinstance(value, (int, float)):
+        elif isinstance(value, int | float):
             formatted_parts.append(f"{key}: {value:.{precision}f}")
         else:
             formatted_parts.append(f"{key}: {value}")

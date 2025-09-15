@@ -4,6 +4,7 @@ Base evaluator for flow prediction models.
 Refactored from the original evaluation.py to be more modular.
 """
 
+import contextlib
 import warnings
 from pathlib import Path
 
@@ -14,6 +15,11 @@ from omegaconf import DictConfig
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
+from .metrics import FlowMetrics  # noqa: E402
+from .time_series_monitor import TimeSeriesMonitor  # noqa: E402
+from .utils import create_output_directory  # noqa: E402
+from .video_creation import VideoCreator  # noqa: E402
+from .visualization import FlowVisualizer  # noqa: E402
 
 try:
     import wandb
@@ -21,13 +27,7 @@ try:
     WANDB_AVAILABLE = True
 except ImportError:
     WANDB_AVAILABLE = False
-    warnings.warn("W&B not available")
-
-from .metrics import FlowMetrics
-from .time_series_monitor import TimeSeriesMonitor
-from .utils import create_output_directory
-from .video_creation import VideoCreator
-from .visualization import FlowVisualizer
+    warnings.warn("W&B not available", stacklevel=2)
 
 
 class BaseFlowEvaluator:
@@ -166,7 +166,5 @@ class BaseFlowEvaluator:
 
     def __del__(self):
         """Cleanup when evaluator is destroyed."""
-        try:
+        with contextlib.suppress(Exception):
             self.close_wandb()
-        except:
-            pass

@@ -236,7 +236,7 @@ class FlowMetrics:
 
                         if isinstance(v, dict):
                             flat_metrics.update(flatten_dict(v, new_key))
-                        elif isinstance(v, (int, float)):
+                        elif isinstance(v, int | float):
                             flat_metrics[new_key] = v
 
                 flatten_dict(metrics)

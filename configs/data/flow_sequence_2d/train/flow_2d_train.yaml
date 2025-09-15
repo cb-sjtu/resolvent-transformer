@@ -3,7 +3,7 @@ name: flow_sequence_2d
 dataset:
   _target_: src.datasets.flow_sequence_2d.fast_flow_dataset.FastFlowSequence2DDataset
   data_dir: "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
-  input_length: 3
+  input_length: 5
   max_k_steps: ${data.max_k_steps}
   field_name: ["u", "v", "w"]
   file_pattern: "*.h5"

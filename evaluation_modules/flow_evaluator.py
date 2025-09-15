@@ -18,17 +18,19 @@ from omegaconf import DictConfig
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
+from .base_evaluator import BaseFlowEvaluator  # noqa: E402
+from .utils import ensure_numpy_array  # noqa: E402
 
 try:
-    import wandb
+    import importlib.util
 
-    WANDB_AVAILABLE = True
+    if importlib.util.find_spec("wandb") is not None:
+        WANDB_AVAILABLE = True
+    else:
+        raise ImportError
 except ImportError:
     WANDB_AVAILABLE = False
-    warnings.warn("W&B not available")
-
-from .base_evaluator import BaseFlowEvaluator
-from .utils import ensure_numpy_array
+    warnings.warn("W&B not available", stacklevel=2)
 
 
 class FlowModelEvaluator(BaseFlowEvaluator):
@@ -352,8 +354,6 @@ class FlowModelEvaluator(BaseFlowEvaluator):
         # Single frame comparison (if ground truth available)
         if ground_truth_frames:
             # Use first prediction vs first ground truth
-            dataset = getattr(self, f"{split}_dataset")
-            sample = dataset[sample_idx]
 
             # Quick prediction for visualization
             with torch.no_grad():
