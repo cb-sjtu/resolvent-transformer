@@ -26,9 +26,11 @@ import rootutils
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
+warnings.filterwarnings("ignore")
+
 # Import our modular evaluation components
-from evaluation_modules.flow_evaluator import FlowModelEvaluator
-from evaluation_modules.utils import get_default_monitor_points
+from evaluation_modules.flow_evaluator import FlowModelEvaluator  # noqa: E402
+from evaluation_modules.utils import get_default_monitor_points  # noqa: E402
 
 warnings.filterwarnings("ignore")
 
@@ -199,7 +201,7 @@ def main():
 
     # Initialize Hydra for configuration management
     with hydra.initialize(version_base="1.3", config_path="configs"):
-        cfg = hydra.compose(config_name="train_flow_swin_2d", overrides=args.config_overrides)
+        hydra.compose(config_name="train_flow_swin_2d", overrides=args.config_overrides)
 
         # Run evaluation
         run_evaluation(
