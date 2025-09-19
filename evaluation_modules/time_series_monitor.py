@@ -94,6 +94,12 @@ class TimeSeriesMonitor:
         if isinstance(data, torch.Tensor):
             data = data.cpu().numpy()
 
+        # Debug: Check input data (only occasionally)
+        if timestep is not None and timestep < 3:
+            print(
+                f"    🔍 Extract_point_values: data shape={data.shape}, data range=[{data.min():.6f}, {data.max():.6f}]"
+            )
+
         # Ensure data has at least 3 channels (u, v, w)
         if data.shape[0] < 3:
             raise ValueError(f"Data must have at least 3 channels (u, v, w), got {data.shape[0]}")
@@ -104,7 +110,7 @@ class TimeSeriesMonitor:
         magnitude = compute_velocity_magnitude(data)
 
         # Extract values at each monitoring point
-        for _i, (z_idx, x_idx) in enumerate(self.monitor_points):
+        for z_idx, x_idx in self.monitor_points:
             # Ensure indices are within bounds
             z_idx = min(z_idx, data.shape[1] - 1)
             x_idx = min(x_idx, data.shape[2] - 1)
@@ -134,6 +140,15 @@ class TimeSeriesMonitor:
             timestep: Current timestep number
             gt_data: Ground truth flow data tensor (C, H, W), optional
         """
+        # Only record data from the first sample (when timesteps array is small)
+        # This prevents accumulation across multiple samples
+        max_recorded_steps = len(self.time_series_data[split][mode]["timesteps"])
+        # Use a reasonable upper limit - if we already have many steps, likely from first sample
+        max_steps_per_sample = 100  # Allow up to 100 steps per sample
+        if max_recorded_steps >= max_steps_per_sample:
+            print(f"    ⏭️ Skipping timestep {timestep} (already have {max_recorded_steps} steps)")
+            return
+
         # Extract prediction values
         pred_values = self.extract_point_values(pred_data, timestep)
 
@@ -145,6 +160,11 @@ class TimeSeriesMonitor:
         for component in ["u", "v", "w", "mag"]:
             for i, value in enumerate(pred_values[component]):
                 self.time_series_data[split][mode][f"{component}_pred"][i].append(value)
+                # Debug: Log the first few values (only from first sample)
+                if (
+                    max_recorded_steps < 3 and timestep < 3 and i == 0
+                ):  # Only for first monitoring point and first few timesteps from first sample
+                    print(f"    🔍 Recorded {split}-{mode} t={timestep} {component}_pred[{i}] = {value:.6f}")
 
         # Record ground truth values if available
         if gt_data is not None:
@@ -199,6 +219,12 @@ class TimeSeriesMonitor:
                         and point_idx in self.time_series_data[split][mode][pred_key]
                     ):
                         pred_values = self.time_series_data[split][mode][pred_key][point_idx]
+                        print(
+                            f"    🎨 Plotting {pred_key}: timesteps={len(timesteps) if timesteps else 0}, "
+                            f"pred_values={len(pred_values) if pred_values else 0}"
+                        )
+                        if pred_values:
+                            print(f"    🎨 Pred values sample: {pred_values[:3]}")  # Show first 3 values
                         if timesteps and pred_values and len(timesteps) == len(pred_values):
                             ax.plot(
                                 timesteps,
@@ -209,6 +235,12 @@ class TimeSeriesMonitor:
                                 label=f"{labels[mode]} (Pred)",
                                 marker="o",
                                 markersize=4,
+                            )
+                            print(f"    ✅ Plotted {len(pred_values)} prediction points for {component}")
+                        else:
+                            print(
+                                f"    ❌ Cannot plot {pred_key}: timesteps={len(timesteps) if timesteps else 0}, "
+                                f"pred_values={len(pred_values) if pred_values else 0}"
                             )
 
                     # Plot ground truth if available

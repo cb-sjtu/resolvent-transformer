@@ -131,7 +131,7 @@ class FlowModelEvaluator(BaseFlowEvaluator):
         common_params = {
             "data_dir": data_dir,
             "input_length": 5,  # Match original evaluation.py
-            "max_k_steps": 20,  # Load more ground truth steps for comparison
+            "max_k_steps": 50,  # Load more ground truth steps for comparison (increased for longer predictions)
             "field_names": ["u", "v", "w"],
             "file_pattern": "*.h5",
             "resolution_scale": [2, 3, 1],
@@ -210,6 +210,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
         """Evaluate using autoregressive prediction."""
         print("  🔄 Autoregressive evaluation...")
 
+        # Get the appropriate dataset for denormalization
+        dataset = getattr(self, f"{split}_dataset")
+
         self.model.eval()
         predictions = []
         current_seq = input_seq.clone()
@@ -227,13 +230,28 @@ class FlowModelEvaluator(BaseFlowEvaluator):
                 else:
                     raise ValueError(f"Unexpected prediction shape: {next_pred.shape}")
 
-                # Store prediction
-                pred_frame = next_pred[0]  # Remove batch dimension: (C, H, W)
-                predictions.append(pred_frame.cpu())
+                # Store prediction (denormalized for proper evaluation)
+                pred_frame_normalized = next_pred[0]  # Remove batch dimension: (C, H, W)
+                pred_frame_denorm = dataset.denormalize(pred_frame_normalized.unsqueeze(0))[
+                    0
+                ].cpu()  # Denormalize: (C, H, W)
+                predictions.append(pred_frame_denorm)
 
-                # Record for time series monitoring
+                # Record for time series monitoring (use denormalized data)
                 gt_frame = ground_truth_frames[step] if step < len(ground_truth_frames) else None
-                self.record_timestep_data(pred_frame, split, "ar", step, gt_frame)
+                gt_frame_denorm = None
+                if gt_frame is not None:
+                    gt_frame_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[
+                        0
+                    ].cpu()  # Denormalize GT: (C, H, W) and move to CPU
+                # Debug: Check data before recording (only first few steps)
+                if step < 3:
+                    print(
+                        f"    📝 Recording step {step}: pred shape={pred_frame_denorm.shape}, "
+                        f"pred range=[{pred_frame_denorm.min():.6f}, {pred_frame_denorm.max():.6f}]"
+                    )
+
+                self.record_timestep_data(pred_frame_denorm, split, "ar", step, gt_frame_denorm)
 
                 # Update sequence for next prediction
                 next_pred_with_time = next_pred.unsqueeze(1)  # Add time dimension
@@ -245,9 +263,17 @@ class FlowModelEvaluator(BaseFlowEvaluator):
                     dim=1,
                 )
 
-        # Compute metrics if ground truth available
+        # Compute metrics if ground truth available (denormalize ground truth for fair comparison)
         if ground_truth_frames:
-            self._compute_and_log_metrics(predictions, ground_truth_frames, sample_idx, split, "autoregressive")
+            gt_frames_denorm = []
+            for gt_frame in ground_truth_frames:
+                if gt_frame is not None:
+                    gt_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[0].cpu()  # Denormalize GT
+                    gt_frames_denorm.append(gt_denorm)
+                else:
+                    gt_frames_denorm.append(None)
+
+            self._compute_and_log_metrics(predictions, gt_frames_denorm, sample_idx, split, "autoregressive")
 
         # Save predictions if requested
         if save_h5:
@@ -262,6 +288,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
             return
 
         print("  📚 Teacher forcing evaluation...")
+
+        # Get the appropriate dataset for denormalization
+        dataset = getattr(self, f"{split}_dataset")
 
         self.model.eval()
         predictions = []
@@ -296,18 +325,32 @@ class FlowModelEvaluator(BaseFlowEvaluator):
                 else:
                     raise ValueError(f"Unexpected prediction shape: {next_pred.shape}")
 
-                # Store prediction
-                pred_frame = next_pred[0]  # (C, H, W)
-                predictions.append(pred_frame.cpu())
+                # Store prediction (denormalized for proper evaluation)
+                pred_frame_normalized = next_pred[0]  # (C, H, W)
+                pred_frame_denorm = dataset.denormalize(pred_frame_normalized.unsqueeze(0))[
+                    0
+                ].cpu()  # Denormalize: (C, H, W)
+                predictions.append(pred_frame_denorm)
 
-                # Record for time series monitoring
+                # Record for time series monitoring (use denormalized data)
                 gt_frame = ground_truth_frames[step] if step < len(ground_truth_frames) else None
-                self.record_timestep_data(pred_frame, split, "tf", step, gt_frame)
+                gt_frame_denorm = None
+                if gt_frame is not None:
+                    gt_frame_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[
+                        0
+                    ].cpu()  # Denormalize GT: (C, H, W) and move to CPU
+                self.record_timestep_data(pred_frame_denorm, split, "tf", step, gt_frame_denorm)
 
-        # Compute metrics
-        self._compute_and_log_metrics(
-            predictions, ground_truth_frames[: len(predictions)], sample_idx, split, "teacher_forcing"
-        )
+        # Compute metrics (denormalize ground truth for fair comparison)
+        gt_frames_denorm = []
+        for gt_frame in ground_truth_frames[: len(predictions)]:
+            if gt_frame is not None:
+                gt_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[0].cpu()  # Denormalize GT
+                gt_frames_denorm.append(gt_denorm)
+            else:
+                gt_frames_denorm.append(None)
+
+        self._compute_and_log_metrics(predictions, gt_frames_denorm, sample_idx, split, "teacher_forcing")
 
         # Save predictions if requested
         if save_h5:
@@ -351,19 +394,28 @@ class FlowModelEvaluator(BaseFlowEvaluator):
         """Create visualizations for the sample."""
         print("    🎨 Creating visualizations...")
 
+        # Get the appropriate dataset for denormalization
+        dataset = getattr(self, f"{split}_dataset")
+
         # Single frame comparison (if ground truth available)
         if ground_truth_frames:
             # Use first prediction vs first ground truth
 
-            # Quick prediction for visualization
+            # Quick prediction for visualization (both denormalized)
             with torch.no_grad():
-                pred = self.model(input_seq.to(self.device))
-                if len(pred.shape) == 5:
-                    pred = pred[:, -1]
-                pred = pred[0].cpu()  # (C, H, W)
+                pred_normalized = self.model(input_seq.to(self.device))
+                if len(pred_normalized.shape) == 5:
+                    pred_normalized = pred_normalized[:, -1]
+                pred_normalized = pred_normalized[0]  # (C, H, W)
+
+                # Denormalize prediction for proper visualization
+                pred_denorm = dataset.denormalize(pred_normalized.unsqueeze(0))[0].cpu()  # (C, H, W)
+
+                # Denormalize ground truth for proper visualization
+                gt_denorm = dataset.denormalize(ground_truth_frames[0].unsqueeze(0))[0].cpu()  # (C, H, W)
 
             plot_path = self.visualizer.plot_single_frame_comparison(
-                pred, ground_truth_frames[0], sample_idx, 0, self.channel_names
+                pred_denorm, gt_denorm, sample_idx, 0, self.channel_names
             )
 
             # Log to wandb

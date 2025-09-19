@@ -47,12 +47,17 @@ class VideoCreator:
         input_seq = sample["input_seq"]  # (1, input_length, C, H, W)
         ground_truth_seq = sample.get("target_seq", None)
 
-        # Run autoregressive prediction
-        predictions = self._run_autoregressive_prediction(evaluator.model, input_seq, num_future)
+        # Run autoregressive prediction (with denormalization)
+        predictions = self._run_autoregressive_prediction(evaluator.model, input_seq, num_future, evaluator.dataset)
 
-        # Prepare ground truth frames if available
+        # Prepare ground truth frames if available (denormalized for proper visualization)
         if ground_truth_seq is not None:
-            ground_truth_frames = [ground_truth_seq[0, i] for i in range(min(num_future, ground_truth_seq.shape[1]))]
+            ground_truth_frames = []
+            for i in range(min(num_future, ground_truth_seq.shape[1])):
+                gt_frame = ground_truth_seq[0, i]  # (C, H, W)
+                if evaluator.dataset is not None:
+                    gt_frame = evaluator.dataset.denormalize(gt_frame.unsqueeze(0))[0]  # Denormalize
+                ground_truth_frames.append(gt_frame)
         else:
             # Generate synthetic ground truth or use model predictions
             ground_truth_frames = predictions  # Fallback
@@ -62,7 +67,7 @@ class VideoCreator:
 
         return video_path
 
-    def _run_autoregressive_prediction(self, model, input_seq, num_steps: int):
+    def _run_autoregressive_prediction(self, model, input_seq, num_steps: int, dataset=None):
         """Run autoregressive prediction for num_steps."""
         import torch
 
@@ -84,7 +89,11 @@ class VideoCreator:
                 else:
                     raise ValueError(f"Unexpected prediction shape: {next_pred.shape}")
 
-                predictions.append(next_pred[0])  # Remove batch dimension: (C, H, W)
+                # Store prediction (denormalized for proper visualization)
+                pred_frame = next_pred[0]  # Remove batch dimension: (C, H, W)
+                if dataset is not None:
+                    pred_frame = dataset.denormalize(pred_frame.unsqueeze(0))[0]  # Denormalize
+                predictions.append(pred_frame)
 
                 # Update current sequence for next prediction
                 # Add time dimension back: (B, C, H, W) -> (B, 1, C, H, W)

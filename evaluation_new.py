@@ -34,6 +34,11 @@ from evaluation_modules.utils import get_default_monitor_points  # noqa: E402
 
 warnings.filterwarnings("ignore")
 
+# ========================================
+# 🎯 CONFIGURATION: Modify this value to change prediction length everywhere
+# ========================================
+DEFAULT_FUTURE_STEPS = 50  # Number of future steps to predict
+
 
 def create_custom_monitor_points():
     """Create custom monitoring points - easily configurable."""
@@ -58,8 +63,8 @@ def run_evaluation(
     checkpoint_path: str,
     save_predictions: bool = False,
     custom_points: bool = False,
-    num_samples: int = 3,
-    num_future_steps: int = 10,
+    num_samples: int = 1,
+    num_future_steps: int = DEFAULT_FUTURE_STEPS,
     output_dir: str = "evaluation_results",
 ):
     """
@@ -134,7 +139,7 @@ def run_evaluation(
         print(f"{'=' * 50}")
 
         try:
-            video_path = evaluator.create_videos(sample_idx=0, num_future=20)
+            video_path = evaluator.create_videos(sample_idx=0, num_future=num_future_steps)
             if video_path:
                 print(f"✅ Video created: {video_path}")
             else:
@@ -176,9 +181,9 @@ def main():
         "--custom-points", action="store_true", help="Use custom monitoring points instead of default grid"
     )
 
-    parser.add_argument("--num-samples", type=int, default=3, help="Number of samples to evaluate per dataset split")
+    parser.add_argument("--num-samples", type=int, default=1, help="Number of samples to evaluate per dataset split")
 
-    parser.add_argument("--num-future-steps", type=int, default=20, help="Number of future steps to predict")
+    parser.add_argument("--num-future-steps", type=int, default=50, help="Number of future steps to predict")
 
     parser.add_argument("--output-dir", type=str, default="evaluation_results", help="Output directory for all results")
 
@@ -189,7 +194,7 @@ def main():
     # Use default checkpoint path if not provided
     if args.checkpoint_path is None:
         args.checkpoint_path = (
-            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-09-12_23-16-43-463283/checkpoints/step_30000.ckpt"
+            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_2d/runs/2025-09-16_19-50-41-721571/checkpoints/step_51300.ckpt"
         )
         print(f"Using default checkpoint: {args.checkpoint_path}")
 

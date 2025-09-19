@@ -9,7 +9,7 @@ INPUT_DIR="/home/sh/CB/RE550_test"
 OUTPUT_DIR="/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
 FIELDS="u v w"
 RESOLUTION_SCALE="2 3 1"
-Y_SLICE="5"
+Y_SLICE="75"
 START_FILE="t00001.h5"
 LOG_FILE="/home/sh/CB/icon-thewell-dev/logs/preprocessing.log"
 
