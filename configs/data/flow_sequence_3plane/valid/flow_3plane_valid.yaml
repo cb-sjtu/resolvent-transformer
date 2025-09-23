@@ -1,0 +1,22 @@
+name: flow_sequence_3plane
+
+dataset:
+  _target_: src.datasets.flow_sequence_2d.flow_sequence_3plane.FlowSequence3PlaneDataset
+  data_dir: ${data.data_folder}
+  input_length: 5
+  field_names: ["u", "v", "w", "p"]  # 4 fields per plane
+  file_pattern: "*u-v-w-p_scale4-6-1_yslice*.h5"  # Match uvwp files
+  resolution_scale: [4, 6, 1]  # (z, y, x) downsampling - 与归一化统计匹配
+  y_slices: [29, 54, 75]  # 与归一化统计对应的y平面
+  train_ratio: 0.9
+  valid_ratio: 0.05
+  test_ratio: 0.05
+  split: "val"
+  enable_normalization: ${data.enable_normalization}
+  norm_stats: ${data.norm_stats}
+
+num_workers: ${data.num_workers}
+pin_memory: ${data.pin_memory}
+batch_size_per_device: ${data.batch_size_per_device}
+enable_device_seed: ${data.valid_enable_device_seed}
+base_seed: ${data.valid_base_seed}

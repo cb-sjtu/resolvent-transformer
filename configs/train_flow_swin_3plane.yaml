@@ -1,0 +1,95 @@
+# @package _global_
+
+# specify here default configuration
+# order of defaults determines the order of config composition
+defaults:
+  - _self_
+  - data/flow_sequence_3plane/flow_sequence_3plane@data
+  - datamodule: base
+  - model: swin_transformer_3plane_simple
+  - plmodule: flow_swin_2d
+  - callbacks: many_callbacks_flow_swin
+  - accelerate: default
+  - logger: wandb
+  - trainer: gpu
+  - opt: default
+  - paths: default
+  - extras: default
+  - hydra: default
+
+# task name, determines output directory path
+task_name: "flow_swin_3plane"
+
+# tags to help you identify your experiments
+# you can overwrite this in experiment configs
+# overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
+tags: ["flow", "swin", "3plane", "uvwp", "12channels"]
+
+# set False to skip model summary
+print_model_summary: True
+
+# pretty print config tree at the start of the run using Rich library
+print_config: True
+
+# disable python warnings if they annoy you
+ignore_warnings: True
+
+# evaluate on test set, using the best model weights achieved during training
+# lightning chooses best weights based on the metric specified in checkpoint callback
+test_after_training: True
+
+# simply provide checkpoint path to resume training
+ckpt_path: null
+
+# seed for random number generators in pytorch, numpy and python.random
+seed: 12345
+
+print_lv: 1
+
+log_project: "turbulence_swin_3plane"
+
+# Enable training
+train: True
+
+# Loss function for FlowSwin2DLitModule
+loss_fn: "mse"
+
+# Per-channel metrics for 3-plane 4-channel monitoring
+enable_per_channel_metrics: true  # 开启12通道指标监测
+
+# Scheduled Sampling Configuration
+scheduled_sampling:
+  enabled: false
+  initial_teacher_forcing_ratio: 1.0
+  final_teacher_forcing_ratio: 0.0
+  schedule_type: "linear"  # "linear", "exponential", "inverse_sigmoid"
+  decay_epochs: 1000
+  start_epoch: 0
+  rollout_only: true
+
+# K-step Rollout Loss Configuration
+k_step_rollout:
+  enabled: true
+  initial_k_steps: 1
+  max_k_steps: 16
+  k_increase_schedule: "curriculum"  # "curriculum", "fixed"
+  curriculum_epochs: [80, 120, 160, 200, 300]  # Epochs to increase K
+  curriculum_k_values: [1, 1, 1, 1, 1]    # Corresponding K values
+  rollout_loss_weight: 1.0
+  single_step_loss_weight: 1.0
+  # Step-wise weights for each rollout step to address gradient dilution
+  # Length should match curriculum_k_values. Each value is the weight for that step.
+  step_weights: [1.0, 1.2, 1.5, 2.0, 2.5]  # Weights for step 1, 2, 3, 4, 5
+  enable_step_weighting: true  # Enable/disable step-wise weighting
+
+# Data configuration with k-step parameter
+data:
+  max_k_steps: ${k_step_rollout.max_k_steps}
+
+# Override trainer settings for proper epoch tracking
+trainer:
+  max_epochs: 50        # Train for 50 epochs
+  max_steps: -1         # Disable step limit
+  val_check_interval: 1.0  # Validate after each epoch
+  check_val_every_n_epoch: 5
+  limit_train_batches: null # Use all training batches

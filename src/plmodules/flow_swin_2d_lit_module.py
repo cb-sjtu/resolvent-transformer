@@ -70,18 +70,121 @@ class FlowSwin2DLitModule(BaseLitModule):
         # Cache for steps_per_epoch (will be set properly during training setup)
         self._cached_steps_per_epoch = None
 
+        # Per-channel metrics configuration for 3-plane 4-channel data
+        self.enable_per_channel_metrics = getattr(cfg, "enable_per_channel_metrics", True)
+        self.channel_names = [
+            "plane0_u_y29",
+            "plane0_v_y29",
+            "plane0_w_y29",
+            "plane0_p_y29",
+            "plane1_u_y54",
+            "plane1_v_y54",
+            "plane1_w_y54",
+            "plane1_p_y54",
+            "plane2_u_y75",
+            "plane2_v_y75",
+            "plane2_w_y75",
+            "plane2_p_y75",
+        ]
+        self.num_channels = len(self.channel_names)
+
     def _steps_per_epoch(self) -> int:
         """Calculate steps per epoch from dataset size and batch size."""
         # Use cached value if available and valid
         if self._cached_steps_per_epoch is not None and self._cached_steps_per_epoch > 0:
             return self._cached_steps_per_epoch
 
+        return self._steps_per_epoch_implementation()
+
+    def compute_per_channel_metrics(self, pred: torch.Tensor, target: torch.Tensor) -> dict:
+        """Compute per-channel loss and relative error metrics.
+
+        Args:
+            pred: Predicted tensor (B, C, H, W)
+            target: Target tensor (B, C, H, W)
+
+        Returns:
+            dict: Per-channel metrics
+        """
+        if not self.enable_per_channel_metrics:
+            return {}
+
+        metrics = {}
+
+        # Ensure we have the expected number of channels
+        if pred.shape[1] != self.num_channels:
+            # If number of channels doesn't match, skip per-channel metrics
+            return {}
+
+        # Compute per-channel losses and relative errors
+        for ch_idx in range(self.num_channels):
+            ch_name = self.channel_names[ch_idx]
+
+            # Extract channel data
+            pred_ch = pred[:, ch_idx]  # (B, H, W)
+            target_ch = target[:, ch_idx]  # (B, H, W)
+
+            # Per-channel MSE loss
+            ch_mse = F.mse_loss(pred_ch, target_ch)
+            metrics[f"{ch_name}_mse"] = ch_mse
+
+            # Per-channel MAE
+            ch_mae = F.l1_loss(pred_ch, target_ch)
+            metrics[f"{ch_name}_mae"] = ch_mae
+
+            # Per-channel relative error
+            target_flat = target_ch.flatten(start_dim=1)  # (B, H*W)
+            pred_flat = pred_ch.flatten(start_dim=1)  # (B, H*W)
+
+            target_norm = torch.norm(target_flat, dim=1, keepdim=True)  # (B, 1)
+            error_norm = torch.norm(pred_flat - target_flat, dim=1, keepdim=True)  # (B, 1)
+
+            ch_rel_error = (error_norm / (target_norm + 1e-8)).mean()
+            metrics[f"{ch_name}_rel_error"] = ch_rel_error
+
+        # Compute grouped metrics (average per field across all planes)
+        field_names = ["u", "v", "w", "p"]
+        for field_idx, field_name in enumerate(field_names):
+            # Get indices for this field across all planes
+            field_channels = [field_idx + plane_idx * 4 for plane_idx in range(3)]
+
+            # Average metrics for this field
+            field_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in field_channels]).mean()
+            field_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in field_channels]).mean()
+            field_rel_error = torch.stack(
+                [metrics[f"{self.channel_names[ch]}_rel_error"] for ch in field_channels]
+            ).mean()
+
+            metrics[f"field_{field_name}_avg_mse"] = field_mse
+            metrics[f"field_{field_name}_avg_mae"] = field_mae
+            metrics[f"field_{field_name}_avg_rel_error"] = field_rel_error
+
+        # Compute plane-wise metrics (average per plane across all fields)
+        for plane_idx in range(3):
+            plane_channels = [plane_idx * 4 + field_idx for field_idx in range(4)]
+
+            plane_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in plane_channels]).mean()
+            plane_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in plane_channels]).mean()
+            plane_rel_error = torch.stack(
+                [metrics[f"{self.channel_names[ch]}_rel_error"] for ch in plane_channels]
+            ).mean()
+
+            y_slice = [29, 54, 75][plane_idx]
+            metrics[f"plane{plane_idx}_y{y_slice}_avg_mse"] = plane_mse
+            metrics[f"plane{plane_idx}_y{y_slice}_avg_mae"] = plane_mae
+            metrics[f"plane{plane_idx}_y{y_slice}_avg_rel_error"] = plane_rel_error
+
+        return metrics
+
+    def _steps_per_epoch_implementation(self) -> int:
+        """Implementation of steps per epoch calculation."""
         try:
             # First try to get from trainer (available during training)
             ntb = getattr(self.trainer, "num_training_batches", None)
             if ntb is not None and ntb != float("inf") and ntb > 0:
                 num_batches = int(ntb)
                 self._cached_steps_per_epoch = num_batches
+                return num_batches
 
             # Second attempt: get from train_dataloader if available
             if hasattr(self.trainer, "train_dataloader") and self.trainer.train_dataloader is not None:
@@ -486,6 +589,9 @@ class FlowSwin2DLitModule(BaseLitModule):
                 pred_single = self.forward(input_seq, return_delta=False)  # Get composed prediction
                 single_step_loss = self.loss_fn(pred_single, target)
                 total_loss += self.kr_single_weight * single_step_loss
+                # Store for per-channel metrics
+                self.current_pred = pred_single.detach()
+                self.current_target = target.detach()
                 # Log single step loss
                 self.log(
                     "train/single_step_loss", single_step_loss, on_step=True, on_epoch=False, batch_size=batch_size
@@ -603,6 +709,9 @@ class FlowSwin2DLitModule(BaseLitModule):
         if total_loss == 0:
             pred = self.forward(input_seq, return_delta=False)  # Use residual prediction
             total_loss = self.loss_fn(pred, target)
+            # Store for per-channel metrics
+            self.current_pred = pred.detach()
+            self.current_target = target.detach()
 
         # Log total loss and curriculum parameters
         self.log("train/loss", total_loss, on_step=True, on_epoch=False, prog_bar=True, batch_size=batch_size)
@@ -639,8 +748,56 @@ class FlowSwin2DLitModule(BaseLitModule):
                     batch_size=batch_size,
                 )
 
-        # Skip expensive metrics calculation during training to save memory
-        # These metrics are computed during validation/test steps
+        # Compute and log per-channel metrics for training
+        if self.enable_per_channel_metrics and hasattr(self, "current_pred") and hasattr(self, "current_target"):
+            # Use the most recent prediction and target from the training step
+            try:
+                per_channel_metrics = self.compute_per_channel_metrics(self.current_pred, self.current_target)
+
+                # Log per-channel metrics (reduced frequency to avoid log spam)
+                if self.global_step % 100 == 0:  # Log every 100 steps for better monitoring
+                    for metric_name, metric_value in per_channel_metrics.items():
+                        self.log(
+                            f"train/{metric_name}", metric_value, on_step=True, on_epoch=False, batch_size=batch_size
+                        )
+
+                # Always log summary metrics
+                if "field_u_avg_rel_error" in per_channel_metrics:
+                    self.log(
+                        "train/field_u_avg_rel_error",
+                        per_channel_metrics["field_u_avg_rel_error"],
+                        on_step=True,
+                        on_epoch=False,
+                        batch_size=batch_size,
+                    )
+                if "field_v_avg_rel_error" in per_channel_metrics:
+                    self.log(
+                        "train/field_v_avg_rel_error",
+                        per_channel_metrics["field_v_avg_rel_error"],
+                        on_step=True,
+                        on_epoch=False,
+                        batch_size=batch_size,
+                    )
+                if "field_w_avg_rel_error" in per_channel_metrics:
+                    self.log(
+                        "train/field_w_avg_rel_error",
+                        per_channel_metrics["field_w_avg_rel_error"],
+                        on_step=True,
+                        on_epoch=False,
+                        batch_size=batch_size,
+                    )
+                if "field_p_avg_rel_error" in per_channel_metrics:
+                    self.log(
+                        "train/field_p_avg_rel_error",
+                        per_channel_metrics["field_p_avg_rel_error"],
+                        on_step=True,
+                        on_epoch=False,
+                        batch_size=batch_size,
+                    )
+
+            except Exception:
+                # Silently skip per-channel metrics if there's an issue
+                pass
 
         return total_loss
 
@@ -702,6 +859,25 @@ class FlowSwin2DLitModule(BaseLitModule):
         )
         self.log("val/grad_error_x", grad_error_x, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
         self.log("val/grad_error_y", grad_error_y, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
+
+        # Compute and log per-channel metrics for validation
+        if self.enable_per_channel_metrics:
+            try:
+                per_channel_metrics = self.compute_per_channel_metrics(pred, target)
+
+                # Log all per-channel metrics for validation (full logging)
+                for metric_name, metric_value in per_channel_metrics.items():
+                    self.log(
+                        f"val/{metric_name}",
+                        metric_value,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                        batch_size=batch_size,
+                    )
+
+            except Exception as e:
+                print(f"Warning: Failed to compute per-channel metrics in validation: {e}")
 
         # Return metrics dict for save_metric callback
         metrics = {

@@ -1,0 +1,19 @@
+_target_: src.models.base.swin_transformer.SwinTransformer2DWithMerging
+
+input_shape: [128, 128]  # 2D shape (z, x) - using downsampled resolution
+sequence_length: 5
+prediction_horizon: 1
+num_channels: 12  # 3 planes × 4 fields (u,v,w,p) = 12 channels
+patch_size: [4, 4]
+embed_dim: 384
+depths: [2, 2, 4, 6, 4, 2, 2]  # encoder: [2,2,4], latent: [6], decoder: [4,2,2]
+num_heads: 16
+window_size: [8, 8]
+mlp_ratio: 4.0
+qkv_bias: true
+drop_rate: 0.1
+attn_drop_rate: 0.1
+drop_path_rate: 0.1
+patch_norm: true
+final_upsample: "expand_first"
+use_patch_merging: true
