@@ -239,7 +239,7 @@ class ThreePlaneModelEvaluator:
             predictions = []
             current_input = input_seq.clone()
 
-            for _i in range(num_predictions):
+            for _ in range(num_predictions):
                 # Predict next frame
                 next_pred = self.model(current_input)  # (B, C, H, W)
                 predictions.append(next_pred)
@@ -651,6 +651,12 @@ class ThreePlaneModelEvaluator:
         print("=" * 60)
         self.visualize_autoregressive(split="val", sample_idx=0, num_future=num_future)
 
+        # Energy Spectra Analysis
+        print("\n" + "=" * 60)
+        print("ENERGY SPECTRA ANALYSIS")
+        print("=" * 60)
+        self._run_energy_spectra_analysis(num_future=num_future)
+
         print(f"\nEvaluation complete! Results saved to: {self.output_dir}")
         print("\nGenerated visualizations:")
         print("- Individual channel images (12 files per sample: 3 planes × 4 channels)")
@@ -659,6 +665,7 @@ class ThreePlaneModelEvaluator:
         print("- Animations for temporal evolution")
         print("- Teacher forcing comparisons")
         print("- Autoregressive predictions")
+        print("- Energy spectra analysis (1D and 2D spectra)")
 
     def visualize_teacher_forcing(self, split: str = "train", sample_idx: int = 0, num_future: int = 20):
         """Evaluate using teacher forcing (ground truth as input) for train/val data."""
@@ -1227,6 +1234,366 @@ class ThreePlaneModelEvaluator:
 
                 plt.close()
 
+    def _compute_energy_spectra(self, frames, field_names, y_slices, dx=1.0, dz=1.0):
+        """
+        Compute energy spectra from prediction frames.
+
+        Args:
+            frames: Tensor of shape (T, C, H, W) where C=12 (3 planes × 4 fields)
+            field_names: List of field names ["u", "v", "w", "p"]
+            y_slices: List of y-slice positions [29, 54, 75]
+            dx: Grid spacing in x direction
+            dz: Grid spacing in z direction
+
+        Returns:
+            dict: Dictionary containing spectra data for each plane and field
+        """
+        print("Computing energy spectra...")
+
+        if isinstance(frames, torch.Tensor):
+            frames = frames.detach().cpu().numpy()
+
+        T, _C, H, W = frames.shape
+        spectra_results = {}
+
+        # Compute frequency grids (no fftshift here, only in visualization)
+        kx = np.fft.fftfreq(W, dx)  # x-direction wavenumbers
+        kz = np.fft.fftfreq(H, dz)  # z-direction wavenumbers
+
+        # Only keep positive frequencies for plotting
+        kx_pos = kx[kx > 0]
+        kz_pos = kz[kz > 0]
+
+        for plane_idx in range(3):
+            y_slice = y_slices[plane_idx]
+            spectra_results[f"plane{plane_idx}"] = {"y_slice": y_slice, "fields": {}}
+
+            for field_idx, field_name in enumerate(field_names):
+                print(f"  Processing plane {plane_idx} ({field_name}) at y={y_slice}")
+
+                # Extract channel data for this plane and field
+                channel_idx = plane_idx * 4 + field_idx
+                field_data = frames[:, channel_idx, :, :]  # Shape: (T, H, W)
+
+                # Time-averaged energy spectrum
+                spectrum_2d_sum = np.zeros((H, W))
+
+                for t in range(T):
+                    # Remove plane average (mean) before FFT
+                    data_slice = field_data[t] - np.mean(field_data[t])
+
+                    # Compute 2D FFT with proper normalization
+                    fft_2d = np.fft.fft2(data_slice) / (H * W)
+
+                    # Compute energy spectrum: E(kx, kz) = 0.5 * |q_hat|^2
+                    spectrum_2d = 0.5 * np.abs(fft_2d) ** 2
+                    spectrum_2d_sum += spectrum_2d
+
+                # Time average (do NOT apply fftshift here, only for visualization)
+                spectrum_2d_avg = spectrum_2d_sum / T
+
+                # Compute 1D spectra by integration
+                # Streamwise spectrum E(kx) = sum over kz
+                spectrum_kx = np.sum(spectrum_2d_avg, axis=0)  # Sum over H (kz direction)
+
+                # Spanwise spectrum E(kz) = sum over kx
+                spectrum_kz = np.sum(spectrum_2d_avg, axis=1)  # Sum over W (kx direction)
+
+                # Store results
+                spectra_results[f"plane{plane_idx}"]["fields"][field_name] = {
+                    "spectrum_2d": spectrum_2d_avg,
+                    "spectrum_kx": spectrum_kx,
+                    "spectrum_kz": spectrum_kz,
+                    "kx": kx,
+                    "kz": kz,
+                    "kx_pos": kx_pos,
+                    "kz_pos": kz_pos,
+                }
+
+        print("Energy spectra computation completed.")
+        return spectra_results
+
+    def _plot_energy_spectra(self, spectra, field_names, y_slices, mode="prediction"):
+        """
+        Plot and save energy spectra.
+
+        Args:
+            spectra: Dictionary containing spectra data from _compute_energy_spectra
+            field_names: List of field names
+            y_slices: List of y-slice positions
+            mode: String identifier for the plot type ("prediction" or "ground_truth")
+        """
+        print(f"Plotting energy spectra for {mode}...")
+
+        for plane_idx in range(3):
+            y_slice = y_slices[plane_idx]
+            plane_data = spectra[f"plane{plane_idx}"]
+
+            for field_name in field_names:
+                field_data = plane_data["fields"][field_name]
+
+                # Extract data
+                spectrum_2d = field_data["spectrum_2d"]
+                spectrum_kx = field_data["spectrum_kx"]
+                spectrum_kz = field_data["spectrum_kz"]
+                kx = field_data["kx"]
+                kz = field_data["kz"]
+                kx_pos = field_data["kx_pos"]
+                kz_pos = field_data["kz_pos"]
+
+                # Save numerical data
+                base_name = f"spectrum_{mode}_plane{plane_idx}_{field_name}"
+                np.save(self.output_dir / f"{base_name}_2d.npy", spectrum_2d)
+                np.save(self.output_dir / f"{base_name}_kx.npy", spectrum_kx)
+                np.save(self.output_dir / f"{base_name}_kz.npy", spectrum_kz)
+
+                # Create combined figure with all spectrum visualizations
+                fig = plt.figure(figsize=(18, 6))
+
+                # Prepare data for plotting
+                kx_pos_mask = kx > 0
+                kz_pos_mask = kz > 0
+                spectrum_kx_pos = spectrum_kx[kx_pos_mask]
+                spectrum_kz_pos = spectrum_kz[kz_pos_mask]
+                # For 2D visualization, apply fftshift to center zero frequency
+                spectrum_2d_shift = np.fft.fftshift(spectrum_2d)
+                kx_shift = np.fft.fftshift(kx)
+                kz_shift = np.fft.fftshift(kz)
+                kx_2d, kz_2d = np.meshgrid(kx_shift, kz_shift)
+                spectrum_log = np.log10(spectrum_2d_shift + 1e-12)
+
+                # Subplot 1: 1D streamwise spectrum E(kx)
+                plt.subplot(1, 3, 1)
+                plt.loglog(kx_pos, spectrum_kx_pos, "b-", linewidth=2)
+                plt.xlabel("Streamwise Wavenumber kx")
+                plt.ylabel("Energy Spectrum E(kx)")
+                plt.title("Streamwise Spectrum")
+                plt.grid(True, alpha=0.3)
+
+                # Subplot 2: 1D spanwise spectrum E(kz)
+                plt.subplot(1, 3, 2)
+                plt.loglog(kz_pos, spectrum_kz_pos, "r-", linewidth=2)
+                plt.xlabel("Spanwise Wavenumber kz")
+                plt.ylabel("Energy Spectrum E(kz)")
+                plt.title("Spanwise Spectrum")
+                plt.grid(True, alpha=0.3)
+
+                # Subplot 3: 2D spectrum heatmap
+                plt.subplot(1, 3, 3)
+                contour = plt.contourf(kx_2d, kz_2d, spectrum_log, levels=50, cmap="viridis")
+                plt.colorbar(contour, label="log₁₀(Energy Spectrum)")
+                plt.xlabel("Streamwise Wavenumber kx")
+                plt.ylabel("Spanwise Wavenumber kz")
+                plt.title("2D Spectrum")
+
+                # Overall title for the figure
+                fig.suptitle(
+                    f"{mode.title()} - Plane {plane_idx} ({field_name.upper()}) - Energy Spectra (y={y_slice})",
+                    fontsize=14,
+                    fontweight="bold",
+                )
+
+                plt.tight_layout()
+
+                # Save combined figure
+                output_path = self.output_dir / f"{base_name}_combined.png"
+                plt.savefig(output_path, dpi=300, bbox_inches="tight")
+                plt.close()
+                print(f"  Saved combined spectrum plot: {output_path}")
+
+        print(f"Energy spectra plotting for {mode} completed.")
+
+    def _run_energy_spectra_analysis(self, num_future: int = 100, sample_idx: int = 0):
+        """
+        Run energy spectra analysis on both autoregressive predictions and ground truth.
+
+        Args:
+            num_future: Number of future steps to generate for analysis (default 50)
+            sample_idx: Index of the sample to analyze
+        """
+        print(f"Generating {num_future} steps for energy spectra analysis...")
+
+        # Get channel info
+        channel_info = self.test_dataset.get_channel_info()
+        field_names = channel_info["field_names"]  # ["u", "v", "w", "p"]
+        y_slices = channel_info["y_slices"]  # [29, 54, 75]
+
+        # Generate autoregressive predictions
+        print("Generating autoregressive predictions...")
+        sample = self.test_dataset[sample_idx]
+        input_seq = sample["data"]["input_seq"].to(self.device)
+
+        # Generate autoregressive predictions
+        pred_frames = self.generate_sequence_prediction(input_seq, num_future)  # (B, T_pred, C, H, W)
+
+        # Denormalize predictions
+        pred_frames_denorm = self.test_dataset.denormalize(pred_frames).cpu().numpy()  # (B, T_pred, C, H, W)
+
+        # Remove batch dimension: (T_pred, C, H, W)
+        pred_frames_array = pred_frames_denorm[0]  # Take first (and only) batch
+
+        # Collect corresponding ground truth frames
+        print("Collecting ground truth frames...")
+        ground_truth_frames = []
+        for i in range(num_future):
+            if sample_idx + i + 1 < len(self.test_dataset):  # +1 because first prediction is t+1
+                gt_sample = self.test_dataset[sample_idx + i + 1]
+                gt_frame = gt_sample["data"]["input_seq"][:, -1:, :, :, :]  # Get last frame
+                gt_frame_denorm = self.test_dataset.denormalize(gt_frame).cpu().numpy()[0, 0]  # (C, H, W)
+                ground_truth_frames.append(gt_frame_denorm)
+            else:
+                # If we run out of ground truth data, duplicate the last frame
+                if ground_truth_frames:
+                    ground_truth_frames.append(ground_truth_frames[-1])
+                else:
+                    # Use a zero frame as fallback
+                    zero_frame = np.zeros_like(pred_frames_array[0])
+                    ground_truth_frames.append(zero_frame)
+
+        # Convert to numpy array: (T, C, H, W)
+        gt_frames_array = np.stack(ground_truth_frames, axis=0)
+
+        print(f"Prediction frames shape: {pred_frames_array.shape}")
+        print(f"Ground truth frames shape: {gt_frames_array.shape}")
+
+        # Verify shapes are consistent
+        assert pred_frames_array.shape == gt_frames_array.shape, (
+            f"Shape mismatch: pred {pred_frames_array.shape} vs gt {gt_frames_array.shape}"
+        )
+
+        # Compute energy spectra for predictions
+        print("\nComputing energy spectra for predictions...")
+        pred_spectra = self._compute_energy_spectra(pred_frames_array, field_names, y_slices, dx=1.0, dz=1.0)
+
+        # Compute energy spectra for ground truth
+        print("\nComputing energy spectra for ground truth...")
+        gt_spectra = self._compute_energy_spectra(gt_frames_array, field_names, y_slices, dx=1.0, dz=1.0)
+
+        # Plot energy spectra
+        print("\nPlotting energy spectra...")
+        self._plot_energy_spectra(pred_spectra, field_names, y_slices, mode="prediction")
+        self._plot_energy_spectra(gt_spectra, field_names, y_slices, mode="ground_truth")
+
+        # Generate comparison plots
+        print("\nGenerating comparison plots...")
+        self._plot_spectra_comparison(pred_spectra, gt_spectra, field_names, y_slices)
+
+        print(f"Energy spectra analysis complete! Results saved to: {self.output_dir}")
+
+    def _plot_spectra_comparison(self, pred_spectra, gt_spectra, field_names, y_slices):
+        """
+        Plot combined comparison between prediction and ground truth spectra.
+
+        Args:
+            pred_spectra: Prediction spectra from _compute_energy_spectra
+            gt_spectra: Ground truth spectra from _compute_energy_spectra
+            field_names: List of field names
+            y_slices: List of y-slice positions
+        """
+        print("Creating combined spectra comparison plots...")
+
+        for plane_idx in range(3):
+            y_slice = y_slices[plane_idx]
+
+            for field_name in field_names:
+                # Extract data
+                pred_data = pred_spectra[f"plane{plane_idx}"]["fields"][field_name]
+                gt_data = gt_spectra[f"plane{plane_idx}"]["fields"][field_name]
+
+                # Create combined figure with 4 subplots
+                fig = plt.figure(figsize=(20, 10))
+
+                # Prepare data for plotting (fix indexing after fftshift)
+                kx = pred_data["kx"]
+                kz = pred_data["kz"]
+                kx_pos = pred_data["kx_pos"]
+                kz_pos = pred_data["kz_pos"]
+
+                # Get positive frequency masks and corresponding spectra
+                kx_pos_mask = kx > 0
+                kz_pos_mask = kz > 0
+
+                pred_spectrum_kx_pos = pred_data["spectrum_kx"][kx_pos_mask]
+                gt_spectrum_kx_pos = gt_data["spectrum_kx"][kx_pos_mask]
+                pred_spectrum_kz_pos = pred_data["spectrum_kz"][kz_pos_mask]
+                gt_spectrum_kz_pos = gt_data["spectrum_kz"][kz_pos_mask]
+
+                # Subplot 1: 1D streamwise spectrum comparison E(kx)
+                plt.subplot(2, 2, 1)
+                plt.loglog(kx_pos, pred_spectrum_kx_pos, "b-", linewidth=2, label="Prediction")
+                plt.loglog(kx_pos, gt_spectrum_kx_pos, "r--", linewidth=2, label="Ground Truth")
+                plt.xlabel("Streamwise Wavenumber kx")
+                plt.ylabel("Energy Spectrum E(kx)")
+                plt.title("Streamwise Spectrum Comparison")
+                plt.legend()
+                plt.grid(True, alpha=0.3)
+
+                # Subplot 2: 1D spanwise spectrum comparison E(kz)
+                plt.subplot(2, 2, 2)
+                plt.loglog(kz_pos, pred_spectrum_kz_pos, "b-", linewidth=2, label="Prediction")
+                plt.loglog(kz_pos, gt_spectrum_kz_pos, "r--", linewidth=2, label="Ground Truth")
+                plt.xlabel("Spanwise Wavenumber kz")
+                plt.ylabel("Energy Spectrum E(kz)")
+                plt.title("Spanwise Spectrum Comparison")
+                plt.legend()
+                plt.grid(True, alpha=0.3)
+
+                # Prepare 2D spectrum data with consistent colorbar scale
+                pred_spectrum_2d = pred_data["spectrum_2d"]
+                gt_spectrum_2d = gt_data["spectrum_2d"]
+
+                # For 2D visualization, apply fftshift to center zero frequency
+                pred_spectrum_2d_shift = np.fft.fftshift(pred_spectrum_2d)
+                gt_spectrum_2d_shift = np.fft.fftshift(gt_spectrum_2d)
+                kx_shift = np.fft.fftshift(kx)
+                kz_shift = np.fft.fftshift(kz)
+
+                # Use log scale for better visualization and find common range
+                pred_spectrum_log = np.log10(pred_spectrum_2d_shift + 1e-12)
+                gt_spectrum_log = np.log10(gt_spectrum_2d_shift + 1e-12)
+
+                # Set consistent color scale
+                vmin = min(np.min(pred_spectrum_log), np.min(gt_spectrum_log))
+                vmax = max(np.max(pred_spectrum_log), np.max(gt_spectrum_log))
+
+                # Create meshgrid for plotting
+                kx_2d, kz_2d = np.meshgrid(kx_shift, kz_shift)
+
+                # Subplot 3: 2D prediction spectrum
+                plt.subplot(2, 2, 3)
+                contour1 = plt.contourf(
+                    kx_2d, kz_2d, pred_spectrum_log, levels=50, cmap="viridis", vmin=vmin, vmax=vmax
+                )
+                plt.colorbar(contour1, label="log₁₀(Energy Spectrum)")
+                plt.xlabel("Streamwise Wavenumber kx")
+                plt.ylabel("Spanwise Wavenumber kz")
+                plt.title("2D Spectrum - Prediction")
+
+                # Subplot 4: 2D ground truth spectrum
+                plt.subplot(2, 2, 4)
+                contour2 = plt.contourf(kx_2d, kz_2d, gt_spectrum_log, levels=50, cmap="viridis", vmin=vmin, vmax=vmax)
+                plt.colorbar(contour2, label="log₁₀(Energy Spectrum)")
+                plt.xlabel("Streamwise Wavenumber kx")
+                plt.ylabel("Spanwise Wavenumber kz")
+                plt.title("2D Spectrum - Ground Truth")
+
+                # Overall title for the figure
+                fig.suptitle(
+                    f"Spectrum Comparison - Plane {plane_idx} ({field_name.upper()}) at y={y_slice}",
+                    fontsize=14,
+                    fontweight="bold",
+                )
+
+                plt.tight_layout()
+
+                # Save combined comparison figure
+                output_path = self.output_dir / f"spectrum_comparison_plane{plane_idx}_{field_name}_combined.png"
+                plt.savefig(output_path, dpi=300, bbox_inches="tight")
+                plt.close()
+                print(f"  Saved combined spectrum comparison: {output_path}")
+
+        print("Combined spectra comparison plots completed.")
+
 
 def main():
     """Main evaluation function."""
@@ -1235,7 +1602,7 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate 3-plane Flow Swin Transformer")
     parser.add_argument("--checkpoint_path", type=str, help="Path to model checkpoint")
     parser.add_argument("--num_samples", type=int, default=1, help="Number of samples to evaluate")
-    parser.add_argument("--num_future", type=int, default=30, help="Number of future steps to predict")
+    parser.add_argument("--num_future", type=int, default=100, help="Number of future steps to predict")
     parser.add_argument("--save_predictions", action="store_true", help="Save predictions as H5 files")
 
     args = parser.parse_args()
@@ -1247,7 +1614,7 @@ def main():
         # Default to the hardcoded path if no argument provided
         checkpoint_path = (
             "/home/sh/CB/icon-thewell-dev/logs/flow_swin_3plane/runs/"
-            "2025-09-22_11-09-35-088845/checkpoints/step_28300.ckpt"
+            "2025-09-23_00-07-38-305868/checkpoints/step_34200.ckpt"
         )
 
     # Load model config (simplified for direct usage)

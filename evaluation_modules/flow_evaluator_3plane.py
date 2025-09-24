@@ -169,7 +169,7 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
         common_params = {
             "data_dir": data_dir,
             "input_length": 5,  # Match 3-plane training
-            "max_k_steps": 50,  # Load multiple GT steps for comparison
+            "max_k_steps": 100,  # Load multiple GT steps for comparison
             "field_names": self.field_names,  # ["u", "v", "w", "p"]
             "file_pattern": "*u-v-w-p_scale4-6-1_yslice*.h5",
             "resolution_scale": [4, 6, 1],
