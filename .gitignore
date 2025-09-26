@@ -198,6 +198,11 @@ cython_debug/
 # model evaluation
 evaluation_results/
 
+# visualization videos (large files)
+visualization/videos/*.mp4
+visualization/videos/*.gif
+visualization/videos/*.avi
+
 # degub files
 debug_test
 
