@@ -10,7 +10,7 @@ This script adopts the modular architecture from evaluation_new.py for 3-plane m
 
 Key Features:
 1. Modular and extensible design
-2. 3-plane specific visualizations (12-channel support)
+2. 3-plane specific visualizations (9-channel support for u, v, w)
 3. Proper WandB integration without step conflicts
 4. Multi-modal visualization (plots + videos)
 """
@@ -216,7 +216,7 @@ def main() -> None:
     if args.checkpoint_path is None:
         args.checkpoint_path = (
             "/home/sh/CB/icon-thewell-dev/logs/flow_swin_3plane/runs/"
-            "2025-09-23_00-07-38-305868/checkpoints/step_34200.ckpt"
+            "2025-10-15_22-32-26-187481/checkpoints/step_49800.ckpt"
         )
         print(f"Using default checkpoint: {args.checkpoint_path}")
 

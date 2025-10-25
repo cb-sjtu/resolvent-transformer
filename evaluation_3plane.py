@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Evaluation script for 3-plane 4-channel Flow Swin Transformer implementation.
+Evaluation script for 3-plane 3-channel Flow Swin Transformer implementation.
 Loads the best model checkpoint and generates comprehensive visualizations for all planes and channels.
+Only processes u,v,w velocity fields (pressure channel removed).
 """
 
 import os
@@ -36,7 +37,7 @@ from src.datasets.flow_sequence_2d.flow_sequence_3plane import FlowSequence3Plan
 
 
 class ThreePlaneModelEvaluator:
-    """Evaluator for the 3-plane 4-channel Flow Swin Transformer model."""
+    """Evaluator for the 3-plane 3-channel Flow Swin Transformer model (u,v,w only)."""
 
     def __init__(self, checkpoint_path: str, model_cfg: DictConfig, save_predictions: bool = False):
         """Initialize the evaluator.
@@ -67,7 +68,7 @@ class ThreePlaneModelEvaluator:
                         project="turbulence_swin_3plane",
                         id=training_run_id,
                         resume="allow",
-                        tags=["evaluation", "flow", "swin", "3plane", "12channel"],
+                        tags=["evaluation", "flow", "swin", "3plane", "9channel", "uvw"],
                     )
                     print("Successfully resumed training wandb run for evaluation logging")
                 except Exception as e:
@@ -76,7 +77,7 @@ class ThreePlaneModelEvaluator:
                     self.wandb_run = wandb.init(
                         project="turbulence_swin_3plane",
                         name=f"evaluation_{log_dir_name}",
-                        tags=["evaluation", "flow", "swin", "3plane", "12channel"],
+                        tags=["evaluation", "flow", "swin", "3plane", "9channel", "uvw"],
                         config={
                             "checkpoint_path": checkpoint_path,
                             "device": str(self.device),
@@ -91,7 +92,7 @@ class ThreePlaneModelEvaluator:
                 self.wandb_run = wandb.init(
                     project="turbulence_swin_3plane",
                     name=f"evaluation_{log_dir_name}",
-                    tags=["evaluation", "flow", "swin", "3plane", "12channel"],
+                    tags=["evaluation", "flow", "swin", "3plane", "9channel", "uvw"],
                     config={
                         "checkpoint_path": checkpoint_path,
                         "device": str(self.device),
@@ -149,11 +150,11 @@ class ThreePlaneModelEvaluator:
 
         # Dataset configuration matching training
         data_dir = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
-        field_names = ["u", "v", "w", "p"]
-        file_pattern = "*u-v-w-p_scale4-6-1_yslice*.h5"
+        field_names = ["u", "v", "w"]  # Only velocity fields (removed pressure)
+        file_pattern = "*u-v-w-p_scale4-6-1_yslice*.h5"  # Still read uvwp files, but only load u,v,w
         resolution_scale = (4, 6, 1)
         y_slices = [29, 54, 75]  # 与归一化统计对应的y平面
-        norm_stats_file = "norm_stats_12ch_3plane_u-v-w-p_scale4-6-1.json"
+        norm_stats_file = "norm_stats_9ch_3plane_u-v-w_scale4-6-1.json"
 
         # Create datasets for all splits
         train_dataset = FlowSequence3PlaneDataset(
@@ -254,7 +255,7 @@ class ThreePlaneModelEvaluator:
         return pred_seq
 
     def visualize_3plane_prediction(self, sample_idx: int = 0, num_future: int = 20):
-        """Visualize 3-plane 4-channel prediction with comprehensive comparison."""
+        """Visualize 3-plane 3-channel prediction with comprehensive comparison (u,v,w only)."""
         print(f"Visualizing 3-plane sample {sample_idx} with {num_future} future steps...")
 
         # Get sample and generate predictions
@@ -289,11 +290,11 @@ class ThreePlaneModelEvaluator:
 
         # Get channel info
         channel_info = self.test_dataset.get_channel_info()
-        field_names = channel_info["field_names"]  # ["u", "v", "w", "p"]
+        field_names = channel_info["field_names"]  # ["u", "v", "w"]
         y_slices = channel_info["y_slices"]  # [29, 54, 75]
         num_planes = channel_info["num_planes"]  # 3
 
-        # Create separate visualizations for each channel
+        # Create separate visualizations for each channel (9 total: 3 planes × 3 fields)
         self._create_channel_visualizations(
             input_seq, pred_seq, ground_truth_frames, field_names, y_slices, num_planes, sample_idx, num_future
         )
@@ -336,17 +337,13 @@ class ThreePlaneModelEvaluator:
                         all_data.append(pred_seq[t][channel_idx])
 
                 if all_data:
-                    if field_name in ["u", "v", "w"]:  # Velocity components
-                        cmap = "RdBu_r"
-                        vmax = max([abs(data.min()) for data in all_data] + [abs(data.max()) for data in all_data])
-                        vmin = -vmax
-                    else:  # Pressure
-                        cmap = "viridis"
-                        vmin = min([data.min() for data in all_data])
-                        vmax = max([data.max() for data in all_data])
+                    # All fields are velocity components
+                    cmap = "RdBu_r"
+                    vmax = max([abs(data.min()) for data in all_data] + [abs(data.max()) for data in all_data])
+                    vmin = -vmax
                 else:
-                    cmap = "viridis"
-                    vmin, vmax = 0, 1
+                    cmap = "RdBu_r"
+                    vmin, vmax = -1, 1
 
                 for t in range(display_steps):
                     # Ground truth
@@ -430,7 +427,7 @@ class ThreePlaneModelEvaluator:
         display_steps = min(num_future, 10)
 
         # Create comprehensive visualization
-        # Rows: 3 planes × 4 fields = 12 rows
+        # Rows: 3 planes × 3 fields = 9 rows
         # Cols: timesteps
         fig, axes = plt.subplots(
             num_planes * len(field_names),
@@ -440,7 +437,6 @@ class ThreePlaneModelEvaluator:
 
         if display_steps == 1:
             axes = axes.reshape(-1, 1)
-
         for t in range(display_steps):
             for plane_idx in range(num_planes):
                 y_slice = y_slices[plane_idx]
@@ -460,20 +456,13 @@ class ThreePlaneModelEvaluator:
                         data = np.zeros((pred_seq.shape[-2], pred_seq.shape[-1]))
                         title_suffix = "N/A"
 
-                    # Determine colormap and range based on field
-                    if field_name in ["u", "v", "w"]:  # Velocity components
-                        cmap = "RdBu_r"
-                        if np.any(data):
-                            vmax = max(abs(data.min()), abs(data.max()))
-                            vmin = -vmax
-                        else:
-                            vmin, vmax = -1, 1
-                    else:  # Pressure
-                        cmap = "viridis"
-                        if np.any(data):
-                            vmin, vmax = data.min(), data.max()
-                        else:
-                            vmin, vmax = 0, 1
+                    # Determine colormap and range based on field (all are velocity components)
+                    cmap = "RdBu_r"
+                    if np.any(data):
+                        vmax = max(abs(data.min()), abs(data.max()))
+                        vmin = -vmax
+                    else:
+                        vmin, vmax = -1, 1
 
                     im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, origin="lower")
 
@@ -490,7 +479,7 @@ class ThreePlaneModelEvaluator:
                     if t == 0 and np.any(data):
                         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
-        plt.suptitle(f"3-Plane 4-Channel Prediction Overview - Sample {sample_idx}", fontsize=14)
+        plt.suptitle(f"3-Plane 3-Channel Prediction Overview (u,v,w) - Sample {sample_idx}", fontsize=14)
         plt.tight_layout()
 
         # Save comprehensive figure
@@ -558,13 +547,10 @@ class ThreePlaneModelEvaluator:
                 # Use first frame to set up plot
                 first_frame = full_sequence[0, channel_idx]
 
-                if field_name in ["u", "v", "w"]:
-                    cmap = "RdBu_r"
-                    vmax = max(abs(first_frame.min()), abs(first_frame.max()))
-                    vmin = -vmax
-                else:
-                    cmap = "viridis"
-                    vmin, vmax = first_frame.min(), first_frame.max()
+                # All fields are velocity components
+                cmap = "RdBu_r"
+                vmax = max(abs(first_frame.min()), abs(first_frame.max()))
+                vmin = -vmax
 
                 im = ax.imshow(first_frame, cmap=cmap, vmin=vmin, vmax=vmax, origin="lower", animated=True)
                 plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
@@ -659,7 +645,7 @@ class ThreePlaneModelEvaluator:
 
         print(f"\nEvaluation complete! Results saved to: {self.output_dir}")
         print("\nGenerated visualizations:")
-        print("- Individual channel images (12 files per sample: 3 planes × 4 channels)")
+        print("- Individual channel images (9 files per sample: 3 planes × 3 fields [u,v,w])")
         print("- Comprehensive overview images")
         print("- Detailed error analysis files")
         print("- Animations for temporal evolution")
@@ -705,12 +691,12 @@ class ThreePlaneModelEvaluator:
                 # Calculate per-channel errors for first few steps
                 if i < 10:  # Print first 10 steps
                     channel_info = dataset.get_channel_info()
-                    field_names = channel_info["field_names"]  # ["u", "v", "w", "p"]
+                    field_names = channel_info["field_names"]  # ["u", "v", "w"]
                     # y_slices = channel_info["y_slices"]  # [29, 54, 75] (unused)
 
                     for plane_idx in range(3):
                         for field_idx, field_name in enumerate(field_names):
-                            channel_idx = plane_idx * 4 + field_idx
+                            channel_idx = plane_idx * len(field_names) + field_idx
 
                             pred_data = pred_denorm[channel_idx]
                             target_data = target_denorm[channel_idx]
@@ -782,7 +768,7 @@ class ThreePlaneModelEvaluator:
 
             for plane_idx in range(3):
                 for field_idx, field_name in enumerate(field_names):
-                    channel_idx = plane_idx * 4 + field_idx
+                    channel_idx = plane_idx * len(field_names) + field_idx
 
                     pred_data = pred_frame[channel_idx]
                     target_data = gt_frame[channel_idx]
@@ -821,7 +807,7 @@ class ThreePlaneModelEvaluator:
         for t, (pred, target) in enumerate(zip(predictions, ground_truth_frames, strict=False)):
             for plane_idx in range(3):
                 for field_idx, field_name in enumerate(field_names):
-                    channel_idx = plane_idx * 4 + field_idx
+                    channel_idx = plane_idx * len(field_names) + field_idx
 
                     pred_data = pred[channel_idx]
                     target_data = target[channel_idx]
@@ -879,21 +865,17 @@ class ThreePlaneModelEvaluator:
         for plane_idx in range(3):
             for field_idx, field_name in enumerate(field_names):
                 ax = axes[plane_idx, field_idx]
-                channel_idx = plane_idx * 4 + field_idx
+                channel_idx = plane_idx * len(field_names) + field_idx
 
                 # Create side-by-side comparison: prediction | ground truth
                 pred_field = pred[channel_idx]
                 target_field = target[channel_idx]
                 combined = np.concatenate([pred_field, target_field], axis=1)
 
-                # Use field-specific colormap
-                if field_name in ["u", "v", "w"]:
-                    cmap = "RdBu_r"
-                    vmax = max(abs(combined.min()), abs(combined.max()))
-                    vmin = -vmax
-                else:
-                    cmap = "viridis"
-                    vmin, vmax = combined.min(), combined.max()
+                # Use colormap for velocity fields
+                cmap = "RdBu_r"
+                vmax = max(abs(combined.min()), abs(combined.max()))
+                vmin = -vmax
 
                 im = ax.imshow(combined, cmap=cmap, vmin=vmin, vmax=vmax, origin="lower")
 
@@ -1081,14 +1063,10 @@ class ThreePlaneModelEvaluator:
                     all_data.append(ground_truth_frames[t][channel_idx])
                     all_data.append(predictions[t][channel_idx])
 
-                if field_name in ["u", "v", "w"]:
-                    cmap = "RdBu_r"
-                    vmax = max([abs(data.min()) for data in all_data] + [abs(data.max()) for data in all_data])
-                    vmin = -vmax
-                else:
-                    cmap = "viridis"
-                    vmin = min([data.min() for data in all_data])
-                    vmax = max([data.max() for data in all_data])
+                # All fields are velocity components
+                cmap = "RdBu_r"
+                vmax = max([abs(data.min()) for data in all_data] + [abs(data.max()) for data in all_data])
+                vmin = -vmax
 
                 for t in range(display_steps):
                     gt_data = ground_truth_frames[t][channel_idx]
@@ -1171,14 +1149,10 @@ class ThreePlaneModelEvaluator:
                     all_data.append(ground_truth_frames[t][channel_idx])
                     all_data.append(pred_seq[t][channel_idx])
 
-                if field_name in ["u", "v", "w"]:
-                    cmap = "RdBu_r"
-                    vmax = max([abs(data.min()) for data in all_data] + [abs(data.max()) for data in all_data])
-                    vmin = -vmax
-                else:
-                    cmap = "viridis"
-                    vmin = min([data.min() for data in all_data])
-                    vmax = max([data.max() for data in all_data])
+                # All fields are velocity components
+                cmap = "RdBu_r"
+                vmax = max([abs(data.min()) for data in all_data] + [abs(data.max()) for data in all_data])
+                vmin = -vmax
 
                 for t in range(display_steps):
                     gt_data = ground_truth_frames[t][channel_idx]
@@ -1239,8 +1213,8 @@ class ThreePlaneModelEvaluator:
         Compute energy spectra from prediction frames.
 
         Args:
-            frames: Tensor of shape (T, C, H, W) where C=12 (3 planes × 4 fields)
-            field_names: List of field names ["u", "v", "w", "p"]
+            frames: Tensor of shape (T, C, H, W) where C = 3 planes × len(field_names)
+            field_names: List of field names (e.g., ["u", "v", "w"] or ["u", "v", "w", "p"])
             y_slices: List of y-slice positions [29, 54, 75]
             dx: Grid spacing in x direction
             dz: Grid spacing in z direction
@@ -1272,7 +1246,7 @@ class ThreePlaneModelEvaluator:
                 print(f"  Processing plane {plane_idx} ({field_name}) at y={y_slice}")
 
                 # Extract channel data for this plane and field
-                channel_idx = plane_idx * 4 + field_idx
+                channel_idx = plane_idx * len(field_names) + field_idx
                 field_data = frames[:, channel_idx, :, :]  # Shape: (T, H, W)
 
                 # Time-averaged energy spectrum
@@ -1415,7 +1389,7 @@ class ThreePlaneModelEvaluator:
 
         # Get channel info
         channel_info = self.test_dataset.get_channel_info()
-        field_names = channel_info["field_names"]  # ["u", "v", "w", "p"]
+        field_names = channel_info["field_names"]  # e.g., ["u", "v", "w"] or ["u", "v", "w", "p"]
         y_slices = channel_info["y_slices"]  # [29, 54, 75]
 
         # Generate autoregressive predictions
@@ -1614,19 +1588,19 @@ def main():
         # Default to the hardcoded path if no argument provided
         checkpoint_path = (
             "/home/sh/CB/icon-thewell-dev/logs/flow_swin_3plane/runs/"
-            "2025-09-23_00-07-38-305868/checkpoints/step_34200.ckpt"
+            "2025-10-15_22-32-26-187481/checkpoints/step_49800.ckpt"
         )
 
     # Load model config (simplified for direct usage)
     from omegaconf import OmegaConf
 
-    # Create a basic model config for 3-plane model
+    # Create a basic model config for 3-plane model (9 channels: 3 planes × 3 fields)
     model_cfg = OmegaConf.create(
         {
             "input_shape": [128, 128],
             "sequence_length": 5,
             "prediction_horizon": 1,
-            "num_channels": 12,
+            "num_channels": 9,
             "patch_size": [4, 4],
             "embed_dim": 128,
             "depths": [2, 2, 4, 6, 4, 2, 2],

@@ -23,7 +23,7 @@ task_name: "flow_swin_3plane"
 # tags to help you identify your experiments
 # you can overwrite this in experiment configs
 # overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
-tags: ["flow", "swin", "3plane", "uvwp", "12channels"]
+tags: ["flow", "swin", "3plane", "uvw", "9channels"]
 
 # set False to skip model summary
 print_model_summary: True
@@ -46,7 +46,7 @@ seed: 12345
 
 print_lv: 1
 
-log_project: "turbulence_swin_3plane"
+log_project: "turbulence_swin_3plane_uvw"
 
 # Enable training
 train: True
@@ -54,8 +54,8 @@ train: True
 # Loss function for FlowSwin2DLitModule
 loss_fn: "mse"
 
-# Per-channel metrics for 3-plane 4-channel monitoring
-enable_per_channel_metrics: true  # 开启12通道指标监测
+# Per-channel metrics for 3-plane 3-channel monitoring
+enable_per_channel_metrics: true  # 开启9通道指标监测 (u,v,w only)
 
 # Scheduled Sampling Configuration
 scheduled_sampling:

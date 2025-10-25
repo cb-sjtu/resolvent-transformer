@@ -168,11 +168,18 @@ class FlowSequence3PlaneDataset(Dataset):
         # Use the first file from the first plane
         first_plane_files = self.files_by_plane[y_slices[0]]
         with h5py.File(first_plane_files[0], "r") as f:
-            # Data is stored as (C, H, W) where C=4 for u,v,w,p
-            data_multi_channel = f["data"][()]  # Shape: (4, H, W)
+            # Data is stored as (C, H, W) where C can be 3 (u,v,w) or 4 (u,v,w,p)
+            data_multi_channel = f["data"][()]  # Shape: (C, H, W)
 
-            if len(data_multi_channel.shape) != 3 or data_multi_channel.shape[0] != len(self.field_names):
-                raise ValueError(f"Expected data shape (4, H, W), got {data_multi_channel.shape}")
+            # Check that data shape is 3D and has at least the required number of channels
+            if len(data_multi_channel.shape) != 3:
+                raise ValueError(f"Expected 3D data shape (C, H, W), got {data_multi_channel.shape}")
+
+            if data_multi_channel.shape[0] < len(self.field_names):
+                raise ValueError(
+                    f"Data file has {data_multi_channel.shape[0]} channels, "
+                    f"but requested {len(self.field_names)} fields: {self.field_names}"
+                )
 
             # The data is already 2D per y-slice, we just need to determine which y_slices are available
             # y_slices are determined by the filename pattern and file availability
@@ -192,7 +199,7 @@ class FlowSequence3PlaneDataset(Dataset):
             print(f"Total physical channels: {self.num_total_channels}")
 
     def _setup_normalization(self, norm_stats):
-        """Setup normalization parameters for 12-channel 3-plane data."""
+        """Setup normalization parameters for multi-channel 3-plane data."""
         if not self.enable_normalization or norm_stats is None:
             self.mean = None
             self.std = None
@@ -220,15 +227,15 @@ class FlowSequence3PlaneDataset(Dataset):
         else:
             raise ValueError(f"norm_stats must be dict or file path, got {type(norm_stats)}")
 
-        # Extract per-channel statistics for 12 channels
+        # Extract per-channel statistics
         try:
             if "per_channel_stats" in stats and len(stats["per_channel_stats"]) > 0:
-                # Per-channel normalization for 12 channels
+                # Per-channel normalization
                 per_channel_stats = stats["per_channel_stats"]
                 self.mean = []
                 self.std = []
 
-                # Build channel stats in order: [plane0_u, plane0_v, plane0_w, plane0_p, plane1_u, ...]
+                # Build channel stats in order: [plane0_u, plane0_v, plane0_w, plane1_u, ...]
                 for ch_idx in range(self.num_total_channels):
                     channel_key = f"channel_{ch_idx:02d}"
 
@@ -242,11 +249,11 @@ class FlowSequence3PlaneDataset(Dataset):
                         self.std.append(float(stats["std"]))
 
                 # Convert to tensors for efficient computation
-                self.mean = torch.tensor(self.mean, dtype=torch.float32).view(-1, 1, 1)  # (12, 1, 1)
-                self.std = torch.tensor(self.std, dtype=torch.float32).view(-1, 1, 1)  # (12, 1, 1)
+                self.mean = torch.tensor(self.mean, dtype=torch.float32).view(-1, 1, 1)  # (num_channels, 1, 1)
+                self.std = torch.tensor(self.std, dtype=torch.float32).view(-1, 1, 1)  # (num_channels, 1, 1)
                 self.per_channel_norm = True
 
-                print(f"12-channel normalization enabled for {self.split} split:")
+                print(f"{self.num_total_channels}-channel normalization enabled for {self.split} split:")
                 for ch_idx in range(min(6, len(self.mean))):  # Show first 6 channels
                     print(
                         f"  channel_{ch_idx:02d}: mean={self.mean[ch_idx, 0, 0]:.6f}, std={self.std[ch_idx, 0, 0]:.6f}"
@@ -283,8 +290,8 @@ class FlowSequence3PlaneDataset(Dataset):
 
         if hasattr(self, "per_channel_norm") and self.per_channel_norm:
             # Per-channel normalization
-            # data shape: (..., C, H, W) where C is 12 channels
-            # mean/std shape: (12, 1, 1)
+            # data shape: (..., C, H, W) where C is num_total_channels
+            # mean/std shape: (num_total_channels, 1, 1)
 
             # Ensure tensors are on the same device
             if hasattr(data, "device"):
@@ -306,8 +313,8 @@ class FlowSequence3PlaneDataset(Dataset):
 
         if hasattr(self, "per_channel_norm") and self.per_channel_norm:
             # Per-channel denormalization
-            # data shape: (..., C, H, W) where C is 12 channels
-            # mean/std shape: (12, 1, 1)
+            # data shape: (..., C, H, W) where C is num_total_channels
+            # mean/std shape: (num_total_channels, 1, 1)
 
             # Ensure tensors are on the same device
             if hasattr(data, "device"):
@@ -333,10 +340,10 @@ class FlowSequence3PlaneDataset(Dataset):
                 - "data": input sequence data with shape (1, input_length, num_total_channels, H, W)
                 - "label": target sequence with shape (1, max_k_steps, num_total_channels, H, W)
 
-        Channel organization:
-            - Channels 0-3: Plane 0 (y_slice[0]) - [u, v, w, p]
-            - Channels 4-7: Plane 1 (y_slice[1]) - [u, v, w, p]
-            - Channels 8-11: Plane 2 (y_slice[2]) - [u, v, w, p]
+        Channel organization (example for 3 fields):
+            - Channels 0-2: Plane 0 (y_slice[0]) - [u, v, w]
+            - Channels 3-5: Plane 1 (y_slice[1]) - [u, v, w]
+            - Channels 6-8: Plane 2 (y_slice[2]) - [u, v, w]
         """
         base_idx = self.indices[idx]
         description = (
@@ -373,9 +380,9 @@ class FlowSequence3PlaneDataset(Dataset):
                         plane_channels.append(data_2d)
 
             # Stack all channels: (num_total_channels, H, W)
-            # Channel order: [plane0_u, plane0_v, plane0_w, plane0_p,
-            #                 plane1_u, plane1_v, plane1_w, plane1_p,
-            #                 plane2_u, plane2_v, plane2_w, plane2_p]
+            # Channel order: [plane0_field0, plane0_field1, ...,
+            #                 plane1_field0, plane1_field1, ...,
+            #                 plane2_field0, plane2_field1, ...]
             multi_channel_frame = np.stack(plane_channels, axis=0)
             frames.append(multi_channel_frame)
 

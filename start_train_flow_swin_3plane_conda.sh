@@ -1,5 +1,5 @@
 #!/bin/bash
-# Training script for flow_swin_3plane model (12-channel version)
+# Training script for flow_swin_3plane model (9-channel version: 3 planes × 3 fields [u,v,w])
 # Train + evaluate, and make sure evaluation logs go into the SAME run directory.
 
 echo "Starting training for flow_swin_3plane model..."

@@ -13,8 +13,8 @@ defaults:
   - _self_
 
 data_folder: /home/sh/CB/icon-thewell-dev/data/preprocessed_flow/
-batch_size_per_device: 16  # 减小batch size因为12通道需要更多内存
+batch_size_per_device: 16  # Batch size for 9-channel data
 
 # Normalization settings
 enable_normalization: true
-norm_stats: "norm_stats_12ch_3plane_u-v-w-p_scale4-6-1.json"  # Path to 12-channel 3-plane normalization stats file
+norm_stats: "norm_stats_9ch_3plane_u-v-w_scale4-6-1.json"  # Path to 9-channel 3-plane normalization stats file (u,v,w only)

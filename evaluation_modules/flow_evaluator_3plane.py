@@ -2,7 +2,7 @@
 """
 3-Plane Flow Evaluator implementation with modular design.
 
-This extends the modular evaluation architecture to support 3-plane 12-channel models.
+This extends the modular evaluation architecture to support 3-plane 9-channel models (uvw).
 Inherits from BaseFlowEvaluator and adds 3-plane specific functionality.
 """
 
@@ -41,7 +41,7 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
     3-Plane Flow Model Evaluator with modular design.
 
     This evaluator provides:
-    - 3-plane specific visualization (12-channel support)
+    - 3-plane specific visualization (9-channel support for u, v, w)
     - Proper WandB integration with step handling
     - Multi-plane analysis
     - Video generation for 3-plane data
@@ -80,16 +80,16 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
 
         # 3-plane specific configuration
         self.num_planes = 3
-        self.num_fields_per_plane = 4  # u, v, w, p
-        self.total_channels = self.num_planes * self.num_fields_per_plane  # 12
+        self.num_fields_per_plane = 3  # u, v, w
+        self.total_channels = self.num_planes * self.num_fields_per_plane  # 9
         self.plane_y_positions = [29, 54, 75]  # y-slice positions
-        self.field_names = ["u", "v", "w", "p"]
+        self.field_names = ["u", "v", "w"]
 
         # Flow-specific configuration (matching 2D version)
         self.channel_names = self.field_names
         self.input_length = 5  # Will be updated from dataset
 
-        # Override time monitor with 3-plane specific one (use "p" instead of "mag")
+        # Override time monitor with 3-plane specific one
         self.time_monitor = self._create_3plane_time_monitor(monitor_points)
 
         print("Initialized 3-plane evaluator:")
@@ -170,7 +170,7 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
             "data_dir": data_dir,
             "input_length": 5,  # Match 3-plane training
             "max_k_steps": 100,  # Load multiple GT steps for comparison
-            "field_names": self.field_names,  # ["u", "v", "w", "p"]
+            "field_names": self.field_names,  # ["u", "v", "w"]
             "file_pattern": "*u-v-w-p_scale4-6-1_yslice*.h5",
             "resolution_scale": [4, 6, 1],
             "y_slices": self.plane_y_positions,  # [29, 54, 75]
@@ -433,8 +433,8 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
             if timestep not in monitor.time_series_data[split][mode]["timesteps"]:
                 monitor.time_series_data[split][mode]["timesteps"].append(timestep)
 
-            # Record prediction values for each point (use "p" instead of "mag")
-            for component in ["u", "v", "w", "p"]:
+            # Record prediction values for each point
+            for component in ["u", "v", "w"]:
                 for i, value in enumerate(pred_values[component]):
                     monitor.time_series_data[split][mode][f"{component}_pred"][i].append(value)
                     # Debug: Log the first few values (only from first sample)
@@ -444,12 +444,12 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
             # Record ground truth values if available
             if gt_data is not None:
                 gt_values = patched_extract_point_values(gt_data, timestep)
-                for component in ["u", "v", "w", "p"]:
+                for component in ["u", "v", "w"]:
                     for i, value in enumerate(gt_values[component]):
                         monitor.time_series_data[split][mode][f"{component}_gt"][i].append(value)
             else:
                 # Fill with None if no ground truth available
-                for component in ["u", "v", "w", "p"]:
+                for component in ["u", "v", "w"]:
                     for i in range(len(monitor.monitor_points)):
                         monitor.time_series_data[split][mode][f"{component}_gt"][i].append(None)
 
@@ -460,28 +460,25 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
                 f"data range=[{flow_data.min():.6f}, {flow_data.max():.6f}]"
             )
 
-            # Extract u, v, w, p from 12-channel 3-plane data
-            # Channels 0-2: u for planes 0,1,2; Channels 3-5: v; Channels 6-8: w; Channels 9-11: p
+            # Extract u, v, w from 9-channel 3-plane data
+            # Channels 0-2: u for planes 0,1,2; Channels 3-5: v; Channels 6-8: w
 
-            point_values = {"u": [], "v": [], "w": [], "p": []}
+            point_values = {"u": [], "v": [], "w": []}
 
             for plane_idx, z_idx, x_idx in monitor.monitor_points:
                 # Extract values from the specific plane
-                # Channel mapping: u=plane_idx+0, v=plane_idx+3, w=plane_idx+6, p=plane_idx+9
+                # Channel mapping: u=plane_idx+0, v=plane_idx+3, w=plane_idx+6
                 u_channel = plane_idx + 0  # 0, 1, 2
                 v_channel = plane_idx + 3  # 3, 4, 5
                 w_channel = plane_idx + 6  # 6, 7, 8
-                p_channel = plane_idx + 9  # 9, 10, 11
 
                 u_val = flow_data[u_channel, z_idx, x_idx].item()
                 v_val = flow_data[v_channel, z_idx, x_idx].item()
                 w_val = flow_data[w_channel, z_idx, x_idx].item()
-                p_val = flow_data[p_channel, z_idx, x_idx].item()
 
                 point_values["u"].append(u_val)
                 point_values["v"].append(v_val)
                 point_values["w"].append(w_val)
-                point_values["p"].append(p_val)
 
             return point_values
 
@@ -501,8 +498,8 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
                     monitor.time_series_data[split][mode] = {
                         "timesteps": [],
                     }
-                    # Initialize data storage for each component and point (use "p" instead of "mag")
-                    for component in ["u", "v", "w", "p"]:
+                    # Initialize data storage for each component and point
+                    for component in ["u", "v", "w"]:
                         monitor.time_series_data[split][mode][f"{component}_pred"] = [
                             [] for _ in range(len(monitor.monitor_points))
                         ]
@@ -513,28 +510,28 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
         monitor.reset_data = patched_reset_data
         monitor.reset_data()  # Initialize with 3-plane structure
 
-        # Also patch plotting methods to use "p" instead of "mag"
+        # Also patch plotting methods for 3-plane visualization
         # original_plot_point_time_series = monitor.plot_point_time_series  # (unused)
 
         def patched_plot_point_time_series(point_idx, output_dir, split="test"):
-            """Plot time series for a specific point (3-plane version with 'p')."""
+            """Plot time series for a specific point (3-plane version)."""
             plane_idx, z_idx, x_idx = monitor.monitor_points[point_idx]
             y_pos = [29, 54, 75][plane_idx]  # Y-slice positions for planes 0, 1, 2
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+            fig, axes = plt.subplots(1, 3, figsize=(18, 5))
             fig.suptitle(
                 f"Time Series at Plane {plane_idx} (y={y_pos}), Point ({z_idx}, {x_idx}) - {split.upper()} Data",
                 fontsize=16,
             )
 
-            components = ["u", "v", "w", "p"]  # Use "p" instead of "mag"
+            components = ["u", "v", "w"]
             colors = {"ar": "blue", "tf": "red"}
             labels = {"ar": "Autoregressive", "tf": "Teacher Forcing"}
 
             for i, component in enumerate(components):
-                ax = axes[i // 2, i % 2]
+                ax = axes[i]
                 ax.set_title(f"Component: {component.upper()}")
                 ax.set_xlabel("Timestep")
                 ax.set_ylabel(f"{component.upper()} Value")
@@ -602,9 +599,9 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
         # original_plot_all_points_component = monitor.plot_all_points_component  # (unused)
 
         def patched_plot_all_points_component(component, output_dir, split="test", mode="ar"):
-            """Plot all points for a specific component (3-plane version with 'p')."""
-            if component not in ["u", "v", "w", "p"]:
-                raise ValueError(f"Component must be one of ['u', 'v', 'w', 'p'], got {component}")
+            """Plot all points for a specific component (3-plane version)."""
+            if component not in ["u", "v", "w"]:
+                raise ValueError(f"Component must be one of ['u', 'v', 'w'], got {component}")
 
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -677,8 +674,8 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
             for i in range(len(monitor.monitor_points)):
                 monitor.plot_point_time_series(i, ts_dir, split)
 
-            # Plot all points for each component (use "p" instead of "mag")
-            for component in ["u", "v", "w", "p"]:
+            # Plot all points for each component
+            for component in ["u", "v", "w"]:
                 for mode in ["ar", "tf"]:
                     monitor.plot_all_points_component(component, ts_dir, split, mode)
 
@@ -691,7 +688,7 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
         # original_save_data_csv = monitor.save_data_csv  # (unused)
 
         def patched_save_data_csv(output_dir):
-            """Save time series data as CSV files (3-plane version with 'p')."""
+            """Save time series data as CSV files (3-plane version)."""
             data_dir = Path(output_dir) / "time_series_data"
             data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -700,9 +697,9 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
                     if split in monitor.time_series_data and mode in monitor.time_series_data[split]:
                         data_dict = {"timestep": monitor.time_series_data[split][mode]["timesteps"]}
 
-                        # Add data for each point and component (use "p" instead of "mag")
+                        # Add data for each point and component
                         num_timesteps = len(data_dict["timestep"])
-                        for component in ["u", "v", "w", "p"]:
+                        for component in ["u", "v", "w"]:
                             for i, (plane_idx, z_idx, x_idx) in enumerate(monitor.monitor_points):
                                 y_pos = [29, 54, 75][plane_idx]  # Y-slice positions for planes 0, 1, 2
                                 # Prediction data

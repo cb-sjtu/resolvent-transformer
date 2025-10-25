@@ -70,21 +70,18 @@ class FlowSwin2DLitModule(BaseLitModule):
         # Cache for steps_per_epoch (will be set properly during training setup)
         self._cached_steps_per_epoch = None
 
-        # Per-channel metrics configuration for 3-plane 4-channel data
+        # Per-channel metrics configuration for 3-plane 3-channel data (u,v,w only)
         self.enable_per_channel_metrics = getattr(cfg, "enable_per_channel_metrics", True)
         self.channel_names = [
             "plane0_u_y29",
             "plane0_v_y29",
             "plane0_w_y29",
-            "plane0_p_y29",
             "plane1_u_y54",
             "plane1_v_y54",
             "plane1_w_y54",
-            "plane1_p_y54",
             "plane2_u_y75",
             "plane2_v_y75",
             "plane2_w_y75",
-            "plane2_p_y75",
         ]
         self.num_channels = len(self.channel_names)
 
@@ -143,10 +140,10 @@ class FlowSwin2DLitModule(BaseLitModule):
             metrics[f"{ch_name}_rel_error"] = ch_rel_error
 
         # Compute grouped metrics (average per field across all planes)
-        field_names = ["u", "v", "w", "p"]
+        field_names = ["u", "v", "w"]  # Only velocity fields (removed pressure)
         for field_idx, field_name in enumerate(field_names):
-            # Get indices for this field across all planes
-            field_channels = [field_idx + plane_idx * 4 for plane_idx in range(3)]
+            # Get indices for this field across all planes (3 fields per plane)
+            field_channels = [field_idx + plane_idx * 3 for plane_idx in range(3)]
 
             # Average metrics for this field
             field_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in field_channels]).mean()
@@ -161,7 +158,7 @@ class FlowSwin2DLitModule(BaseLitModule):
 
         # Compute plane-wise metrics (average per plane across all fields)
         for plane_idx in range(3):
-            plane_channels = [plane_idx * 4 + field_idx for field_idx in range(4)]
+            plane_channels = [plane_idx * 3 + field_idx for field_idx in range(3)]  # 3 fields per plane
 
             plane_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in plane_channels]).mean()
             plane_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in plane_channels]).mean()
