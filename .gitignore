@@ -209,5 +209,7 @@ debug_test
 # evaluation results
 wandb/
 
+timeseries_comparison_results/
+spectrum_comparison_results/
 # ------------------------------------------------------------------------------------------------
 # The following are for project-specific configs
