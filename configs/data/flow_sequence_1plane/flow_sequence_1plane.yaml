@@ -1,0 +1,20 @@
+#######################################################
+# This file belongs to the core repository.
+# If your project repository is a fork of core,
+# you are suggested to keep this file untouched in your project.
+# This helps avoid merge conflicts when syncing from core.
+#######################################################
+
+defaults:
+  - ../dataloader@_here_
+  - train/flow_1plane_train@train.flow_sequence_1plane
+  - valid/flow_1plane_valid@valid.flow_sequence_1plane
+  - test/flow_1plane_test@test.flow_sequence_1plane
+  - _self_
+
+data_folder: /home/sh/CB/icon-thewell-dev/data/preprocessed_flow/
+batch_size_per_device: 8  # Batch size for 3-channel data
+
+# Normalization settings
+enable_normalization: true
+norm_stats: "norm_stats_3ch_1plane_u-v-w_scale2-3-1_yslice54.json"  # Path to 3-channel 1-plane normalization stats file (u,v,w only)

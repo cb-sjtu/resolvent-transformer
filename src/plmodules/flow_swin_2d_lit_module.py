@@ -70,19 +70,47 @@ class FlowSwin2DLitModule(BaseLitModule):
         # Cache for steps_per_epoch (will be set properly during training setup)
         self._cached_steps_per_epoch = None
 
-        # Per-channel metrics configuration for 3-plane 3-channel data (u,v,w only)
+        # Per-channel metrics configuration - dynamically detect number of channels
         self.enable_per_channel_metrics = getattr(cfg, "enable_per_channel_metrics", True)
-        self.channel_names = [
-            "plane0_u_y29",
-            "plane0_v_y29",
-            "plane0_w_y29",
-            "plane1_u_y54",
-            "plane1_v_y54",
-            "plane1_w_y54",
-            "plane2_u_y75",
-            "plane2_v_y75",
-            "plane2_w_y75",
-        ]
+
+        # Get number of channels from model config
+        model_num_channels = cfg.model.get("num_channels", 9)
+
+        # Automatically set up channel names based on number of channels
+        if model_num_channels == 9:
+            # 3-plane configuration (3 planes × 3 fields)
+            self.channel_names = [
+                "plane0_u_y29",
+                "plane0_v_y29",
+                "plane0_w_y29",
+                "plane1_u_y54",
+                "plane1_v_y54",
+                "plane1_w_y54",
+                "plane2_u_y75",
+                "plane2_v_y75",
+                "plane2_w_y75",
+            ]
+            self.num_planes = 3
+            self.y_slices = [29, 54, 75]
+        elif model_num_channels == 3:
+            # 1-plane configuration (1 plane × 3 fields)
+            self.channel_names = [
+                "u_y54",
+                "v_y54",
+                "w_y54",
+            ]
+            self.num_planes = 1
+            self.y_slices = [54]
+        else:
+            # Generic configuration - disable per-channel metrics
+            print(
+                f"Warning: Unknown channel configuration ({model_num_channels} channels). Per-channel metrics disabled."
+            )
+            self.enable_per_channel_metrics = False
+            self.channel_names = [f"ch{i}" for i in range(model_num_channels)]
+            self.num_planes = 1
+            self.y_slices = []
+
         self.num_channels = len(self.channel_names)
 
     def _steps_per_epoch(self) -> int:
@@ -141,35 +169,56 @@ class FlowSwin2DLitModule(BaseLitModule):
 
         # Compute grouped metrics (average per field across all planes)
         field_names = ["u", "v", "w"]  # Only velocity fields (removed pressure)
-        for field_idx, field_name in enumerate(field_names):
-            # Get indices for this field across all planes (3 fields per plane)
-            field_channels = [field_idx + plane_idx * 3 for plane_idx in range(3)]
 
-            # Average metrics for this field
-            field_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in field_channels]).mean()
-            field_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in field_channels]).mean()
-            field_rel_error = torch.stack(
-                [metrics[f"{self.channel_names[ch]}_rel_error"] for ch in field_channels]
-            ).mean()
+        if self.num_planes == 3:
+            # 3-plane configuration: average across planes for each field
+            for field_idx, field_name in enumerate(field_names):
+                # Get indices for this field across all planes (3 fields per plane)
+                field_channels = [field_idx + plane_idx * 3 for plane_idx in range(3)]
 
-            metrics[f"field_{field_name}_avg_mse"] = field_mse
-            metrics[f"field_{field_name}_avg_mae"] = field_mae
-            metrics[f"field_{field_name}_avg_rel_error"] = field_rel_error
+                # Average metrics for this field
+                field_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in field_channels]).mean()
+                field_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in field_channels]).mean()
+                field_rel_error = torch.stack(
+                    [metrics[f"{self.channel_names[ch]}_rel_error"] for ch in field_channels]
+                ).mean()
 
-        # Compute plane-wise metrics (average per plane across all fields)
-        for plane_idx in range(3):
-            plane_channels = [plane_idx * 3 + field_idx for field_idx in range(3)]  # 3 fields per plane
+                metrics[f"field_{field_name}_avg_mse"] = field_mse
+                metrics[f"field_{field_name}_avg_mae"] = field_mae
+                metrics[f"field_{field_name}_avg_rel_error"] = field_rel_error
 
-            plane_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in plane_channels]).mean()
-            plane_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in plane_channels]).mean()
-            plane_rel_error = torch.stack(
-                [metrics[f"{self.channel_names[ch]}_rel_error"] for ch in plane_channels]
-            ).mean()
+            # Compute plane-wise metrics (average per plane across all fields)
+            for plane_idx in range(3):
+                plane_channels = [plane_idx * 3 + field_idx for field_idx in range(3)]  # 3 fields per plane
 
-            y_slice = [29, 54, 75][plane_idx]
-            metrics[f"plane{plane_idx}_y{y_slice}_avg_mse"] = plane_mse
-            metrics[f"plane{plane_idx}_y{y_slice}_avg_mae"] = plane_mae
-            metrics[f"plane{plane_idx}_y{y_slice}_avg_rel_error"] = plane_rel_error
+                plane_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in plane_channels]).mean()
+                plane_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in plane_channels]).mean()
+                plane_rel_error = torch.stack(
+                    [metrics[f"{self.channel_names[ch]}_rel_error"] for ch in plane_channels]
+                ).mean()
+
+                y_slice = self.y_slices[plane_idx]
+                metrics[f"plane{plane_idx}_y{y_slice}_avg_mse"] = plane_mse
+                metrics[f"plane{plane_idx}_y{y_slice}_avg_mae"] = plane_mae
+                metrics[f"plane{plane_idx}_y{y_slice}_avg_rel_error"] = plane_rel_error
+
+        elif self.num_planes == 1:
+            # 1-plane configuration: field metrics are the same as individual channel metrics
+            for field_idx, field_name in enumerate(field_names):
+                ch_name = self.channel_names[field_idx]
+                metrics[f"field_{field_name}_avg_mse"] = metrics[f"{ch_name}_mse"]
+                metrics[f"field_{field_name}_avg_mae"] = metrics[f"{ch_name}_mae"]
+                metrics[f"field_{field_name}_avg_rel_error"] = metrics[f"{ch_name}_rel_error"]
+
+            # Compute overall plane metrics (average across all fields in the single plane)
+            plane_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in range(3)]).mean()
+            plane_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in range(3)]).mean()
+            plane_rel_error = torch.stack([metrics[f"{self.channel_names[ch]}_rel_error"] for ch in range(3)]).mean()
+
+            y_slice = self.y_slices[0]
+            metrics[f"plane0_y{y_slice}_avg_mse"] = plane_mse
+            metrics[f"plane0_y{y_slice}_avg_mae"] = plane_mae
+            metrics[f"plane0_y{y_slice}_avg_rel_error"] = plane_rel_error
 
         return metrics
 
