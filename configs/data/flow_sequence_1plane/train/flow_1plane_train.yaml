@@ -14,6 +14,7 @@ dataset:
   split: "train"
   enable_normalization: ${data.enable_normalization}
   norm_stats: ${data.norm_stats}
+  time_stride: ${data.time_stride}  # Frame spacing between timesteps
 
 num_workers: ${data.num_workers}
 pin_memory: ${data.pin_memory}

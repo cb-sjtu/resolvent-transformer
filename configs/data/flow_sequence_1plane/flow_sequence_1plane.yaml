@@ -15,6 +15,9 @@ defaults:
 data_folder: /home/sh/CB/icon-thewell-dev/data/preprocessed_flow/
 batch_size_per_device: 12  # Batch size for 3-channel data
 
+# Time stride settings
+time_stride: 2  # Frame spacing (1=consecutive, 2=every other frame)
+
 # Normalization settings
 enable_normalization: true
 norm_stats: "norm_stats_3ch_1plane_u-v-w_scale2-3-1_yslice54.json"  # Path to 3-channel 1-plane normalization stats file (u,v,w only)

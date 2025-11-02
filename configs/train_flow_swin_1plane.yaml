@@ -46,7 +46,7 @@ seed: 12345
 
 print_lv: 1
 
-log_project: "turbulence_swin_1plane_uvw"
+log_project: "turbulence_swin_1plane_uvw_2t"
 
 # Enable training
 train: True

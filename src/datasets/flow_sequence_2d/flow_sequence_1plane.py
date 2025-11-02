@@ -36,6 +36,7 @@ class FlowSequence1PlaneDataset(Dataset):
         split: str = "train",
         enable_normalization: bool = True,
         norm_stats=None,  # Normalization statistics (file path or dict)
+        time_stride: int = 1,  # Time stride between frames (1=consecutive, 2=skip one frame)
     ):
         """
         Args:
@@ -52,9 +53,11 @@ class FlowSequence1PlaneDataset(Dataset):
             split: Dataset split ('train', 'val', 'test')
             enable_normalization: Whether to enable normalization
             norm_stats: Normalization statistics (file path or dict)
+            time_stride: Time stride between frames (1=consecutive, 2=every other frame, etc.)
         """
         assert split in ["train", "val", "test"]
         assert abs(train_ratio + valid_ratio + test_ratio - 1.0) < 1e-6
+        assert time_stride >= 1, "time_stride must be >= 1"
 
         if field_names is None:
             field_names = ["u", "v", "w"]
@@ -68,6 +71,7 @@ class FlowSequence1PlaneDataset(Dataset):
         self.y_slice = y_slice
         self.split = split
         self.enable_normalization = enable_normalization
+        self.time_stride = time_stride
 
         # Get files matching the pattern
         files = sorted(glob.glob(os.path.join(data_dir, file_pattern)))
@@ -90,15 +94,23 @@ class FlowSequence1PlaneDataset(Dataset):
         self.timesteps = sorted(self.timesteps)
         self.num_frames = len(self.timesteps)
 
-        # Each sample needs input_length + max_k_steps frames
-        total_frames_needed = self.input_length + self.max_k_steps
+        # Each sample needs input_length + max_k_steps frames with time_stride spacing
+        # Total span: (input_length + max_k_steps - 1) * time_stride + 1
+        # Example: input=5, target=1, stride=2 -> need frames at [0,2,4,6,8,10] -> span=11
+        total_frames_needed = (self.input_length + self.max_k_steps - 1) * self.time_stride + 1
         self.num_samples = self.num_frames - total_frames_needed + 1
 
         if self.num_samples <= 0:
-            raise ValueError(f"Not enough frames. Need at least {total_frames_needed}, got {self.num_frames}")
+            raise ValueError(
+                f"Not enough frames. Need at least {total_frames_needed} "
+                f"(input_length={self.input_length}, max_k_steps={self.max_k_steps}, "
+                f"time_stride={self.time_stride}), got {self.num_frames}"
+            )
 
         print(f"Found {self.num_frames} timesteps for y_slice={y_slice}")
         print(f"Files: {len(files)}")
+        print(f"Time stride: {self.time_stride} (frames spaced by {self.time_stride}t)")
+        print(f"Total frames needed per sample: {total_frames_needed}")
 
         # Filter out sequences that span the discontinuity between timestep 1080 and 1081
         discontinuity_timestep = 1081
@@ -321,13 +333,15 @@ class FlowSequence1PlaneDataset(Dataset):
             f"dataset: {self.__class__.__name__}, idx: {idx}, y_slice: {self.y_slice}, fields: {self.field_names}"
         )
 
-        # Load input sequence + target frames
+        # Load input sequence + target frames with time_stride spacing
         frames = []
-        total_frames_needed = self.input_length + self.max_k_steps
+        total_frames_to_load = self.input_length + self.max_k_steps
 
-        for i in range(total_frames_needed):
-            # Get the timestep for this frame
-            timestep = self.timesteps[base_idx + i]
+        for i in range(total_frames_to_load):
+            # Get the timestep for this frame with time_stride spacing
+            # Example: time_stride=2, i=0 -> base_idx+0, i=1 -> base_idx+2, i=2 -> base_idx+4
+            frame_offset = base_idx + i * self.time_stride
+            timestep = self.timesteps[frame_offset]
 
             # Get the file path for this timestep
             fpath = self.file_dict[timestep]
