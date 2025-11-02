@@ -43,7 +43,7 @@ def compute_multi_channel_normalization_stats(data_dir, field_names, scale, y_sl
     total_count = 0
 
     # Process multi-channel files
-    for i, fpath in enumerate(files[:200]):  # Process more files for better stats
+    for i, fpath in enumerate(files[:1200]):  # Process more files for better stats
         try:
             with h5py.File(fpath, "r") as f:
                 data = f["data"][()]  # Shape: (3, H, W) for u,v,w
@@ -141,8 +141,8 @@ if __name__ == "__main__":
     data_dir = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
     field_names = ["u", "v", "w"]
     scale = [2, 3, 1]  # (z, x, y) downsampling used in training
-    y_slice = 5
-    output_file = "norm_stats_u-v-w_scale2-3-1_yslice5.json"
+    y_slice = 54
+    output_file = "norm_stats_3ch_1plane_u-v-w_scale2-3-1_yslice54.json"
 
     stats = compute_multi_channel_normalization_stats(
         data_dir=data_dir, field_names=field_names, scale=scale, y_slice=y_slice, output_file=output_file
