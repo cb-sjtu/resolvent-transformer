@@ -170,6 +170,7 @@ class OnePlaneModelEvaluator:
             split="train",
             enable_normalization=True,
             norm_stats=norm_stats_file,
+            time_stride=2,  # Match training configuration: frame spacing of 2t
         )
 
         val_dataset = FlowSequence1PlaneDataset(
@@ -185,6 +186,7 @@ class OnePlaneModelEvaluator:
             split="val",
             enable_normalization=True,
             norm_stats=norm_stats_file,
+            time_stride=2,  # Match training configuration: frame spacing of 2t
         )
 
         test_dataset = FlowSequence1PlaneDataset(
@@ -200,6 +202,7 @@ class OnePlaneModelEvaluator:
             split="test",
             enable_normalization=True,
             norm_stats=norm_stats_file,
+            time_stride=2,  # Match training configuration: frame spacing of 2t
         )
 
         print(f"Dataset sizes - Train: {len(train_dataset)}, Val: {len(val_dataset)}, Test: {len(test_dataset)}")
@@ -875,8 +878,8 @@ def main():
     else:
         # Default to the hardcoded path if no argument provided
         checkpoint_path = (
-            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/"
-            "2025-11-02_14-11-12-461089/checkpoints/step_10800.ckpt"
+            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
+            "runs/2025-11-02_19-23-29-868390/checkpoints/step_11400.ckpt"
         )
 
     # Load model config (simplified for direct usage)
