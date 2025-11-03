@@ -234,8 +234,27 @@ class ThreePlaneModelEvaluator:
         return None
 
     def generate_sequence_prediction(self, input_seq: torch.Tensor, num_predictions: int = 5) -> torch.Tensor:
-        """Generate autoregressive sequence predictions."""
+        """Generate TRUE autoregressive sequence predictions.
+
+        IMPORTANT: This implements TRUE autoregressive prediction, where:
+        - The sliding window moves by time_stride frames (not just 1 frame)
+        - Uses previous predictions as input for future predictions
+        - Matches the training data's temporal spacing
+        """
         self.model.eval()
+
+        # Get time_stride from dataset
+        time_stride = 1  # Default value
+        try:
+            if hasattr(self.test_dataset, "get_time_stride"):
+                time_stride = self.test_dataset.get_time_stride()
+            else:
+                channel_info = self.test_dataset.get_channel_info()
+                time_stride = channel_info.get("time_stride", 1)
+            print(f"Using time_stride={time_stride} for autoregressive prediction")
+        except Exception:
+            print("Warning: Could not get time_stride, using default=1")
+
         with torch.no_grad():
             predictions = []
             current_input = input_seq.clone()
@@ -245,8 +264,9 @@ class ThreePlaneModelEvaluator:
                 next_pred = self.model(current_input)  # (B, C, H, W)
                 predictions.append(next_pred)
 
-                # Update input sequence for next prediction
-                # Remove first frame and add prediction
+                # TRUE AUTOREGRESSIVE: Slide window by 1 frame (always remove oldest frame)
+                # Model requires fixed input_length, so always remove exactly 1 frame
+                # Example: [0,2,4,6,8] → predict 10, then [2,4,6,8,10] → predict 12
                 current_input = torch.cat([current_input[:, 1:], next_pred.unsqueeze(1)], dim=1)
 
             # Stack predictions: (B, T_pred, C, H, W)

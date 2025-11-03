@@ -418,6 +418,7 @@ class FlowSequence3PlaneDataset(Dataset):
             "field_names": self.field_names,
             "num_channels_per_plane": self.num_channels_per_plane,
             "num_total_channels": self.num_total_channels,
+            "time_stride": 1,  # 3plane dataset uses consecutive frames (time_stride=1)
         }
 
         # 详细的通道映射
@@ -434,3 +435,7 @@ class FlowSequence3PlaneDataset(Dataset):
 
         info["channel_mapping"] = channel_mapping
         return info
+
+    def get_time_stride(self):
+        """Return the time stride used in this dataset (always 1 for 3plane)."""
+        return 1

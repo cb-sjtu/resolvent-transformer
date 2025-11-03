@@ -388,6 +388,7 @@ class FlowSequence1PlaneDataset(Dataset):
             "y_slice": self.y_slice,
             "field_names": self.field_names,
             "num_channels": self.num_channels,
+            "time_stride": self.time_stride,  # Add time_stride info
         }
 
         # Channel mapping
@@ -397,3 +398,7 @@ class FlowSequence1PlaneDataset(Dataset):
 
         info["channel_mapping"] = channel_mapping
         return info
+
+    def get_time_stride(self):
+        """Return the time stride used in this dataset."""
+        return self.time_stride

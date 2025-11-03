@@ -68,13 +68,33 @@ class VideoCreator:
         return video_path
 
     def _run_autoregressive_prediction(self, model, input_seq, num_steps: int, dataset=None):
-        """Run autoregressive prediction for num_steps."""
+        """Run autoregressive prediction for num_steps.
+
+        IMPORTANT: This implements TRUE autoregressive prediction, where:
+        - The sliding window moves by time_stride frames (not just 1 frame)
+        - Uses previous predictions as input for future predictions
+        - Matches the training data's temporal spacing
+        """
         import torch
 
         model.eval()
         predictions = []
 
         current_seq = input_seq.clone()  # (1, input_length, C, H, W)
+
+        # Get time_stride from dataset
+        time_stride = 1  # Default value
+        if dataset is not None and hasattr(dataset, "get_time_stride"):
+            time_stride = dataset.get_time_stride()
+            print(f"Using time_stride={time_stride} for autoregressive prediction")
+        elif dataset is not None:
+            # Try to get from channel_info
+            try:
+                channel_info = dataset.get_channel_info()
+                time_stride = channel_info.get("time_stride", 1)
+                print(f"Using time_stride={time_stride} from channel_info")
+            except Exception:
+                print("Warning: Could not get time_stride, using default=1")
 
         with torch.no_grad():
             for _step in range(num_steps):
@@ -99,10 +119,12 @@ class VideoCreator:
                 # Add time dimension back: (B, C, H, W) -> (B, 1, C, H, W)
                 next_pred_with_time = next_pred.unsqueeze(1)
 
-                # Slide window: remove first frame, add new prediction
+                # TRUE AUTOREGRESSIVE: Slide window by 1 frame (always remove oldest frame)
+                # Model requires fixed input_length, so always remove exactly 1 frame
+                # Example: [0,2,4,6,8] → predict 10, then [2,4,6,8,10] → predict 12
                 current_seq = torch.cat(
                     [
-                        current_seq[:, 1:],  # Remove first frame
+                        current_seq[:, 1:],  # Remove first frame (keep sequence length fixed)
                         next_pred_with_time,  # Add new prediction
                     ],
                     dim=1,

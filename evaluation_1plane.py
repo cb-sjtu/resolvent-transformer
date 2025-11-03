@@ -170,7 +170,7 @@ class OnePlaneModelEvaluator:
             split="train",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=2,  # Match training configuration: frame spacing of 2t
+            time_stride=5,  # Match training configuration: frame spacing of 5t
         )
 
         val_dataset = FlowSequence1PlaneDataset(
@@ -186,7 +186,7 @@ class OnePlaneModelEvaluator:
             split="val",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=2,  # Match training configuration: frame spacing of 2t
+            time_stride=5,  # Match training configuration: frame spacing of 5t
         )
 
         test_dataset = FlowSequence1PlaneDataset(
@@ -202,7 +202,7 @@ class OnePlaneModelEvaluator:
             split="test",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=2,  # Match training configuration: frame spacing of 2t
+            time_stride=5,  # Match training configuration: frame spacing of 5t
         )
 
         print(f"Dataset sizes - Train: {len(train_dataset)}, Val: {len(val_dataset)}, Test: {len(test_dataset)}")

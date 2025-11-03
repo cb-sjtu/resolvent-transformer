@@ -179,7 +179,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             "test_ratio": 0.15,
             "norm_stats": "norm_stats_3ch_1plane_u-v-w_scale2-3-1_yslice54.json",
             "enable_normalization": True,
-            "time_stride": 2,  # Match training configuration: frame spacing of 2t
+            "time_stride": 5,  # Match training configuration: frame spacing of 5t
         }
 
         # Load datasets with specific splits
