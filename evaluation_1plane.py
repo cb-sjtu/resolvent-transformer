@@ -170,7 +170,7 @@ class OnePlaneModelEvaluator:
             split="train",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=5,  # Match training configuration: frame spacing of 5t
+            time_stride=10,  # Match training configuration: frame spacing of 5t
         )
 
         val_dataset = FlowSequence1PlaneDataset(
@@ -186,7 +186,7 @@ class OnePlaneModelEvaluator:
             split="val",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=5,  # Match training configuration: frame spacing of 5t
+            time_stride=10,  # Match training configuration: frame spacing of 5t
         )
 
         test_dataset = FlowSequence1PlaneDataset(
@@ -202,7 +202,7 @@ class OnePlaneModelEvaluator:
             split="test",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=5,  # Match training configuration: frame spacing of 5t
+            time_stride=10,  # Match training configuration: frame spacing of 5t
         )
 
         print(f"Dataset sizes - Train: {len(train_dataset)}, Val: {len(val_dataset)}, Test: {len(test_dataset)}")
@@ -570,7 +570,7 @@ class OnePlaneModelEvaluator:
 
         print(f"Energy spectra plotting for {mode} completed.")
 
-    def _run_energy_spectra_analysis(self, num_future: int = 20, sample_idx: int = 0):
+    def _run_energy_spectra_analysis(self, num_future: int = 10, sample_idx: int = 0):
         """
         Run energy spectra analysis on predictions and ground truth for 1 plane.
 
@@ -815,7 +815,7 @@ class OnePlaneModelEvaluator:
         plt.close()
 
     def run_comprehensive_evaluation(
-        self, num_samples: int = 1, num_future: int = 20, run_spectra: bool = True, create_animation: bool = True
+        self, num_samples: int = 1, num_future: int = 10, run_spectra: bool = True, create_animation: bool = True
     ):
         """Run comprehensive evaluation including energy spectra analysis and animation.
 
@@ -841,14 +841,14 @@ class OnePlaneModelEvaluator:
             print("\n" + "=" * 60)
             print("ANIMATION GENERATION")
             print("=" * 60)
-            self.create_1plane_animation(sample_idx=0, num_future=20)
+            self.create_1plane_animation(sample_idx=0, num_future=10)
 
         # Energy spectra analysis
         if run_spectra:
             print("\n" + "=" * 60)
             print("ENERGY SPECTRA ANALYSIS")
             print("=" * 60)
-            self._run_energy_spectra_analysis(num_future=20, sample_idx=0)
+            self._run_energy_spectra_analysis(num_future=10, sample_idx=0)
 
         print(f"\nEvaluation complete! Results saved to: {self.output_dir}")
         print("\nGenerated visualizations:")
@@ -867,7 +867,7 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate 1-plane Flow Swin Transformer")
     parser.add_argument("checkpoint_path", type=str, nargs="?", help="Path to model checkpoint")
     parser.add_argument("--num_samples", type=int, default=1, help="Number of samples to evaluate")
-    parser.add_argument("--num_future", type=int, default=20, help="Number of future steps to predict")
+    parser.add_argument("--num_future", type=int, default=10, help="Number of future steps to predict")
     parser.add_argument("--save_predictions", action="store_true", help="Save predictions as H5 files")
 
     args = parser.parse_args()
@@ -879,7 +879,7 @@ def main():
         # Default to the hardcoded path if no argument provided
         checkpoint_path = (
             "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
-            "runs/2025-11-02_19-23-29-868390/checkpoints/step_11400.ckpt"
+            "runs/2025-11-03_22-37-55-879072/checkpoints/step_43800.ckpt"
         )
 
     # Load model config (simplified for direct usage)

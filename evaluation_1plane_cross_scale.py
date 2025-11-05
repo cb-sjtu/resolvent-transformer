@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """
 Cross-scale evaluation script for 1-plane Flow Swin Transformer.
-Alternates between small-scale (t) and large-scale (5t) models to extend autoregressive predictions.
+Alternates between small-scale (t) and large-scale (10t) models to extend autoregressive predictions.
 
 Prediction strategy:
-- Small-scale model: predicts 4 consecutive steps (frames spaced by t)
-- Large-scale model: predicts 1 step using every 5th frame (frames spaced by 5t)
+- Small-scale model: predicts consecutive steps (frames spaced by t)
+- Large-scale model: predicts 1 step using every 10th frame (frames spaced by 10t)
 - Alternates between the two models to achieve long-term predictions
 
 Example prediction sequence:
-Small-scale (t):  [1,2,3,4,5] → 6, [2,3,4,5,6] → 7, ..., [20,21,22,23,24] → 25
-Large-scale (5t): [1,6,11,16,21] → 26
-Small-scale (t):  [22,23,24,25,26] → 27, [23,24,25,26,27] → 28, ..., [25,26,27,28,29] → 30
-Large-scale (5t): [6,11,16,21,26] → 31
+Phase 0: Load historical GT at t=-19, -9 from validation set
+Warm-up: Small-scale predicts t=6 to t=30, collecting anchors at t=1,11,21
+Cycle 1: Small-scale predicts t=31 (candidate)
+         Large-scale [-19,-9,1,11,21]→31, then FUSE at t=31
+         Continue small-scale to t=40
+Cycle 2: Small-scale predicts t=41 (candidate)
+         Large-scale [-9,1,11,21,31]→41, then FUSE at t=41
 ...
 """
 
@@ -21,6 +24,7 @@ import sys
 import warnings
 from pathlib import Path
 
+import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 import rootutils
@@ -61,7 +65,7 @@ class CrossScaleEvaluator:
 
         Args:
             small_scale_checkpoint: Path to small-scale model checkpoint (t spacing)
-            large_scale_checkpoint: Path to large-scale model checkpoint (5t spacing)
+            large_scale_checkpoint: Path to large-scale model checkpoint (10t spacing)
             small_scale_cfg: Model configuration for small-scale model
             large_scale_cfg: Model configuration for large-scale model
             data_config: Data configuration dictionary
@@ -76,14 +80,14 @@ class CrossScaleEvaluator:
         self.small_scale_model = self._load_model(small_scale_checkpoint, small_scale_cfg)
 
         print("\n" + "=" * 60)
-        print("Loading large-scale model (5t spacing)...")
+        print("Loading large-scale model (10t spacing)...")
         print("=" * 60)
         self.large_scale_model = self._load_model(large_scale_checkpoint, large_scale_cfg)
 
         # Setup datasets
         self.data_config = data_config
         self.small_scale_dataset = self._setup_dataset(time_stride=1)  # t spacing
-        self.large_scale_dataset = self._setup_dataset(time_stride=5)  # 5t spacing
+        self.large_scale_dataset = self._setup_dataset(time_stride=10)  # 10t spacing
 
         # Create output directory
         self.output_dir = Path("evaluation_results") / "cross_scale_evaluation"
@@ -156,17 +160,24 @@ class CrossScaleEvaluator:
         initial_frames: torch.Tensor,
         num_predictions: int = 100,
         fusion_weight: float = 0.5,
+        sample_idx: int = 0,
+        fusion_interval: int = 10,
+        first_fusion_point: int = 31,
     ) -> tuple[np.ndarray, list[str], list[dict]]:
         """Perform MR-PC (Multi-Resolution Prediction-Correction) cross-scale prediction.
 
         Strategy:
-        1. Warm-up phase: Use small-scale model for 20 steps to build anchor queue B
-        2. Main loop: Every 5 small steps + 1 large-scale correction with fusion
+        1. Warm-up phase: Use small-scale model to reach first_fusion_point-1, build frame cache
+        2. First fusion at first_fusion_point using historical data
+        3. Main loop: Fusion every fusion_interval steps with large-scale correction
 
         Args:
             initial_frames: Initial input sequence (B, T=5, C, H, W), frames at t=1,2,3,4,5
             num_predictions: Total number of future steps to predict
             fusion_weight: Weight for fusion, x_fused = (1-α)*x_small + α*x_large
+            sample_idx: Sample index for accessing historical ground truth frames
+            fusion_interval: Interval between fusion points in timesteps (default: 10)
+            first_fusion_point: Time step of the first fusion point (default: 31)
 
         Returns:
             predictions: Array of all predicted frames (num_predictions, C, H, W)
@@ -177,7 +188,30 @@ class CrossScaleEvaluator:
         print("Starting MR-PC cross-scale prediction")
         print(f"Total predictions: {num_predictions}")
         print(f"Fusion weight α: {fusion_weight}")
+        print(f"Fusion interval: {fusion_interval}t")
+        print(f"First fusion point: t={first_fusion_point}")
         print(f"{'=' * 60}")
+
+        # Calculate derived parameters based on first_fusion_point
+        # Warmup predicts from t=6 to t=(first_fusion_point-1)
+        # Initial frames are at t=1-5, current_time starts at 5
+        # So warmup_steps = (first_fusion_point - 1) - 5 = first_fusion_point - 6
+        warmup_steps = first_fusion_point - 6
+        historical_start = first_fusion_point - 50
+        historical_end = 0
+        num_historical_frames = max(0, 1 - historical_start)
+
+        # Calculate anchor times (10t intervals before first fusion point, within warmup range)
+        anchor_times = []
+        for offset in [50, 40, 30, 20, 10]:
+            anchor_t = first_fusion_point - offset
+            if 1 <= anchor_t <= first_fusion_point - 1:
+                anchor_times.append(anchor_t)
+
+        print("Derived parameters:")
+        print(f"  Warmup steps: {warmup_steps} (predict t=6 to t={first_fusion_point - 1})")
+        print(f"  Historical frames: t={historical_start} to t={historical_end} ({num_historical_frames} frames)")
+        print(f"  Anchor times during warmup: {anchor_times}")
 
         self.small_scale_model.eval()
         self.large_scale_model.eval()
@@ -188,32 +222,80 @@ class CrossScaleEvaluator:
 
         # Initialize queues
         # S: small-step window (length=5, t-spacing), for small-scale model
-        # B: anchor window (length=5, 5t-spacing), for large-scale model
+        # B: anchor window (length=5, 10t-spacing), for large-scale model (kept for compatibility)
         # all_frames: complete history of all frames
+        # frame_cache: dictionary mapping time -> frame tensor for efficient lookup
 
         # initial_frames: (1, 5, C, H, W) -> frames at t=1,2,3,4,5
         initial_list = [initial_frames[0, i].clone() for i in range(5)]
         all_frames = initial_list.copy()  # Complete history
 
         S = initial_list.copy()  # [x[1], x[2], x[3], x[4], x[5]]
-        B = [initial_list[-1].clone()]  # [x[5]] - first anchor at 5t
+        B = []  # Will be filled with anchors at t=-19,-9,1,11,21 for first fusion at t=31
+
+        # Frame cache: stores all frames for efficient large-scale input construction
+        frame_cache = {}
+        for i, frame in enumerate(initial_list):
+            frame_cache[i + 1] = frame.clone()  # Store t=1,2,3,4,5
 
         current_time = 5  # Current time in units of t
 
         print("\nInitialization:")
         print("  S (small window): frames at t=[1,2,3,4,5]")
-        print("  B (anchor queue): frames at t=[5]")
+        print("  B (anchor queue): will use historical GT for t=-19,-9, predictions for t=1,11,21")
+        print("  Frame cache: initialized with t=1 to t=5")
         print(f"  Current time: {current_time}t")
 
         with torch.no_grad():
             # ========================================
-            # Phase 1: Warm-up (20 small steps to build B)
+            # Phase 0: Load ALL historical ground truth frames
+            # ========================================
+            print(f"\n{'=' * 60}")
+            print("Phase 0: Loading historical ground truth frames")
+            print(f"{'=' * 60}")
+
+            # Load historical frames from historical_start to 0
+            # This ensures we have all frames needed for large-scale input construction
+            if sample_idx >= num_historical_frames:
+                print(f"  Loading historical GT frames from t={historical_start} to t=0...")
+
+                for t in range(historical_start, 1):  # t: historical_start to 0
+                    offset = 1 - t  # Calculate offset from current sample
+                    hist_sample = self.small_scale_dataset[sample_idx - offset]
+                    hist_frame = hist_sample["data"]["input_seq"][0, -1].to(self.device)  # (C, H, W)
+                    frame_cache[t] = hist_frame.clone()
+
+                print(f"  ✓ Loaded {len([t for t in frame_cache if t <= 0])} historical frames")
+
+                # For backward compatibility with B
+                if historical_start <= -19:
+                    B.append(frame_cache[-19].clone())
+                if historical_start <= -9:
+                    B.append(frame_cache[-9].clone())
+            else:
+                print(f"  WARNING: Not enough history (sample_idx={sample_idx}, need >={num_historical_frames})")
+                print("           Using initial frames as fallback")
+                # Fallback: create dummy historical frames
+                for t in range(historical_start, 1):
+                    frame_cache[t] = initial_list[0].clone()
+                if historical_start <= -19:
+                    B.append(initial_list[0].clone())
+                if historical_start <= -9:
+                    B.append(initial_list[2].clone())
+
+            # ========================================
+            # Phase 1: Warm-up
             # ========================================
             print(f"\n{'=' * 60}")
             print("Phase 1: Warm-up - Building anchor queue B")
             print(f"{'=' * 60}")
 
-            warmup_steps = 20
+            # Add initial frame at t=1 to B if it's an anchor
+            if 1 in anchor_times:
+                B.append(initial_list[0].clone())  # t=1
+                print("  Anchor at t=1 added to B")
+
+            # warmup_steps already calculated based on first_fusion_point
             for step in range(warmup_steps):
                 # Small-scale prediction
                 small_input = torch.stack(S, dim=0).unsqueeze(0)  # (1, 5, C, H, W)
@@ -224,19 +306,23 @@ class CrossScaleEvaluator:
                 predictions.append(next_pred.cpu())
                 model_used.append("small")
 
+                # Store in frame cache
+                frame_cache[current_time] = next_pred.clone()
+
                 # Update S: slide window
                 S = S[1:] + [next_pred]
 
-                # Check if this is an anchor point (multiple of 5)
-                if current_time % 5 == 0:
+                # Check if this is an anchor point
+                if current_time in anchor_times:
                     B.append(next_pred.clone())
                     print(f"  Step {step + 1}/{warmup_steps}: t={current_time}, Small-scale (★ Anchor added to B)")
                 else:
                     print(f"  Step {step + 1}/{warmup_steps}: t={current_time}, Small-scale")
 
             print("\nWarm-up complete!")
-            print(f"  B now contains {len(B)} anchors at t={[5 + i * 5 for i in range(len(B))]}")
-            print(f"  Current time: {current_time}t")
+            print(f"  B now contains {len(B)} anchors")
+            print(f"  Frame cache now contains {len(frame_cache)} frames (t={historical_start} to t={current_time})")
+            print(f"  Current time: {current_time}t (should be {first_fusion_point - 1})")
 
             # ========================================
             # Phase 2: Main MR-PC loop
@@ -250,41 +336,53 @@ class CrossScaleEvaluator:
                 cycle_count += 1
                 print(f"\n--- Cycle {cycle_count} (starting at t={current_time}) ---")
 
-                # Step 1: Small-scale predictions (5 steps)
-                small_predictions = []
-                for small_step in range(5):
-                    if len(predictions) >= num_predictions:
-                        break
-
-                    small_input = torch.stack(S, dim=0).unsqueeze(0)  # (1, 5, C, H, W)
-                    next_pred = self.small_scale_model(small_input)[0]  # (C, H, W)
-
-                    current_time += 1
-                    all_frames.append(next_pred.clone())
-                    small_predictions.append(next_pred)
-
-                    # For the first 4 steps, directly use small-scale prediction
-                    if small_step < 4:
-                        predictions.append(next_pred.cpu())
-                        model_used.append("small")
-                        S = S[1:] + [next_pred]
-                        print(f"  Small step {small_step + 1}/5: t={current_time}, using small-scale result")
-                    else:
-                        # Last step: keep as candidate, will be fused with large-scale
-                        print(f"  Small step {small_step + 1}/5: t={current_time}, candidate for fusion")
-
+                # Step 1: Small-scale prediction for first step (will be fused)
                 if len(predictions) >= num_predictions:
                     break
 
-                # Step 2: Large-scale prediction (jump from k to k+5)
-                large_input = torch.stack(B, dim=0).unsqueeze(0)  # (1, 5, C, H, W)
+                small_input = torch.stack(S, dim=0).unsqueeze(0)  # (1, 5, C, H, W)
+                small_pred_first = self.small_scale_model(small_input)[0]  # (C, H, W)
+
+                current_time += 1
+                all_frames.append(small_pred_first.clone())
+                print(f"  Small-scale: t={current_time} (candidate for fusion)")
+
+                # Step 2: Large-scale prediction using frame cache
+                # Construct large-scale input: 5 frames with 10t spacing
+                # Input times: [current_time-40, current_time-30, current_time-20, current_time-10, current_time]
+                # But we don't have current_time yet, so use [t-50, t-40, t-30, t-20, t-10]
+                large_input_times = [
+                    current_time - 50,
+                    current_time - 40,
+                    current_time - 30,
+                    current_time - 20,
+                    current_time - 10,
+                ]
+
+                # Get frames from cache
+                large_input_frames = []
+                for t in large_input_times:
+                    if t in frame_cache:
+                        large_input_frames.append(frame_cache[t])
+                    else:
+                        # Fallback: use nearest available frame
+                        available_times = sorted([k for k in frame_cache if k <= t])
+                        if available_times:
+                            fallback_t = available_times[-1]
+                            large_input_frames.append(frame_cache[fallback_t])
+                            print(f"    WARNING: t={t} not in cache, using t={fallback_t}")
+                        else:
+                            # Extreme fallback: use first initial frame
+                            large_input_frames.append(initial_list[0])
+                            print(f"    WARNING: t={t} not in cache, using initial frame")
+
+                large_input = torch.stack(large_input_frames, dim=0).unsqueeze(0)  # (1, 5, C, H, W)
                 large_pred = self.large_scale_model(large_input)[0]  # (C, H, W)
 
-                print(f"  Large-scale jump: t={current_time - 5} → t={current_time}")
+                print(f"  Large-scale: using frames at t={large_input_times} → t={current_time}")
 
-                # Step 3: Fusion
-                small_candidate = small_predictions[-1]  # x̂[k+5] from small-scale
-                x_fused = (1 - fusion_weight) * small_candidate + fusion_weight * large_pred
+                # Step 3: Fusion at current time
+                x_fused = (1 - fusion_weight) * small_pred_first + fusion_weight * large_pred
 
                 # Record fusion info
                 fusion_info.append(
@@ -292,7 +390,7 @@ class CrossScaleEvaluator:
                         "time": current_time,
                         "cycle": cycle_count,
                         "fusion_weight": fusion_weight,
-                        "small_pred": small_candidate.cpu(),
+                        "small_pred": small_pred_first.cpu(),
                         "large_pred": large_pred.cpu(),
                         "fused": x_fused.cpu(),
                     }
@@ -301,17 +399,41 @@ class CrossScaleEvaluator:
                 # Add fused result
                 predictions.append(x_fused.cpu())
                 model_used.append("fused")
-                all_frames[-1] = x_fused.clone()  # Replace the last frame with fused version
+                all_frames[-1] = x_fused.clone()  # Replace with fused version
+
+                # Store in frame cache
+                frame_cache[current_time] = x_fused.clone()
 
                 print(f"  Fusion: x[{current_time}] = {1 - fusion_weight:.2f}*small + {fusion_weight:.2f}*large")
 
-                # Step 4: Update queues for next cycle
-                S = S[1:] + [x_fused]  # Update S with fused anchor
-                B = B[1:] + [x_fused]  # Update B with new anchor
+                # Update S with fused result
+                S = S[1:] + [x_fused]
 
-                print("  Queues updated for next cycle")
-                print(f"  S: last 5 frames ending at t={current_time}")
-                print(f"  B: anchors at t={[current_time - 20 + i * 5 for i in range(5)]}")
+                # Update B with new anchor (for backward compatibility, though not strictly needed)
+                if current_time % 10 == 1:  # Only update B at 10t intervals (t=31, 41, 51, ...)
+                    B = B[1:] + [x_fused]
+                    updated_anchor_times = [current_time - 40 + (i * 10) for i in range(5)]
+                    print(f"  B updated: anchors now at t={updated_anchor_times}")
+
+                # Step 4: Continue with small-scale for next (fusion_interval - 1) steps
+                for _ in range(fusion_interval - 1):
+                    if len(predictions) >= num_predictions:
+                        break
+
+                    small_input = torch.stack(S, dim=0).unsqueeze(0)
+                    next_pred = self.small_scale_model(small_input)[0]
+
+                    current_time += 1
+                    all_frames.append(next_pred.clone())
+                    predictions.append(next_pred.cpu())
+                    model_used.append("small")
+
+                    # Store in frame cache
+                    frame_cache[current_time] = next_pred.clone()
+
+                    S = S[1:] + [next_pred]
+
+                    print(f"  Small-scale: t={current_time}")
 
         # Stack all predictions
         pred_array = torch.stack(predictions, dim=0).cpu().numpy()  # (num_predictions, C, H, W)
@@ -348,44 +470,108 @@ class CrossScaleEvaluator:
         print(f"Pure small-scale baseline complete: {len(predictions)} predictions")
         return pred_array
 
-    def pure_large_scale_prediction(self, initial_frames: torch.Tensor, num_predictions: int = 100) -> np.ndarray:
-        """Pure large-scale autoregressive prediction (baseline)."""
+    def pure_large_scale_prediction(
+        self, initial_frames: torch.Tensor, num_predictions: int = 100, sample_idx: int = 0
+    ) -> np.ndarray:
+        """Pure large-scale autoregressive prediction (baseline).
+
+        Uses the same historical frame strategy as MR-PC for fair comparison:
+        - Loads ground truth frames at t=-19 and t=-9 from dataset
+        - Uses anchors at [-19, -9, 1, 11, 21] to predict t=31
+        - Then continues autoregressively with 10t spacing
+
+        Args:
+            initial_frames: Initial input sequence (1, 5, C, H, W) at t=1,2,3,4,5
+            num_predictions: Number of steps to predict
+            sample_idx: Index of current sample (needed to access historical frames)
+
+        Returns:
+            Predictions array of shape (num_predictions, C, H, W)
+        """
         print(f"\nRunning pure large-scale baseline ({num_predictions} steps)...")
 
         self.large_scale_model.eval()
         predictions = []
 
-        # For large-scale model, we need to first get frames at 5t spacing
-        # Start with initial frames (assume they are at t=1,2,3,4,5)
-        # We need frames at 5t intervals, so first build up history using small model
-
         with torch.no_grad():
-            # Phase 1: Build initial large-scale sequence using small model
-            S = [initial_frames[0, i].clone() for i in range(5)]
-            all_frames = S.copy()
+            # Phase 0: Load historical ground truth frames at t=-19 and t=-9
+            historical_frames = []
+            if sample_idx >= 20:
+                # Load frame at t=-19 (20 samples back)
+                hist_sample_19 = self.small_scale_dataset[sample_idx - 20]
+                hist_frame_19 = hist_sample_19["data"]["input_seq"][0, -1].to(self.device)  # (C, H, W)
+                historical_frames.append(hist_frame_19.clone())
+                print(f"Loaded historical frame at t=-19 from sample {sample_idx - 20}")
 
-            # Predict up to t=25 to get 5 anchors at 5, 10, 15, 20, 25
-            for _step in range(20):
-                small_input = torch.stack(S, dim=0).unsqueeze(0)
-                next_pred = self.small_scale_model(small_input)[0]
-                all_frames.append(next_pred)
+                # Load frame at t=-9 (10 samples back)
+                hist_sample_9 = self.small_scale_dataset[sample_idx - 10]
+                hist_frame_9 = hist_sample_9["data"]["input_seq"][0, -1].to(self.device)  # (C, H, W)
+                historical_frames.append(hist_frame_9.clone())
+                print(f"Loaded historical frame at t=-9 from sample {sample_idx - 10}")
+            else:
+                # If not enough history, fall back to using early frames from initial_frames
+                print(f"Warning: sample_idx={sample_idx} < 20, cannot load historical frames")
+                print("Using first two frames from initial_frames as fallback")
+                historical_frames = [initial_frames[0, 0].clone(), initial_frames[0, 1].clone()]
+
+            # Initialize anchor queue B with historical frames
+            B = historical_frames.copy()  # [t=-19, t=-9]
+
+            # Add t=1 from initial frames
+            B.append(initial_frames[0, 0].clone())
+
+            # Phase 1: Warm-up - predict t=6 to t=30 using small-scale model, collect anchors at t=11, 21
+            print("\nPhase 1: Warm-up (small-scale) - predicting t=6 to t=30")
+            S = [initial_frames[0, i].clone() for i in range(5)]  # t=1,2,3,4,5
+            all_frames = S.copy()
+            current_time = 5
+
+            warmup_steps = 25  # Predict from t=6 to t=30
+            for _ in range(warmup_steps):
+                small_input = torch.stack(S, dim=0).unsqueeze(0)  # (1, 5, C, H, W)
+                next_pred = self.small_scale_model(small_input)[0]  # (C, H, W)
+
+                current_time += 1
+                all_frames.append(next_pred.clone())
                 S = S[1:] + [next_pred]
 
-            # Extract anchors at 5t spacing: indices 4, 9, 14, 19, 24 (0-indexed)
-            B = [all_frames[i].clone() for i in [4, 9, 14, 19, 24]]
+                # Collect anchors at t=11 and t=21
+                if current_time in [11, 21]:
+                    B.append(next_pred.clone())
+                    print(f"  Collected anchor at t={current_time}")
 
-            # Now use large-scale model for remaining predictions
+            # B now contains: [t=-19, t=-9, t=1, t=11, t=21]
+            print("Anchor queue B ready with 5 frames: t=[-19, -9, 1, 11, 21]")
+
+            # Phase 2: Main loop - use large-scale model autoregressively
+            print("\nPhase 2: Large-scale predictions (every 10t)")
+            print("=" * 60)
+
             remaining = num_predictions
+            prediction_count = 0
+
             while remaining > 0:
+                # Prepare input for large-scale model
                 large_input = torch.stack(B, dim=0).unsqueeze(0)  # (1, 5, C, H, W)
+
+                # Large-scale prediction
                 next_pred = self.large_scale_model(large_input)[0]  # (C, H, W)
 
+                # Store prediction
                 predictions.append(next_pred.cpu())
+                prediction_count += 1
+
+                # Update anchor queue
                 B = B[1:] + [next_pred]
+
                 remaining -= 1
 
+                # Log every 10 predictions
+                if prediction_count % 10 == 0:
+                    print(f"  Generated {prediction_count}/{num_predictions} predictions")
+
         pred_array = torch.stack(predictions, dim=0).cpu().numpy()
-        print(f"Pure large-scale baseline complete: {len(predictions)} predictions")
+        print(f"\nPure large-scale baseline complete: {len(predictions)} predictions")
         return pred_array
 
     def visualize_cross_scale_prediction(
@@ -393,6 +579,8 @@ class CrossScaleEvaluator:
         sample_idx: int = 0,
         num_predictions: int = 100,
         fusion_weight: float = 0.5,
+        fusion_interval: int = 10,
+        first_fusion_point: int = 31,
     ):
         """Visualize MR-PC cross-scale prediction results with baselines."""
         print(f"\n{'=' * 60}")
@@ -404,13 +592,15 @@ class CrossScaleEvaluator:
         input_seq = sample["data"]["input_seq"].to(self.device)  # (1, T, C, H, W)
 
         # 1. Perform MR-PC cross-scale prediction
-        pred_seq_mrpc, model_used, fusion_info = self.cross_scale_prediction(input_seq, num_predictions, fusion_weight)
+        pred_seq_mrpc, model_used, fusion_info = self.cross_scale_prediction(
+            input_seq, num_predictions, fusion_weight, sample_idx, fusion_interval, first_fusion_point
+        )
 
         # 2. Perform pure small-scale baseline
         pred_seq_small = self.pure_small_scale_prediction(input_seq, num_predictions)
 
         # 3. Perform pure large-scale baseline
-        pred_seq_large = self.pure_large_scale_prediction(input_seq, num_predictions)
+        pred_seq_large = self.pure_large_scale_prediction(input_seq, num_predictions, sample_idx)
 
         # Denormalize all predictions
         pred_seq_mrpc_denorm = (
@@ -774,7 +964,7 @@ class CrossScaleEvaluator:
             ax.plot(time_steps, mse_large, ":", linewidth=2, label=f"{field_name.upper()} (Large)", alpha=0.6)
 
         # Mark warm-up phase
-        warmup_end = 20
+        warmup_end = 25  # Warm-up now ends at t=30 (25 predictions from t=6 to t=30)
         if warmup_end < num_steps:
             ax.axvline(x=warmup_end, color="purple", linestyle="-.", linewidth=2, alpha=0.5, label="Warm-up end")
 
@@ -1311,6 +1501,301 @@ class CrossScaleEvaluator:
 
         print("Energy spectrum comparison plots completed.")
 
+    def generate_prediction_videos(
+        self,
+        sample_idx: int = 0,
+        num_predictions: int = 100,
+        fusion_weight: float = 0.5,
+        fps: int = 10,
+        fusion_interval: int = 10,
+        first_fusion_point: int = 31,
+    ):
+        """Generate videos comparing MR-PC fusion predictions with small-scale baseline.
+
+        Creates three videos:
+        1. MR-PC (fused) prediction showing all 3 channels (u, v, w)
+        2. Small-scale baseline prediction showing all 3 channels (u, v, w)
+        3. Comparison video with GT, MR-PC, and Small-scale side-by-side
+
+        Args:
+            sample_idx: Sample index to evaluate
+            num_predictions: Number of future steps to predict
+            fusion_weight: Fusion weight for MR-PC
+            fps: Frames per second for output videos
+            fusion_interval: Fusion interval in timesteps
+        """
+        print(f"\n{'=' * 60}")
+        print("Generating prediction videos")
+        print(f"{'=' * 60}")
+
+        # Get initial sample from small-scale dataset
+        sample = self.small_scale_dataset[sample_idx]
+        input_seq = sample["data"]["input_seq"].to(self.device)  # (1, T, C, H, W)
+
+        # Perform predictions
+        print("\n1. Running MR-PC prediction...")
+        pred_seq_mrpc, model_used, fusion_info = self.cross_scale_prediction(
+            input_seq, num_predictions, fusion_weight, sample_idx, fusion_interval, first_fusion_point
+        )
+
+        print("\n2. Running small-scale baseline prediction...")
+        pred_seq_small = self.pure_small_scale_prediction(input_seq, num_predictions)
+
+        # Denormalize predictions
+        pred_seq_mrpc_denorm = (
+            self.small_scale_dataset.denormalize(torch.from_numpy(pred_seq_mrpc).unsqueeze(0)).cpu().numpy()[0]
+        )
+        pred_seq_small_denorm = (
+            self.small_scale_dataset.denormalize(torch.from_numpy(pred_seq_small).unsqueeze(0)).cpu().numpy()[0]
+        )
+
+        # Collect ground truth
+        print("\n3. Collecting ground truth for comparison...")
+        gt_frames = []
+        for t in range(num_predictions):
+            if sample_idx + t + 1 < len(self.small_scale_dataset):
+                gt_sample = self.small_scale_dataset[sample_idx + t + 1]
+                gt_frame = gt_sample["data"]["input_seq"][0, -1].cpu().numpy()  # Last frame of input
+                gt_frames.append(gt_frame)
+            else:
+                gt_frames.append(np.zeros_like(pred_seq_mrpc_denorm[0]))
+
+        gt_seq_denorm = (
+            self.small_scale_dataset.denormalize(torch.from_numpy(np.stack(gt_frames)).unsqueeze(0)).cpu().numpy()[0]
+        )
+
+        field_names = self.small_scale_dataset.field_names
+        T, C, H, W = pred_seq_mrpc_denorm.shape
+
+        print("\n4. Preparing video generation...")
+        print(f"   Video shape: {T} frames, {C} channels, {H}x{W} spatial resolution")
+        print(f"   Fields: {field_names}")
+
+        # Create output directory
+        video_dir = self.output_dir / "videos"
+        video_dir.mkdir(exist_ok=True)
+
+        # ========== Video 1: MR-PC Prediction ==========
+        print("\n5. Creating MR-PC prediction video...")
+        mrpc_video_path = video_dir / f"mrpc_prediction_sample_{sample_idx}.mp4"
+
+        # Calculate color range based on FIRST FRAME of MR-PC prediction (matches evaluation_1plane.py)
+        vmin_mrpc = []
+        vmax_mrpc = []
+        for ch in range(C):
+            first_frame = pred_seq_mrpc_denorm[0, ch]
+            vmax_val = max(abs(first_frame.min()), abs(first_frame.max()))
+            vmin_mrpc.append(-vmax_val)
+            vmax_mrpc.append(vmax_val)
+        print(f"   MR-PC color ranges: {list(zip(field_names, vmin_mrpc, vmax_mrpc, strict=False))}")
+
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+        ims = []
+        titles = []
+
+        for ch, (field_name, ax) in enumerate(zip(field_names, axes, strict=False)):
+            im = ax.imshow(
+                pred_seq_mrpc_denorm[0, ch],
+                cmap="RdBu_r",
+                vmin=vmin_mrpc[ch],
+                vmax=vmax_mrpc[ch],
+                origin="lower",
+                animated=True,
+            )
+            ims.append(im)
+            title = ax.set_title(f"{field_name.upper()}, t=0")
+            titles.append(title)
+            ax.set_xlabel("x")
+            ax.set_ylabel("z")
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+        def animate_mrpc(frame):
+            for ch in range(C):
+                ims[ch].set_array(pred_seq_mrpc_denorm[frame, ch])
+                # Update title with current timestep and fusion indicator
+                is_fusion = model_used[frame] == "fused" if frame < len(model_used) else False
+                fusion_label = " [FUSION]" if is_fusion else ""
+                titles[ch].set_text(f"{field_names[ch].upper()}, t={frame}{fusion_label}")
+            return ims + titles
+
+        anim = animation.FuncAnimation(fig, animate_mrpc, frames=T, interval=1000 / fps, blit=True, repeat=True)
+
+        try:
+            writer = animation.FFMpegWriter(fps=fps, metadata=dict(artist="MRPC"), bitrate=1800)
+            anim.save(mrpc_video_path, writer=writer)
+            print(f"   Saved: {mrpc_video_path}")
+        except Exception as e:
+            print(f"   Warning: Could not save as MP4: {e}")
+            print("   Trying GIF format...")
+            mrpc_gif_path = video_dir / f"mrpc_prediction_sample_{sample_idx}.gif"
+            anim.save(mrpc_gif_path, writer="pillow", fps=fps)
+            print(f"   Saved as GIF: {mrpc_gif_path}")
+
+        plt.close(fig)
+
+        # ========== Video 2: Small-scale Baseline ==========
+        print("\n6. Creating small-scale baseline video...")
+        small_video_path = video_dir / f"small_prediction_sample_{sample_idx}.mp4"
+
+        # Calculate color range based on FIRST FRAME of Small-scale prediction
+        vmin_small = []
+        vmax_small = []
+        for ch in range(C):
+            first_frame = pred_seq_small_denorm[0, ch]
+            vmax_val = max(abs(first_frame.min()), abs(first_frame.max()))
+            vmin_small.append(-vmax_val)
+            vmax_small.append(vmax_val)
+        print(f"   Small-scale color ranges: {list(zip(field_names, vmin_small, vmax_small, strict=False))}")
+
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+        ims = []
+        titles = []
+
+        for ch, (field_name, ax) in enumerate(zip(field_names, axes, strict=False)):
+            im = ax.imshow(
+                pred_seq_small_denorm[0, ch],
+                cmap="RdBu_r",
+                vmin=vmin_small[ch],
+                vmax=vmax_small[ch],
+                origin="lower",
+                animated=True,
+            )
+            ims.append(im)
+            title = ax.set_title(f"{field_name.upper()}, t=0")
+            titles.append(title)
+            ax.set_xlabel("x")
+            ax.set_ylabel("z")
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+        def animate_small(frame):
+            for ch in range(C):
+                ims[ch].set_array(pred_seq_small_denorm[frame, ch])
+                titles[ch].set_text(f"{field_names[ch].upper()}, t={frame}")
+            return ims + titles
+
+        anim = animation.FuncAnimation(fig, animate_small, frames=T, interval=1000 / fps, blit=True, repeat=True)
+
+        try:
+            writer = animation.FFMpegWriter(fps=fps, metadata=dict(artist="SmallScale"), bitrate=1800)
+            anim.save(small_video_path, writer=writer)
+            print(f"   Saved: {small_video_path}")
+        except Exception as e:
+            print(f"   Warning: Could not save as MP4: {e}")
+            print("   Trying GIF format...")
+            small_gif_path = video_dir / f"small_prediction_sample_{sample_idx}.gif"
+            anim.save(small_gif_path, writer="pillow", fps=fps)
+            print(f"   Saved as GIF: {small_gif_path}")
+
+        plt.close(fig)
+
+        # ========== Video 3: Comparison (GT + MR-PC + Small) ==========
+        print("\n7. Creating comparison video...")
+        comparison_video_path = video_dir / f"comparison_sample_{sample_idx}.mp4"
+
+        # Calculate color range based on FIRST FRAME of Ground Truth (for fair comparison)
+        vmin_gt = []
+        vmax_gt = []
+        for ch in range(C):
+            first_frame = gt_seq_denorm[0, ch]
+            vmax_val = max(abs(first_frame.min()), abs(first_frame.max()))
+            vmin_gt.append(-vmax_val)
+            vmax_gt.append(vmax_val)
+        print(f"   Comparison color ranges (from GT): {list(zip(field_names, vmin_gt, vmax_gt, strict=False))}")
+
+        fig, axes = plt.subplots(3, 3, figsize=(12, 10))
+        ims = []
+        titles = []
+
+        for ch, field_name in enumerate(field_names):
+            # Row 0: Ground Truth
+            im_gt = axes[0, ch].imshow(
+                gt_seq_denorm[0, ch],
+                cmap="RdBu_r",
+                vmin=vmin_gt[ch],
+                vmax=vmax_gt[ch],
+                origin="lower",
+                animated=True,
+            )
+            title_gt = axes[0, ch].set_title(f"GT {field_name.upper()}, t=0")
+            axes[0, ch].set_xlabel("x")
+            axes[0, ch].set_ylabel("z")
+            plt.colorbar(im_gt, ax=axes[0, ch], fraction=0.046, pad=0.04)
+            ims.append(im_gt)
+            titles.append(title_gt)
+
+            # Row 1: MR-PC
+            im_mrpc = axes[1, ch].imshow(
+                pred_seq_mrpc_denorm[0, ch],
+                cmap="RdBu_r",
+                vmin=vmin_gt[ch],
+                vmax=vmax_gt[ch],
+                origin="lower",
+                animated=True,
+            )
+            title_mrpc = axes[1, ch].set_title(f"MR-PC {field_name.upper()}, t=0")
+            axes[1, ch].set_xlabel("x")
+            axes[1, ch].set_ylabel("z")
+            plt.colorbar(im_mrpc, ax=axes[1, ch], fraction=0.046, pad=0.04)
+            ims.append(im_mrpc)
+            titles.append(title_mrpc)
+
+            # Row 2: Small-scale
+            im_small = axes[2, ch].imshow(
+                pred_seq_small_denorm[0, ch],
+                cmap="RdBu_r",
+                vmin=vmin_gt[ch],
+                vmax=vmax_gt[ch],
+                origin="lower",
+                animated=True,
+            )
+            title_small = axes[2, ch].set_title(f"Small {field_name.upper()}, t=0")
+            axes[2, ch].set_xlabel("x")
+            axes[2, ch].set_ylabel("z")
+            plt.colorbar(im_small, ax=axes[2, ch], fraction=0.046, pad=0.04)
+            ims.append(im_small)
+            titles.append(title_small)
+
+        def animate_comparison(frame):
+            for ch in range(C):
+                ims[ch * 3].set_array(gt_seq_denorm[frame, ch])
+                ims[ch * 3 + 1].set_array(pred_seq_mrpc_denorm[frame, ch])
+                ims[ch * 3 + 2].set_array(pred_seq_small_denorm[frame, ch])
+
+                # Update titles with current timestep
+                titles[ch * 3].set_text(f"GT {field_names[ch].upper()}, t={frame}")
+
+                # Update MR-PC title with fusion indicator
+                is_fusion = model_used[frame] == "fused" if frame < len(model_used) else False
+                mrpc_title = f"MR-PC {field_names[ch].upper()}, t={frame}"
+                if is_fusion:
+                    mrpc_title += " [FUSION]"
+                titles[ch * 3 + 1].set_text(mrpc_title)
+
+                titles[ch * 3 + 2].set_text(f"Small {field_names[ch].upper()}, t={frame}")
+
+            return ims + titles
+
+        anim = animation.FuncAnimation(fig, animate_comparison, frames=T, interval=1000 / fps, blit=True, repeat=True)
+
+        try:
+            writer = animation.FFMpegWriter(fps=fps, metadata=dict(artist="Comparison"), bitrate=1800)
+            anim.save(comparison_video_path, writer=writer)
+            print(f"   Saved: {comparison_video_path}")
+        except Exception as e:
+            print(f"   Warning: Could not save as MP4: {e}")
+            print("   Trying GIF format...")
+            comparison_gif_path = video_dir / f"comparison_sample_{sample_idx}.gif"
+            anim.save(comparison_gif_path, writer="pillow", fps=fps)
+            print(f"   Saved as GIF: {comparison_gif_path}")
+
+        plt.close(fig)
+
+        print(f"\n{'=' * 60}")
+        print("Video generation complete!")
+        print(f"{'=' * 60}")
+        print(f"Videos saved to: {video_dir}")
+        print(f"Video duration: {T / fps:.1f} seconds at {fps} fps")
+
 
 def main():
     """Main evaluation function."""
@@ -1326,21 +1811,48 @@ def main():
     parser.add_argument(
         "--large_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/2025-11-02_23-13-52-741233/checkpoints/last.ckpt",
-        help="Path to large-scale model checkpoint (5t spacing)",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/2025-11-03_22-37-55-879072/checkpoints/step_43800.ckpt",
+        help="Path to large-scale model checkpoint (10t spacing)",
     )
     parser.add_argument("--sample_idx", type=int, default=0, help="Sample index to evaluate")
-    parser.add_argument("--num_predictions", type=int, default=50, help="Number of future steps to predict")
+    parser.add_argument("--num_predictions", type=int, default=80, help="Number of future steps to predict")
     parser.add_argument(
-        "--fusion_weight", type=float, default=0.5, help="Fusion weight α (0-1): x_fused = (1-α)*x_small + α*x_large"
+        "--fusion_weight", type=float, default=0.8, help="Fusion weight α (0-1): x_fused = (1-α)*x_small + α*x_large"
+    )
+    parser.add_argument(
+        "--generate_videos", action="store_true", help="Generate videos comparing MR-PC and small-scale predictions"
+    )
+    parser.add_argument("--video_fps", type=int, default=10, help="Frames per second for generated videos")
+    parser.add_argument(
+        "--fusion_interval",
+        type=int,
+        default=10,
+        help="Fusion interval in timesteps (e.g., 1=fuse every t, 2=fuse every 2t, 10=fuse every 10t)",
+    )
+    parser.add_argument(
+        "--first_fusion_point",
+        type=int,
+        default=31,
+        help="Time step of the first fusion point (default: 31). Must be >= 11.",
     )
 
     args = parser.parse_args()
 
+    # Validate first_fusion_point
+    if args.first_fusion_point < 11:
+        raise ValueError(f"first_fusion_point must be >= 11, got {args.first_fusion_point}")
+
+    # Calculate minimum sample_idx requirement
+    min_sample_idx_required = max(0, 1 - (args.first_fusion_point - 50))
+    if args.sample_idx < min_sample_idx_required:
+        print(f"WARNING: sample_idx ({args.sample_idx}) < required minimum ({min_sample_idx_required})")
+        print(f"         for first_fusion_point={args.first_fusion_point}")
+        print("         Historical frames may be incomplete.")
+
     # Model configurations
     small_scale_cfg = OmegaConf.create(
         {
-            "input_shape": [128, 128],
+            "input_shape": [256, 256],
             "sequence_length": 5,
             "prediction_horizon": 1,
             "num_channels": 3,  # u, v, w
@@ -1359,7 +1871,7 @@ def main():
 
     large_scale_cfg = OmegaConf.create(
         {
-            "input_shape": [128, 128],
+            "input_shape": [256, 256],
             "sequence_length": 5,
             "prediction_horizon": 1,
             "num_channels": 3,  # u, v, w
@@ -1405,7 +1917,20 @@ def main():
         sample_idx=args.sample_idx,
         num_predictions=args.num_predictions,
         fusion_weight=args.fusion_weight,
+        fusion_interval=args.fusion_interval,
+        first_fusion_point=args.first_fusion_point,
     )
+
+    # Generate videos if requested
+    if args.generate_videos:
+        evaluator.generate_prediction_videos(
+            sample_idx=args.sample_idx,
+            num_predictions=args.num_predictions,
+            fusion_weight=args.fusion_weight,
+            fps=args.video_fps,
+            fusion_interval=args.fusion_interval,
+            first_fusion_point=args.first_fusion_point,
+        )
 
     print("\n" + "=" * 60)
     print("MR-PC evaluation complete!")

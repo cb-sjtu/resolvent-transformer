@@ -16,7 +16,7 @@ data_folder: /home/sh/CB/icon-thewell-dev/data/preprocessed_flow/
 batch_size_per_device: 8  # Batch size for 3-channel data
 
 # Time stride settings
-time_stride: 5  # Frame spacing (1=consecutive, 2=every other frame)
+time_stride: 10  # Frame spacing (1=consecutive, 2=every other frame)
 
 # Normalization settings
 enable_normalization: true

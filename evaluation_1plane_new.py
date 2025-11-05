@@ -43,7 +43,7 @@ warnings.filterwarnings("ignore")
 # ========================================
 # 🎯 CONFIGURATION: Modify this value to change prediction length everywhere
 # ========================================
-DEFAULT_FUTURE_STEPS = 20  # Number of future steps to predict for 1-plane
+DEFAULT_FUTURE_STEPS = 10  # Number of future steps to predict for 1-plane
 
 
 def create_1plane_monitor_points():
@@ -213,7 +213,7 @@ def main() -> None:
     if args.checkpoint_path is None:
         args.checkpoint_path = (
             "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
-            "runs/2025-11-02_23-13-52-741233/checkpoints/step_41700.ckpt"
+            "runs/2025-11-03_22-37-55-879072/checkpoints/step_43800.ckpt"
         )
         print(f"Using default checkpoint: {args.checkpoint_path}")
 
