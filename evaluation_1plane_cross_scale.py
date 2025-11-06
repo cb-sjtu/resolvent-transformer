@@ -1314,9 +1314,9 @@ class CrossScaleEvaluator:
 
         T, C, H, W = frames.shape
 
-        # Create wavenumber arrays
-        kx = np.fft.fftfreq(W, d=1.0) * W  # Streamwise wavenumber
-        kz = np.fft.fftfreq(H, d=1.0) * H  # Spanwise wavenumber
+        # Create wavenumber arrays (normalized to grid spacing = 1.0)
+        kx = np.fft.fftfreq(W, d=1.0)  # Streamwise wavenumber
+        kz = np.fft.fftfreq(H, d=1.0)  # Spanwise wavenumber
 
         # Positive wavenumbers for plotting
         kx_pos = kx[kx > 0]
