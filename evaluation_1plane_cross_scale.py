@@ -719,6 +719,15 @@ class CrossScaleEvaluator:
                         timestep_idx = base_idx + self.small_scale_dataset.input_length
                         timestep = self.small_scale_dataset.timesteps[timestep_idx]
                         print(f"    GT frame {i}: dataset[{sample_idx + i}] -> timestep {timestep}")
+
+                        # Additional debug: print value at specific point
+                        if i == 0:
+                            print(f"    [DEBUG] Sample idx: {sample_idx}")
+                            print(f"    [DEBUG] First GT timestep: {timestep}")
+                            print(
+                                f"    [DEBUG] First GT value at point (64,64), channel 0: {target_frame[0, 64, 64]:.6f}"
+                            )
+                            print(f"    [DEBUG] GT shape: {target_frame.shape}")
                 else:
                     print(
                         f"  Warning: sample_idx + {i} = {sample_idx + i} >= \

@@ -37,6 +37,7 @@ class FlowSequence1PlaneDataset(Dataset):
         enable_normalization: bool = True,
         norm_stats=None,  # Normalization statistics (file path or dict)
         time_stride: int = 1,  # Time stride between frames (1=consecutive, 2=skip one frame)
+        prediction_step_size: int = 1,  # Number of steps for each prediction (for discontinuity filtering)
     ):
         """
         Args:
@@ -54,6 +55,7 @@ class FlowSequence1PlaneDataset(Dataset):
             enable_normalization: Whether to enable normalization
             norm_stats: Normalization statistics (file path or dict)
             time_stride: Time stride between frames (1=consecutive, 2=every other frame, etc.)
+            prediction_step_size: Number of steps for each prediction (default: 1, used for discontinuity filtering)
         """
         assert split in ["train", "val", "test"]
         assert abs(train_ratio + valid_ratio + test_ratio - 1.0) < 1e-6
@@ -65,6 +67,7 @@ class FlowSequence1PlaneDataset(Dataset):
         self.data_dir = data_dir
         self.input_length = input_length
         self.max_k_steps = max_k_steps
+        self.prediction_step_size = prediction_step_size
         self.field_names = field_names
         self.num_channels = len(self.field_names)  # 3 channels for u,v,w
         self.resolution_scale = resolution_scale
@@ -97,7 +100,7 @@ class FlowSequence1PlaneDataset(Dataset):
         # Each sample needs input_length + max_k_steps frames with time_stride spacing
         # Total span: (input_length + max_k_steps - 1) * time_stride + 1
         # Example: input=5, target=1, stride=2 -> need frames at [0,2,4,6,8,10] -> span=11
-        total_frames_needed = (self.input_length + self.max_k_steps - 1) * self.time_stride + 1
+        total_frames_needed = (self.input_length + self.prediction_step_size - 1) * self.time_stride + 1
         self.num_samples = self.num_frames - total_frames_needed + 1
 
         if self.num_samples <= 0:
@@ -113,8 +116,11 @@ class FlowSequence1PlaneDataset(Dataset):
         print(f"Total frames needed per sample: {total_frames_needed}")
 
         # Filter out sequences that span the discontinuity between timestep 1080 and 1081
-        # A sequence starting at timestep T will access
-        # frames from T to T + (input_length + max_k_steps - 1) * time_stride
+        # For discontinuity filtering, we use prediction_step_size (typically 1) instead of max_k_steps
+        # because the physical discontinuity matters for single-step predictions during training/inference,
+        # not for the number of ground truth frames loaded for comparison during evaluation.
+        # A sequence starting at timestep T will access frames from T to T
+        # + (input_length + prediction_step_size - 1) * time_stride
         # We need to exclude sequences where this range crosses the discontinuity (1080 -> 1081)
         discontinuity_timestep = 1081
 
@@ -123,8 +129,12 @@ class FlowSequence1PlaneDataset(Dataset):
 
         for i in range(self.num_samples):
             start_timestep = self.timesteps[i]
-            # Calculate the last timestep this sequence will access
-            end_timestep = self.timesteps[i + (self.input_length + self.max_k_steps - 1) * self.time_stride]
+            # Calculate the last timestep index this sequence will access for prediction
+            # A sequence starting at index i will access frames at:
+            # i, i+stride, i+2*stride, ..., i+(input_length+prediction_step_size-1)*stride
+            # Note: We use prediction_step_size here, NOT max_k_steps
+            end_idx = i + (self.input_length + self.prediction_step_size - 1) * self.time_stride
+            end_timestep = self.timesteps[end_idx]
 
             # Exclude if the sequence spans across the discontinuity
             # This happens when start <= 1080 and end >= 1081
