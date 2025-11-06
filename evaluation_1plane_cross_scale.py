@@ -24,6 +24,7 @@ import sys
 import warnings
 from pathlib import Path
 
+import h5py
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
@@ -154,6 +155,80 @@ class CrossScaleEvaluator:
 
         print(f"Dataset size: {len(dataset)}")
         return dataset
+
+    def load_consecutive_ground_truth(self, sample_idx: int, num_frames: int, time_stride: int = 1) -> list[np.ndarray]:
+        """Load consecutive ground truth frames with specified time stride.
+
+        This method directly loads frames from HDF5 files to ensure continuous temporal sampling,
+        bypassing dataset filtering that might create gaps.
+
+        Args:
+            sample_idx: Starting sample index in the dataset
+            num_frames: Number of consecutive frames to load
+            time_stride: Time spacing between frames (1 for small-scale, 10 for large-scale)
+
+        Returns:
+            List of denormalized frames, each with shape (C, H, W)
+        """
+        # Get base index in the timesteps array
+        base_idx = self.small_scale_dataset.indices[sample_idx]
+
+        # The label corresponds to the frame after the input sequence
+        # For small_scale_dataset with time_stride=1 and input_length=5:
+        # - Input frames are at indices: base_idx, base_idx+1, ..., base_idx+4
+        # - Label (first GT frame) is at index: base_idx + 5
+        dataset_time_stride = self.small_scale_dataset.time_stride
+        input_length = self.small_scale_dataset.input_length
+
+        # Starting timestep index in the full timesteps array (first GT frame)
+        start_timestep_idx = base_idx + input_length * dataset_time_stride
+
+        print("\nLoading ground truth:")
+        print(f"  Sample index: {sample_idx}")
+        print(f"  Base index in timesteps array: {base_idx}")
+        print(f"  Dataset time_stride: {dataset_time_stride}")
+        print(f"  Starting GT timestep index: {start_timestep_idx}")
+        print(f"  Requested time_stride for GT: {time_stride}")
+
+        ground_truth_frames = []
+
+        # Load all frames
+        for i in range(num_frames):
+            # Calculate the timestep index with desired time_stride
+            timestep_idx = start_timestep_idx + i * time_stride
+
+            if timestep_idx >= len(self.small_scale_dataset.timesteps):
+                print(f"  Warning: timestep_idx {timestep_idx} out of range, stopping at frame {i}")
+                break
+
+            # Get the actual timestep number
+            timestep = self.small_scale_dataset.timesteps[timestep_idx]
+
+            if i < 5 or i % 20 == 0:  # Print first 5 and every 20th frame
+                print(f"  Frame {i}: timestep_idx={timestep_idx}, timestep={timestep}")
+
+            # Load directly from HDF5 file
+            fpath = self.small_scale_dataset.file_dict[timestep]
+
+            with h5py.File(fpath, "r") as f:
+                data_multi_channel = f["data"][()]  # Shape: (C, H, W)
+
+                # Extract the requested fields
+                channels = []
+                for field_idx in range(len(self.small_scale_dataset.field_names)):
+                    channels.append(data_multi_channel[field_idx])
+
+                frame = np.stack(channels, axis=0)  # (C, H, W)
+
+            # HDF5 data is raw (not normalized), so we need to normalize then denormalize
+            # to match the same processing as predictions
+            frame_tensor = torch.from_numpy(frame).float()
+            frame_normalized = self.small_scale_dataset.normalize(frame_tensor)
+            frame_denorm = self.small_scale_dataset.denormalize(frame_normalized.unsqueeze(0).unsqueeze(0))
+            ground_truth_frames.append(frame_denorm.cpu().numpy()[0, 0])
+
+        print(f"  Loaded {len(ground_truth_frames)} ground truth frames\n")
+        return ground_truth_frames
 
     def cross_scale_prediction(
         self,
@@ -616,17 +691,49 @@ class CrossScaleEvaluator:
         )
 
         # Collect ground truth for comparison
+        # For small_scale_dataset with time_stride=1:
+        #   - dataset[idx] has label at timestep: base_timestep + 5
+        #   - dataset[idx+1] has label at timestep: base_timestep + 6
+        #   - So consecutive samples give consecutive timesteps
+        print("\nLoading ground truth frames...")
         ground_truth_frames = []
-        for i in range(num_predictions):
-            if sample_idx + i < len(self.small_scale_dataset):
-                sample_i = self.small_scale_dataset[sample_idx + i]
-                target_i = sample_i["label"]  # (1, 1, C, H, W)
-                target_denorm = self.small_scale_dataset.denormalize(target_i)
-                target_frame = target_denorm.cpu().numpy()[0, 0]  # (C, H, W)
-                ground_truth_frames.append(target_frame)
-            else:
-                if ground_truth_frames:
-                    ground_truth_frames.append(ground_truth_frames[-1])
+
+        # First, check if we can use the simple method (consecutive dataset samples)
+        # This works if the dataset has time_stride=1 and no gaps in the range we need
+        dataset_time_stride = self.small_scale_dataset.time_stride
+        print(f"  Small-scale dataset time_stride: {dataset_time_stride}")
+
+        if dataset_time_stride == 1:
+            # Simple method: consecutive samples have consecutive labels
+            print(f"  Using consecutive dataset samples for {num_predictions} frames")
+            for i in range(num_predictions):
+                if sample_idx + i < len(self.small_scale_dataset):
+                    sample_i = self.small_scale_dataset[sample_idx + i]
+                    target_i = sample_i["label"]  # (1, 1, C, H, W)
+                    target_denorm = self.small_scale_dataset.denormalize(target_i)
+                    target_frame = target_denorm.cpu().numpy()[0, 0]  # (C, H, W)
+                    ground_truth_frames.append(target_frame)
+
+                    if i < 5:  # Debug: print first 5 frames
+                        base_idx = self.small_scale_dataset.indices[sample_idx + i]
+                        timestep_idx = base_idx + self.small_scale_dataset.input_length
+                        timestep = self.small_scale_dataset.timesteps[timestep_idx]
+                        print(f"    GT frame {i}: dataset[{sample_idx + i}] -> timestep {timestep}")
+                else:
+                    print(
+                        f"  Warning: sample_idx + {i} = {sample_idx + i} >= \
+                            dataset length {len(self.small_scale_dataset)}"
+                    )
+                    if ground_truth_frames:
+                        ground_truth_frames.append(ground_truth_frames[-1])
+
+            print(f"  Loaded {len(ground_truth_frames)} ground truth frames")
+        else:
+            # For time_stride != 1, use the direct HDF5 loading method
+            print(f"  Using direct HDF5 loading (time_stride={dataset_time_stride})")
+            ground_truth_frames = self.load_consecutive_ground_truth(
+                sample_idx=sample_idx, num_frames=num_predictions, time_stride=1
+            )
 
         # Get channel info
         channel_info = self.small_scale_dataset.get_channel_info()
@@ -730,7 +837,7 @@ class CrossScaleEvaluator:
                 else:
                     gt_values = None
 
-                # Plot ground truth
+                # Plot ground truth with markers
                 if gt_values is not None:
                     ax.plot(
                         time_steps[: len(gt_values)],
@@ -739,6 +846,15 @@ class CrossScaleEvaluator:
                         linewidth=3,
                         label="Ground Truth",
                         alpha=0.8,
+                        zorder=5,
+                    )
+                    # Add markers to show individual GT data points
+                    ax.plot(
+                        time_steps[: len(gt_values)],
+                        gt_values,
+                        "ko",
+                        markersize=4,
+                        alpha=0.6,
                         zorder=5,
                     )
 
@@ -838,7 +954,7 @@ class CrossScaleEvaluator:
                 else:
                     gt_values = None
 
-                # Plot ground truth
+                # Plot ground truth with markers
                 if gt_values is not None:
                     ax.plot(
                         time_steps[: len(gt_values)],
@@ -847,6 +963,15 @@ class CrossScaleEvaluator:
                         linewidth=3,
                         label="Ground Truth",
                         alpha=0.8,
+                        zorder=5,
+                    )
+                    # Add markers to show individual GT data points
+                    ax.plot(
+                        time_steps[: len(gt_values)],
+                        gt_values,
+                        "ko",
+                        markersize=4,
+                        alpha=0.6,
                         zorder=5,
                     )
 
@@ -1893,7 +2018,7 @@ def main():
         "data_dir": "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow",
         "input_length": 5,
         "field_names": ["u", "v", "w"],
-        "file_pattern": "*u-v-w_scale2-3-1_yslice*.h5",
+        "file_pattern": "*u-v-w_scale2-3-1_yslice54*.h5",  # Explicitly specify yslice54 to avoid loading other y-slices
         "resolution_scale": (2, 3, 1),
         "y_slice": 54,
         "train_ratio": 0.7,
