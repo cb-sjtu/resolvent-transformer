@@ -800,19 +800,29 @@ class CrossScaleEvaluator:
         """Create temporal evolution plots for multiple points comparing MR-PC with baselines."""
         print("\nCreating temporal evolution plots for 9 points with baselines...")
 
-        # Select 9 points in a 3x3 grid
-        H, W = pred_seq_mrpc.shape[-2:]
+        # Fixed 9 monitoring points (same as evaluation_1plane_new.py)
+        # Base 2D positions in the domain (z_index, x_index)
+        # Adjusted monitoring points for 256x256 domain (indices 0-255)
+        fixed_positions = [
+            (40, 40),  # Bottom-left region
+            (40, 64),  # Bottom-center
+            (40, 100),  # Bottom-right
+            (64, 40),  # Center-left
+            (64, 64),  # Center-center
+            (64, 100),  # Center-right
+            (100, 40),  # Top-left
+            (100, 64),  # Top-center
+            (100, 100),  # Top-right
+        ]
 
-        # Create 3x3 grid of points
-        h_positions = [H // 4, H // 2, 3 * H // 4]  # 1/4, 1/2, 3/4 positions
-        w_positions = [W // 4, W // 2, 3 * W // 4]
-
+        # Create points list with grid indices for labeling
         points = []
-        for h_idx, h_pos in enumerate(h_positions):
-            for w_idx, w_pos in enumerate(w_positions):
-                points.append((h_pos, w_pos, h_idx, w_idx))
+        for idx, (z_pos, x_pos) in enumerate(fixed_positions):
+            h_idx = idx // 3  # Row index (0, 1, 2)
+            w_idx = idx % 3  # Column index (0, 1, 2)
+            points.append((z_pos, x_pos, h_idx, w_idx))
 
-        print(f"  Monitoring {len(points)} points in 3x3 grid")
+        print(f"  Monitoring {len(points)} fixed points")
 
         num_steps = len(pred_seq_mrpc)
         time_steps = np.arange(1, num_steps + 1)
@@ -1341,15 +1351,26 @@ class CrossScaleEvaluator:
             print("No fusion events to analyze")
             return
 
-        # Select 9 points in a 3x3 grid (same as temporal evolution)
-        H, W = pred_seq.shape[-2:]
-        h_positions = [H // 4, H // 2, 3 * H // 4]
-        w_positions = [W // 4, W // 2, 3 * W // 4]
+        # Fixed 9 monitoring points (same as evaluation_1plane_new.py)
+        # Adjusted monitoring points for 256x256 domain (indices 0-255)
+        fixed_positions = [
+            (80, 80),  # Bottom-left region
+            (80, 128),  # Bottom-center
+            (80, 200),  # Bottom-right
+            (128, 80),  # Center-left
+            (128, 128),  # Center-center
+            (128, 200),  # Center-right
+            (200, 80),  # Top-left
+            (200, 128),  # Top-center
+            (200, 200),  # Top-right
+        ]
 
+        # Create points list with grid indices for labeling
         points = []
-        for h_idx, h_pos in enumerate(h_positions):
-            for w_idx, w_pos in enumerate(w_positions):
-                points.append((h_pos, w_pos, h_idx, w_idx))
+        for idx, (z_pos, x_pos) in enumerate(fixed_positions):
+            h_idx = idx // 3  # Row index (0, 1, 2)
+            w_idx = idx % 3  # Column index (0, 1, 2)
+            points.append((z_pos, x_pos, h_idx, w_idx))
 
         num_fusions = len(fusion_info)
         fusion_times = [f["time"] for f in fusion_info]
