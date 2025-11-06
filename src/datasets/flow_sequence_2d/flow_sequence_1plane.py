@@ -113,20 +113,27 @@ class FlowSequence1PlaneDataset(Dataset):
         print(f"Total frames needed per sample: {total_frames_needed}")
 
         # Filter out sequences that span the discontinuity between timestep 1080 and 1081
+        # A sequence starting at timestep T will access
+        # frames from T to T + (input_length + max_k_steps - 1) * time_stride
+        # We need to exclude sequences where this range crosses the discontinuity (1080 -> 1081)
         discontinuity_timestep = 1081
-        exclude_start = discontinuity_timestep - total_frames_needed + 1
-        exclude_end = discontinuity_timestep
 
         valid_indices = []
         excluded_count = 0
 
         for i in range(self.num_samples):
             start_timestep = self.timesteps[i]
+            # Calculate the last timestep this sequence will access
+            end_timestep = self.timesteps[i + (self.input_length + self.max_k_steps - 1) * self.time_stride]
 
-            # Exclude sequences that would span the discontinuity
-            if exclude_start <= start_timestep <= exclude_end:
+            # Exclude if the sequence spans across the discontinuity
+            # This happens when start <= 1080 and end >= 1081
+            if start_timestep <= 1080 < end_timestep:
                 excluded_count += 1
-                print(f"Excluding sequence starting at timestep {start_timestep} (would span discontinuity)")
+                print(
+                    f"Excluding sequence starting at timestep {start_timestep}, "
+                    f"ending at {end_timestep} (spans discontinuity at 1080->1081)"
+                )
             else:
                 valid_indices.append(i)
 
