@@ -748,6 +748,18 @@ class CrossScaleEvaluator:
         channel_info = self.small_scale_dataset.get_channel_info()
         field_names = channel_info["field_names"]  # ["u", "v", "w"]
 
+        # Save complete 3-channel spatial-temporal data as npy files
+        gt_array = np.stack(ground_truth_frames, axis=0)  # (T, C, H, W)
+        np.save(self.output_dir / f"pred_mrpc_sample_{sample_idx}.npy", pred_seq_mrpc_denorm)
+        np.save(self.output_dir / f"pred_small_sample_{sample_idx}.npy", pred_seq_small_denorm)
+        np.save(self.output_dir / f"pred_large_sample_{sample_idx}.npy", pred_seq_large_denorm)
+        np.save(self.output_dir / f"ground_truth_sample_{sample_idx}.npy", gt_array)
+        print(f"Saved complete spatial-temporal data for sample {sample_idx}:")
+        print(f"  - pred_mrpc_sample_{sample_idx}.npy: {pred_seq_mrpc_denorm.shape}")
+        print(f"  - pred_small_sample_{sample_idx}.npy: {pred_seq_small_denorm.shape}")
+        print(f"  - pred_large_sample_{sample_idx}.npy: {pred_seq_large_denorm.shape}")
+        print(f"  - ground_truth_sample_{sample_idx}.npy: {gt_array.shape}")
+
         # Create visualizations with baselines
         self._create_temporal_evolution_plot(
             pred_seq_mrpc_denorm,
