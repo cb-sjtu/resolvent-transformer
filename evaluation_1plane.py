@@ -417,8 +417,8 @@ class OnePlaneModelEvaluator:
             frames: Tensor of shape (T, C, H, W) where C = 3 (u, v, w)
             field_names: List of field names ["u", "v", "w"]
             y_slice: Y-slice position (54)
-            dx: Grid spacing in x direction
-            dz: Grid spacing in z direction
+            dx: Grid spacing in x direction (deprecated, physical domain size used instead)
+            dz: Grid spacing in z direction (deprecated, physical domain size used instead)
 
         Returns:
             dict: Dictionary containing spectra data for each field
@@ -431,11 +431,20 @@ class OnePlaneModelEvaluator:
         T, _C, H, W = frames.shape
         spectra_results = {"y_slice": y_slice, "fields": {}}
 
-        # Compute frequency grids
-        kx = np.fft.fftfreq(W, dx)  # x-direction wavenumbers
-        kz = np.fft.fftfreq(H, dz)  # z-direction wavenumbers
+        # Physical domain sizes for turbulence simulation
+        Lx = 4 * np.pi  # Domain size in x-direction
+        Lz = 2 * np.pi  # Domain size in z-direction
 
-        # Only keep positive frequencies for plotting
+        # Compute physical grid spacings
+        dx_physical = Lx / W
+        dz_physical = Lz / H
+
+        # Compute angular wavenumbers: k = 2π × fftfreq(N, d=L/N)
+        # fftfreq gives spatial frequency f, then k = 2π × f
+        kx = 2 * np.pi * np.fft.fftfreq(W, d=dx_physical)  # x-direction angular wavenumbers
+        kz = 2 * np.pi * np.fft.fftfreq(H, d=dz_physical)  # z-direction angular wavenumbers
+
+        # Only keep positive wavenumbers for plotting
         kx_pos = kx[kx > 0]
         kz_pos = kz[kz > 0]
 
