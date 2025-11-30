@@ -121,12 +121,27 @@ class CrossScaleEvaluator:
         except Exception as e:
             print(f"Could not load with checkpoint hyperparameters: {e}")
             print("Creating module with provided config...")
-            module_cfg = OmegaConf.create({"model": model_cfg, "loss_fn": "mse"})
+            module_cfg = OmegaConf.create(
+                {
+                    "model": model_cfg,
+                    "loss_fn": "mse",
+                    "accelerate": {
+                        "fp32_matmul_precision": "high",
+                        "dynamo_cache_size_limit": None,
+                        "compile": False,
+                        "sdpa": ["efficient"],
+                    },
+                }
+            )
             model = FlowSwin2DLitModule(module_cfg)
 
             checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             if "state_dict" in checkpoint:
-                model.load_state_dict(checkpoint["state_dict"])
+                state_dict = checkpoint["state_dict"]
+                # Remove _metadata key if present (can cause loading issues)
+                if "_metadata" in state_dict:
+                    del state_dict["_metadata"]
+                model.load_state_dict(state_dict, strict=False)
                 print("Model weights loaded successfully!")
 
         model.eval()
@@ -1972,7 +1987,7 @@ def main():
     parser.add_argument(
         "--small_scale_checkpoint",
         type=str,
-        default="logs/flow_lstm_1plane/runs/2025-11-05_20-32-55-526491/checkpoints/step_19200.ckpt",
+        default="logs/flow_fno_1plane/runs/2025-11-06_22-16-42-060676/checkpoints/step_8400.ckpt",
         help="Path to small-scale model checkpoint (t spacing)",
     )
     parser.add_argument(
@@ -2019,6 +2034,7 @@ def main():
     # Model configurations
     small_scale_cfg = OmegaConf.create(
         {
+            "_target_": "src.models.base.swin_transformer.SwinTransformerAuto",
             "input_shape": [256, 256],
             "sequence_length": 5,
             "prediction_horizon": 1,
@@ -2033,11 +2049,13 @@ def main():
             "drop_rate": 0.1,
             "attn_drop_rate": 0.1,
             "drop_path_rate": 0.1,
+            "use_patch_merging": True,
         }
     )
 
     large_scale_cfg = OmegaConf.create(
         {
+            "_target_": "src.models.base.swin_transformer.SwinTransformerAuto",
             "input_shape": [256, 256],
             "sequence_length": 5,
             "prediction_horizon": 1,
@@ -2052,6 +2070,7 @@ def main():
             "drop_rate": 0.1,
             "attn_drop_rate": 0.1,
             "drop_path_rate": 0.1,
+            "use_patch_merging": True,
         }
     )
 
