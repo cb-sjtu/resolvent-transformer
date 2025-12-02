@@ -1987,7 +1987,7 @@ def main():
     parser.add_argument(
         "--small_scale_checkpoint",
         type=str,
-        default="logs/flow_fno_1plane/runs/2025-11-06_22-16-42-060676/checkpoints/step_8400.ckpt",
+        default="logs/flow_fno_1plane/runs/2025-12-01_20-40-46-584918/checkpoints/step_6000.ckpt",
         help="Path to small-scale model checkpoint (t spacing)",
     )
     parser.add_argument(
