@@ -775,6 +775,80 @@ class CrossScaleEvaluator:
         print(f"  - pred_large_sample_{sample_idx}.npy: {pred_seq_large_denorm.shape}")
         print(f"  - ground_truth_sample_{sample_idx}.npy: {gt_array.shape}")
 
+        # Save fusion point predictions (small-scale and large-scale before fusion)
+        if len(fusion_info) > 0:
+            # Get shape info
+            T, C, H, W = pred_seq_mrpc_denorm.shape
+
+            # Create sparse arrays for fusion point predictions (initialized with NaN)
+            pred_small_at_fusion = np.full((T, C, H, W), np.nan, dtype=np.float32)
+            pred_large_at_fusion = np.full((T, C, H, W), np.nan, dtype=np.float32)
+
+            # Lists to store fusion point indices and weights
+            fusion_point_indices = []
+            fusion_weights = []
+
+            # Extract and denormalize fusion point predictions
+            for info in fusion_info:
+                current_time = info["time"]  # Absolute time (e.g., 31, 41, 51, ...)
+                fusion_weight = info["fusion_weight"]
+
+                # Convert absolute time to prediction sequence index
+                # Predictions start at time=6 (after initial frames at t=1-5)
+                # So prediction index = current_time - 6
+                pred_idx = current_time - 6
+
+                # Skip if index is out of bounds (shouldn't happen but safety check)
+                if pred_idx < 0 or pred_idx >= T:
+                    print(
+                        f"Warning: Fusion point at time {current_time} (pred_idx={pred_idx}) "
+                        f"is out of bounds [0, {T}), skipping..."
+                    )
+                    continue
+
+                # Get predictions (these are CPU tensors in normalized space)
+                small_pred_tensor = info["small_pred"]  # (C, H, W)
+                large_pred_tensor = info["large_pred"]  # (C, H, W)
+
+                # Denormalize predictions
+                # Add batch dimension for denormalization, then remove it
+                small_pred_denorm = (
+                    self.small_scale_dataset.denormalize(small_pred_tensor.unsqueeze(0)).cpu().numpy()[0]
+                )
+                large_pred_denorm = (
+                    self.small_scale_dataset.denormalize(large_pred_tensor.unsqueeze(0)).cpu().numpy()[0]
+                )
+
+                # Fill in the sparse arrays at fusion points
+                pred_small_at_fusion[pred_idx] = small_pred_denorm
+                pred_large_at_fusion[pred_idx] = large_pred_denorm
+
+                # Record fusion point info (using prediction index, not absolute time)
+                fusion_point_indices.append(pred_idx)
+                fusion_weights.append(fusion_weight)
+
+            # Save fusion point predictions and metadata
+            np.save(self.output_dir / f"pred_small_at_fusion_sample_{sample_idx}.npy", pred_small_at_fusion)
+            np.save(self.output_dir / f"pred_large_at_fusion_sample_{sample_idx}.npy", pred_large_at_fusion)
+            np.save(
+                self.output_dir / f"fusion_points_sample_{sample_idx}.npy",
+                np.array(fusion_point_indices, dtype=np.int32),
+            )
+            np.save(
+                self.output_dir / f"fusion_weights_sample_{sample_idx}.npy", np.array(fusion_weights, dtype=np.float32)
+            )
+
+            print(f"\nSaved fusion point data for sample {sample_idx}:")
+            print(f"  - pred_small_at_fusion_sample_{sample_idx}.npy: {pred_small_at_fusion.shape}")
+            print(f"  - pred_large_at_fusion_sample_{sample_idx}.npy: {pred_large_at_fusion.shape}")
+            print(f"  - fusion_points_sample_{sample_idx}.npy: {len(fusion_point_indices)} fusion points")
+            print(f"  - fusion_weights_sample_{sample_idx}.npy: {len(fusion_weights)} weights")
+            print(f"  Fusion points (prediction indices): {fusion_point_indices}")
+            # Also print the mapping to absolute time for reference
+            if len(fusion_point_indices) > 0:
+                abs_times = [idx + 6 for idx in fusion_point_indices]
+                print(f"  Corresponding absolute times: {abs_times}")
+
         # Create visualizations with baselines
         self._create_temporal_evolution_plot(
             pred_seq_mrpc_denorm,
@@ -1987,7 +2061,7 @@ def main():
     parser.add_argument(
         "--small_scale_checkpoint",
         type=str,
-        default="logs/flow_fno_1plane/runs/2025-11-06_22-16-42-060676/checkpoints/step_8400.ckpt",
+        default="logs/flow_swin_1plane/runs/2025-11-02_14-11-12-461089/checkpoints/step_10800.ckpt",
         help="Path to small-scale model checkpoint (t spacing)",
     )
     parser.add_argument(
