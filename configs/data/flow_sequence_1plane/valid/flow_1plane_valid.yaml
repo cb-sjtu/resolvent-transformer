@@ -15,6 +15,7 @@ dataset:
   enable_normalization: ${data.enable_normalization}
   norm_stats: ${data.norm_stats}
   time_stride: ${data.time_stride}  # Frame spacing between timesteps
+  filter_discontinuity: false  # New dataset (ts00001-ts10000) is continuous, no discontinuity
 
 num_workers: ${data.num_workers}
 pin_memory: ${data.pin_memory}

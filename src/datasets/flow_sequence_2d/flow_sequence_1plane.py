@@ -38,6 +38,7 @@ class FlowSequence1PlaneDataset(Dataset):
         norm_stats=None,  # Normalization statistics (file path or dict)
         time_stride: int = 1,  # Time stride between frames (1=consecutive, 2=skip one frame)
         prediction_step_size: int = 1,  # Number of steps for each prediction (for discontinuity filtering)
+        filter_discontinuity: bool = True,  # Whether to filter sequences crossing timestep 1080->1081
     ):
         """
         Args:
@@ -56,6 +57,8 @@ class FlowSequence1PlaneDataset(Dataset):
             norm_stats: Normalization statistics (file path or dict)
             time_stride: Time stride between frames (1=consecutive, 2=every other frame, etc.)
             prediction_step_size: Number of steps for each prediction (default: 1, used for discontinuity filtering)
+            filter_discontinuity: Whether to filter sequences crossing timestep 1080->1081
+            (default: True for old data, False for new continuous data)
         """
         assert split in ["train", "val", "test"]
         assert abs(train_ratio + valid_ratio + test_ratio - 1.0) < 1e-6
@@ -75,6 +78,7 @@ class FlowSequence1PlaneDataset(Dataset):
         self.split = split
         self.enable_normalization = enable_normalization
         self.time_stride = time_stride
+        self.filter_discontinuity = filter_discontinuity
 
         # Get files matching the pattern
         files = sorted(glob.glob(os.path.join(data_dir, file_pattern)))
@@ -116,43 +120,49 @@ class FlowSequence1PlaneDataset(Dataset):
         print(f"Total frames needed per sample: {total_frames_needed}")
 
         # Filter out sequences that span the discontinuity between timestep 1080 and 1081
-        # For discontinuity filtering, we use prediction_step_size (typically 1) instead of max_k_steps
-        # because the physical discontinuity matters for single-step predictions during training/inference,
-        # not for the number of ground truth frames loaded for comparison during evaluation.
-        # A sequence starting at timestep T will access frames from T to T
-        # + (input_length + prediction_step_size - 1) * time_stride
-        # We need to exclude sequences where this range crosses the discontinuity (1080 -> 1081)
-        discontinuity_timestep = 1081
+        # Only apply this filtering if filter_discontinuity is True (for old datasets)
+        if self.filter_discontinuity:
+            # For discontinuity filtering, we use prediction_step_size (typically 1) instead of max_k_steps
+            # because the physical discontinuity matters for single-step predictions during training/inference,
+            # not for the number of ground truth frames loaded for comparison during evaluation.
+            # A sequence starting at timestep T will access frames from T to T
+            # + (input_length + prediction_step_size - 1) * time_stride
+            # We need to exclude sequences where this range crosses the discontinuity (1080 -> 1081)
+            discontinuity_timestep = 1081
 
-        valid_indices = []
-        excluded_count = 0
+            valid_indices = []
+            excluded_count = 0
 
-        for i in range(self.num_samples):
-            start_timestep = self.timesteps[i]
-            # Calculate the last timestep index this sequence will access for prediction
-            # A sequence starting at index i will access frames at:
-            # i, i+stride, i+2*stride, ..., i+(input_length+prediction_step_size-1)*stride
-            # Note: We use prediction_step_size here, NOT max_k_steps
-            end_idx = i + (self.input_length + self.prediction_step_size - 1) * self.time_stride
-            end_timestep = self.timesteps[end_idx]
+            for i in range(self.num_samples):
+                start_timestep = self.timesteps[i]
+                # Calculate the last timestep index this sequence will access for prediction
+                # A sequence starting at index i will access frames at:
+                # i, i+stride, i+2*stride, ..., i+(input_length+prediction_step_size-1)*stride
+                # Note: We use prediction_step_size here, NOT max_k_steps
+                end_idx = i + (self.input_length + self.prediction_step_size - 1) * self.time_stride
+                end_timestep = self.timesteps[end_idx]
 
-            # Exclude if the sequence spans across the discontinuity
-            # This happens when start <= 1080 and end >= 1081
-            if start_timestep <= 1080 < end_timestep:
-                excluded_count += 1
-                print(
-                    f"Excluding sequence starting at timestep {start_timestep}, "
-                    f"ending at {end_timestep} (spans discontinuity at 1080->1081)"
-                )
-            else:
-                valid_indices.append(i)
+                # Exclude if the sequence spans across the discontinuity
+                # This happens when start <= 1080 and end >= 1081
+                if start_timestep <= 1080 < end_timestep:
+                    excluded_count += 1
+                    print(
+                        f"Excluding sequence starting at timestep {start_timestep}, "
+                        f"ending at {end_timestep} (spans discontinuity at 1080->1081)"
+                    )
+                else:
+                    valid_indices.append(i)
 
-        print(f"Excluded {excluded_count} sequences due to discontinuity at timestep {discontinuity_timestep}")
-        print(f"Valid samples: {len(valid_indices)} (originally {self.num_samples})")
+            print(f"Excluded {excluded_count} sequences due to discontinuity at timestep {discontinuity_timestep}")
+            print(f"Valid samples: {len(valid_indices)} (originally {self.num_samples})")
 
-        # Update num_samples to reflect filtered data
-        self.num_samples = len(valid_indices)
-        self.valid_base_indices = valid_indices
+            # Update num_samples to reflect filtered data
+            self.num_samples = len(valid_indices)
+            self.valid_base_indices = valid_indices
+        else:
+            # No discontinuity filtering - use all samples
+            print(f"Discontinuity filtering disabled - using all {self.num_samples} samples")
+            self.valid_base_indices = list(range(self.num_samples))
 
         # Split data indices using the filtered valid_base_indices
         train_samples = int(self.num_samples * train_ratio)
