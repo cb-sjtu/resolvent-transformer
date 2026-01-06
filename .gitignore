@@ -213,5 +213,8 @@ timeseries_comparison_results*/
 spectrum_comparison_results*/
 
 data_show/
+
+visualization/
+scripts/
 # ------------------------------------------------------------------------------------------------
 # The following are for project-specific configs
