@@ -87,8 +87,8 @@ class FlowSequence1PlaneDataset(Dataset):
         self.file_dict = {}  # Map timestep -> filename
 
         for f in files:
-            # Extract timestep from filename like "..._t00123.h5"
-            match = re.search(r"_t(\d+)\.h5$", f)
+            # Extract timestep from filename like "..._t00123.h5" or "..._ts00123.h5"
+            match = re.search(r"_ts?(\d+)\.h5$", f)
             if match:
                 timestep = int(match.group(1))
                 self.timesteps.append(timestep)

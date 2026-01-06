@@ -1,5 +1,6 @@
 #!/bin/bash
 # Training script for flow_swin_1plane model (3-channel version: 1 plane × 3 fields [u,v,w])
+# NEW: Using 10,000-frame dataset with time_stride=5 and 8000/500/1500 split
 # Train + evaluate, and make sure evaluation logs go into the SAME run directory.
 
 echo "Starting training for flow_swin_1plane model..."
