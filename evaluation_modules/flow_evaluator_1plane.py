@@ -163,7 +163,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         """Load 1-plane specific datasets (adapted from original evaluation.py)."""
         from src.datasets.flow_sequence_2d.flow_sequence_1plane import FlowSequence1PlaneDataset
 
-        data_dir = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
+        data_dir = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow/new/"
 
         # Use the same parameters as 1-plane training configuration with max_k_steps for GT comparison
         common_params = {
@@ -171,15 +171,16 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             "input_length": 5,  # Match 1-plane training
             "max_k_steps": 100,  # Load multiple GT steps for comparison
             "field_names": self.field_names,  # ["u", "v", "w"]
-            "file_pattern": "*u-v-w_scale2-3-1_yslice54*.h5",
+            "file_pattern": "*u-v-w_scale2-3_ylayer2_ts*.h5",
             "resolution_scale": [2, 3, 1],
             "y_slice": self.plane_y_position,  # 54
-            "train_ratio": 0.7,
-            "valid_ratio": 0.15,
+            "train_ratio": 0.80,
+            "valid_ratio": 0.05,
             "test_ratio": 0.15,
-            "norm_stats": "norm_stats_3ch_1plane_u-v-w_scale2-3-1_yslice54.json",
+            "norm_stats": "norm_stats_3ch_1plane_u-v-w_scale2-3_ylayer2.json",
             "enable_normalization": True,
-            "time_stride": 10,  # Match training configuration: frame spacing of 5t
+            "time_stride": 5,  # Match training configuration: frame spacing of 5t
+            "filter_discontinuity": False,  # New dataset is continuous
         }
 
         # Load datasets with specific splits

@@ -7,7 +7,7 @@ echo "Starting training for flow_swin_1plane model..."
 
 # 1) 训练
 echo "Starting training..."
-python src/train.py --config-name=train_flow_swin_1plane trainer.max_steps=50000 trainer.val_check_interval=300 trainer.limit_val_batches=5
+python src/train.py --config-name=train_flow_swin_1plane trainer.max_steps=200000 trainer.val_check_interval=3000 trainer.limit_val_batches=3
 echo "Training completed!"
 
 # 2) 等待 wandb 同步

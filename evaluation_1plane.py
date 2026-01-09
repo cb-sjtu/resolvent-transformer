@@ -149,12 +149,12 @@ class OnePlaneModelEvaluator:
         print("Setting up 1-plane datasets...")
 
         # Dataset configuration matching training
-        data_dir = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
+        data_dir = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow/new/"
         field_names = ["u", "v", "w"]  # Only velocity fields (removed pressure)
-        file_pattern = "*u-v-w_scale2-3-1_yslice54*.h5"
+        file_pattern = "*u-v-w_scale2-3_ylayer2_ts*.h5"
         resolution_scale = (2, 3, 1)
         y_slice = 54  # y_slice54
-        norm_stats_file = "norm_stats_3ch_1plane_u-v-w_scale2-3-1_yslice54.json"
+        norm_stats_file = "norm_stats_3ch_1plane_u-v-w_scale2-3_ylayer2.json"
 
         # Create datasets for all splits
         train_dataset = FlowSequence1PlaneDataset(
@@ -164,13 +164,14 @@ class OnePlaneModelEvaluator:
             file_pattern=file_pattern,
             resolution_scale=resolution_scale,
             y_slice=y_slice,
-            train_ratio=0.7,
-            valid_ratio=0.15,
+            train_ratio=0.80,
+            valid_ratio=0.05,
             test_ratio=0.15,
             split="train",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=10,  # Match training configuration: frame spacing of 5t
+            time_stride=5,  # Match training configuration: frame spacing of 5t
+            filter_discontinuity=False,  # New dataset is continuous
         )
 
         val_dataset = FlowSequence1PlaneDataset(
@@ -180,13 +181,14 @@ class OnePlaneModelEvaluator:
             file_pattern=file_pattern,
             resolution_scale=resolution_scale,
             y_slice=y_slice,
-            train_ratio=0.7,
-            valid_ratio=0.15,
+            train_ratio=0.80,
+            valid_ratio=0.05,
             test_ratio=0.15,
             split="val",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=10,  # Match training configuration: frame spacing of 5t
+            time_stride=5,  # Match training configuration: frame spacing of 5t
+            filter_discontinuity=False,  # New dataset is continuous
         )
 
         test_dataset = FlowSequence1PlaneDataset(
@@ -196,13 +198,14 @@ class OnePlaneModelEvaluator:
             file_pattern=file_pattern,
             resolution_scale=resolution_scale,
             y_slice=y_slice,
-            train_ratio=0.7,
-            valid_ratio=0.15,
+            train_ratio=0.80,
+            valid_ratio=0.05,
             test_ratio=0.15,
             split="test",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=10,  # Match training configuration: frame spacing of 5t
+            time_stride=5,  # Match training configuration: frame spacing of 5t
+            filter_discontinuity=False,  # New dataset is continuous
         )
 
         print(f"Dataset sizes - Train: {len(train_dataset)}, Val: {len(val_dataset)}, Test: {len(test_dataset)}")
@@ -850,14 +853,14 @@ class OnePlaneModelEvaluator:
             print("\n" + "=" * 60)
             print("ANIMATION GENERATION")
             print("=" * 60)
-            self.create_1plane_animation(sample_idx=0, num_future=10)
+            self.create_1plane_animation(sample_idx=0, num_future=60)
 
         # Energy spectra analysis
         if run_spectra:
             print("\n" + "=" * 60)
             print("ENERGY SPECTRA ANALYSIS")
             print("=" * 60)
-            self._run_energy_spectra_analysis(num_future=10, sample_idx=0)
+            self._run_energy_spectra_analysis(num_future=60, sample_idx=0)
 
         print(f"\nEvaluation complete! Results saved to: {self.output_dir}")
         print("\nGenerated visualizations:")
@@ -876,7 +879,7 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate 1-plane Flow Swin Transformer")
     parser.add_argument("checkpoint_path", type=str, nargs="?", help="Path to model checkpoint")
     parser.add_argument("--num_samples", type=int, default=1, help="Number of samples to evaluate")
-    parser.add_argument("--num_future", type=int, default=10, help="Number of future steps to predict")
+    parser.add_argument("--num_future", type=int, default=60, help="Number of future steps to predict")
     parser.add_argument("--save_predictions", action="store_true", help="Save predictions as H5 files")
 
     args = parser.parse_args()
@@ -886,10 +889,8 @@ def main():
         checkpoint_path = args.checkpoint_path
     else:
         # Default to the hardcoded path if no argument provided
-        checkpoint_path = (
-            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
-            "runs/2025-11-03_22-37-55-879072/checkpoints/step_43800.ckpt"
-        )
+        checkpoint_path = "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
+        "runs/2026-01-07_15-00-40-043313/checkpoints/step_66600.ckpt"
 
     # Load model config (simplified for direct usage)
     from omegaconf import OmegaConf

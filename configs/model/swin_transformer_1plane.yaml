@@ -6,7 +6,7 @@ prediction_horizon: 1
 num_channels: 3  # 1 plane × 3 fields (u,v,w) = 3 channels
 patch_size: [4, 4]
 embed_dim: 192
-depths: [2, 2, 4, 6, 4, 2, 2]  # encoder: [2,2,4], latent: [6], decoder: [4,2,2]
+depths: [2, 4, 4, 6, 4, 4, 2]  # encoder: [2,2,4], latent: [6], decoder: [4,2,2]
 num_heads: 32
 window_size: [8, 8]
 mlp_ratio: 4.0
