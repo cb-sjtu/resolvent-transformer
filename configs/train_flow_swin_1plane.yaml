@@ -23,7 +23,7 @@ task_name: "flow_swin_1plane"
 # tags to help you identify your experiments
 # you can overwrite this in experiment configs
 # overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
-tags: ["flow", "swin", "1plane", "uvw", "3channels", "ylayer2", "10k_frames", "stride5"]
+tags: ["flow", "swin", "1plane", "uvw", "3channels", "ylayer2", "10k_frames", "stride10"]
 
 # set False to skip model summary
 print_model_summary: True
@@ -46,7 +46,7 @@ seed: 12345
 
 print_lv: 1
 
-log_project: "turbulence_swin_1plane_uvw_10k_ts5"
+log_project: "turbulence_swin_1plane_uvw_10k_ts10"
 
 # Enable training
 train: True

@@ -170,7 +170,7 @@ class OnePlaneModelEvaluator:
             split="train",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=5,  # Match training configuration: frame spacing of 5t
+            time_stride=10,  # Match training configuration: frame spacing of 10t
             filter_discontinuity=False,  # New dataset is continuous
         )
 
@@ -187,7 +187,7 @@ class OnePlaneModelEvaluator:
             split="val",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=5,  # Match training configuration: frame spacing of 5t
+            time_stride=10,  # Match training configuration: frame spacing of 10t
             filter_discontinuity=False,  # New dataset is continuous
         )
 
@@ -204,7 +204,7 @@ class OnePlaneModelEvaluator:
             split="test",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=5,  # Match training configuration: frame spacing of 5t
+            time_stride=10,  # Match training configuration: frame spacing of 10t
             filter_discontinuity=False,  # New dataset is continuous
         )
 

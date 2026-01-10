@@ -1,13 +1,13 @@
 #!/bin/bash
 # Training script for flow_swin_1plane model (3-channel version: 1 plane × 3 fields [u,v,w])
-# NEW: Using 10,000-frame dataset with time_stride=5 and 8000/500/1500 split
+# NEW: Using 10,000-frame dataset with time_stride=10 and 8000/500/1500 split
 # Train + evaluate, and make sure evaluation logs go into the SAME run directory.
 
 echo "Starting training for flow_swin_1plane model..."
 
 # 1) 训练
 echo "Starting training..."
-python src/train.py --config-name=train_flow_swin_1plane trainer.max_steps=200000 trainer.val_check_interval=3000 trainer.limit_val_batches=3
+python src/train.py --config-name=train_flow_swin_1plane trainer.max_steps=200000 trainer.val_check_interval=1000 trainer.limit_val_batches=3
 echo "Training completed!"
 
 # 2) 等待 wandb 同步

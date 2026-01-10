@@ -2061,13 +2061,14 @@ def main():
     parser.add_argument(
         "--small_scale_checkpoint",
         type=str,
-        default="logs/flow_fno_1plane/runs/2025-12-17_17-22-37-875118/checkpoints/step_5100.ckpt",
+        default="logs/flow_swin_1plane/runs/2025-11-02_14-11-12-461089/checkpoints/step_10800.ckpt",
         help="Path to small-scale model checkpoint (t spacing)",
     )
     parser.add_argument(
         "--large_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/2025-11-03_22-37-55-879072/checkpoints/step_43800.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/"
+        "flow_swin_1plane/runs/2026-01-07_15-00-40-043313/checkpoints/step_66600.ckpt",
         help="Path to large-scale model checkpoint (10t spacing)",
     )
     parser.add_argument("--sample_idx", type=int, default=0, help="Sample index to evaluate")
@@ -2150,17 +2151,17 @@ def main():
 
     # Data configuration
     data_config = {
-        "data_dir": "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow",
+        "data_dir": "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow/new",
         "input_length": 5,
         "field_names": ["u", "v", "w"],
-        "file_pattern": "*u-v-w_scale2-3-1_yslice54*.h5",  # Explicitly specify yslice54 to avoid loading other y-slices
+        "file_pattern": "*u-v-w_scale2-3_ylayer2_ts*.h5",  # Explicitly specify yslice54 to avoid loading other y-slices
         "resolution_scale": (2, 3, 1),
         "y_slice": 54,
         "train_ratio": 0.7,
         "valid_ratio": 0.15,
         "test_ratio": 0.15,
         "enable_normalization": True,
-        "norm_stats": "norm_stats_3ch_1plane_u-v-w_scale2-3-1_yslice54.json",
+        "norm_stats": "norm_stats_3ch_1plane_u-v-w_scale2-3_ylayer2.json",
     }
 
     # Create evaluator
