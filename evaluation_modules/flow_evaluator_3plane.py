@@ -20,6 +20,7 @@ from omegaconf import DictConfig
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 from .base_evaluator import BaseFlowEvaluator  # noqa: E402
+from .time_series_monitor import MAX_GROUND_TRUTH_STEPS, MAX_RECORDED_TIMESTEPS  # noqa: E402
 from .utils import ensure_numpy_array, log_image_to_wandb  # noqa: E402
 
 try:
@@ -169,7 +170,7 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
         common_params = {
             "data_dir": data_dir,
             "input_length": 5,  # Match 3-plane training
-            "max_k_steps": 100,  # Load multiple GT steps for comparison
+            "max_k_steps": MAX_GROUND_TRUTH_STEPS,  # Load multiple GT steps for comparison (configurable)
             "field_names": self.field_names,  # ["u", "v", "w"]
             "file_pattern": "*u-v-w-p_scale4-6-1_yslice*.h5",
             "resolution_scale": [4, 6, 1],
@@ -421,7 +422,7 @@ class Flow3PlaneEvaluator(BaseFlowEvaluator):
         def patched_record_timestep(pred_data, split, mode, timestep, gt_data=None):
             # Only record data from the first sample (when timesteps array is small)
             max_recorded_steps = len(monitor.time_series_data[split][mode]["timesteps"])
-            max_steps_per_sample = 100  # Allow up to 100 steps per sample
+            max_steps_per_sample = MAX_RECORDED_TIMESTEPS  # Use the configurable constant
             if max_recorded_steps >= max_steps_per_sample:
                 print(f"    ⏭️ Skipping timestep {timestep} (already have {max_recorded_steps} steps)")
                 return

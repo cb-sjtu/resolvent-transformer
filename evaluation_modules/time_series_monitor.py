@@ -14,6 +14,12 @@ import torch
 
 from .utils import compute_velocity_magnitude
 
+# ========================================
+# 🎯 CONFIGURATION: Modify these values to control evaluation behavior
+# ========================================
+MAX_RECORDED_TIMESTEPS = 300  # Maximum number of timesteps to record for time series plots
+MAX_GROUND_TRUTH_STEPS = 300  # Maximum number of ground truth steps to load from dataset
+
 
 class TimeSeriesMonitor:
     """Monitor specific points in flow field over time."""
@@ -144,7 +150,7 @@ class TimeSeriesMonitor:
         # This prevents accumulation across multiple samples
         max_recorded_steps = len(self.time_series_data[split][mode]["timesteps"])
         # Use a reasonable upper limit - if we already have many steps, likely from first sample
-        max_steps_per_sample = 100  # Allow up to 100 steps per sample
+        max_steps_per_sample = MAX_RECORDED_TIMESTEPS  # Use the configurable constant
         if max_recorded_steps >= max_steps_per_sample:
             print(f"    ⏭️ Skipping timestep {timestep} (already have {max_recorded_steps} steps)")
             return

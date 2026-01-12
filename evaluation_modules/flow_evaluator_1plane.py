@@ -20,6 +20,7 @@ from omegaconf import DictConfig
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 from .base_evaluator import BaseFlowEvaluator  # noqa: E402
+from .time_series_monitor import MAX_GROUND_TRUTH_STEPS, MAX_RECORDED_TIMESTEPS  # noqa: E402
 from .utils import ensure_numpy_array, log_image_to_wandb  # noqa: E402
 
 try:
@@ -54,6 +55,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         save_predictions: bool = False,
         monitor_points: list = None,
         output_base_dir: str = "evaluation_1plane_outputs",
+        time_stride: int = 10,
     ):
         """
         Initialize 1-plane evaluator.
@@ -64,6 +66,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             save_predictions: Whether to save prediction results
             monitor_points: Points to monitor for time series analysis
             output_base_dir: Base directory for outputs
+            time_stride: Time stride for dataset loading (default: 10)
         """
         # Initialize parent class
         super().__init__(
@@ -88,6 +91,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         # Flow-specific configuration
         self.channel_names = self.field_names
         self.input_length = 5  # Will be updated from dataset
+        self.time_stride = time_stride  # Store time_stride as instance variable
 
         # Override time monitor with 1-plane specific one
         self.time_monitor = self._create_1plane_time_monitor(monitor_points)
@@ -97,6 +101,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         print(f"  - Fields per plane: {self.num_fields_per_plane}")
         print(f"  - Total channels: {self.total_channels}")
         print(f"  - Y position: {self.plane_y_position}")
+        print(f"  - Time stride: {self.time_stride}")
 
     def load_model_and_datasets(self):
         """Load model and datasets for 1-plane evaluation."""
@@ -169,7 +174,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         common_params = {
             "data_dir": data_dir,
             "input_length": 5,  # Match 1-plane training
-            "max_k_steps": 100,  # Load multiple GT steps for comparison
+            "max_k_steps": MAX_GROUND_TRUTH_STEPS,  # Load multiple GT steps for comparison (configurable)
             "field_names": self.field_names,  # ["u", "v", "w"]
             "file_pattern": "*u-v-w_scale2-3_ylayer2_ts*.h5",
             "resolution_scale": [2, 3, 1],
@@ -179,7 +184,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             "test_ratio": 0.15,
             "norm_stats": "norm_stats_3ch_1plane_u-v-w_scale2-3_ylayer2.json",
             "enable_normalization": True,
-            "time_stride": 5,  # Match training configuration: frame spacing of 5t
+            "time_stride": self.time_stride,  # Use the time_stride passed to __init__
             "filter_discontinuity": False,  # New dataset is continuous
         }
 
@@ -418,7 +423,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         def patched_record_timestep(pred_data, split, mode, timestep, gt_data=None):
             # Only record data from the first sample (when timesteps array is small)
             max_recorded_steps = len(monitor.time_series_data[split][mode]["timesteps"])
-            max_steps_per_sample = 100  # Allow up to 100 steps per sample
+            max_steps_per_sample = MAX_RECORDED_TIMESTEPS  # Use the configurable constant
             if max_recorded_steps >= max_steps_per_sample:
                 print(f"    ⏭️ Skipping timestep {timestep} (already have {max_recorded_steps} steps)")
                 return
@@ -506,7 +511,7 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+            fig, axes = plt.subplots(3, 1, figsize=(14, 18))
             fig.suptitle(
                 f"Time Series at y={self.plane_y_position}, Point ({z_idx}, {x_idx}) - {split.upper()} Data",
                 fontsize=16,

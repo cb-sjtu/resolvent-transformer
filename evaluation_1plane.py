@@ -170,7 +170,7 @@ class OnePlaneModelEvaluator:
             split="train",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=10,  # Match training configuration: frame spacing of 10t
+            time_stride=1,  # Match training configuration: frame spacing of 10t
             filter_discontinuity=False,  # New dataset is continuous
         )
 
@@ -187,7 +187,7 @@ class OnePlaneModelEvaluator:
             split="val",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=10,  # Match training configuration: frame spacing of 10t
+            time_stride=1,  # Match training configuration: frame spacing of 10t
             filter_discontinuity=False,  # New dataset is continuous
         )
 
@@ -204,7 +204,7 @@ class OnePlaneModelEvaluator:
             split="test",
             enable_normalization=True,
             norm_stats=norm_stats_file,
-            time_stride=10,  # Match training configuration: frame spacing of 10t
+            time_stride=1,  # Match training configuration: frame spacing of 10t
             filter_discontinuity=False,  # New dataset is continuous
         )
 
@@ -890,7 +890,7 @@ def main():
     else:
         # Default to the hardcoded path if no argument provided
         checkpoint_path = "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
-        "runs/2026-01-07_15-00-40-043313/checkpoints/step_66600.ckpt"
+        "runs/2026-01-10_11-08-38-752656/checkpoints/step_170000.ckpt"
 
     # Load model config (simplified for direct usage)
     from omegaconf import OmegaConf

@@ -50,6 +50,12 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 from src.datasets.flow_sequence_2d.flow_sequence_1plane import FlowSequence1PlaneDataset  # noqa: E402
 
+# ========================================
+# 🎯 CONFIGURATION: Modify these values to change settings everywhere
+# ========================================
+SMALL_SCALE_TIME_STRIDE = 1  # Small-scale model: consecutive frames (1t spacing)
+LARGE_SCALE_TIME_STRIDE = 5  # Large-scale model: every 10th frame (10t spacing)
+
 
 class CrossScaleEvaluator:
     """Evaluator that alternates between small-scale and large-scale models for extended predictions."""
@@ -87,8 +93,8 @@ class CrossScaleEvaluator:
 
         # Setup datasets
         self.data_config = data_config
-        self.small_scale_dataset = self._setup_dataset(time_stride=1)  # t spacing
-        self.large_scale_dataset = self._setup_dataset(time_stride=10)  # 10t spacing
+        self.small_scale_dataset = self._setup_dataset(time_stride=SMALL_SCALE_TIME_STRIDE)  # t spacing
+        self.large_scale_dataset = self._setup_dataset(time_stride=LARGE_SCALE_TIME_STRIDE)  # 10t spacing
 
         # Create output directory
         self.output_dir = Path("evaluation_results") / "cross_scale_evaluation"
@@ -159,8 +165,8 @@ class CrossScaleEvaluator:
             file_pattern=self.data_config["file_pattern"],
             resolution_scale=self.data_config["resolution_scale"],
             y_slice=self.data_config["y_slice"],
-            train_ratio=self.data_config.get("train_ratio", 0.7),
-            valid_ratio=self.data_config.get("valid_ratio", 0.15),
+            train_ratio=self.data_config.get("train_ratio", 0.8),
+            valid_ratio=self.data_config.get("valid_ratio", 0.05),
             test_ratio=self.data_config.get("test_ratio", 0.15),
             split="test",
             time_stride=time_stride,
@@ -287,13 +293,14 @@ class CrossScaleEvaluator:
         # Initial frames are at t=1-5, current_time starts at 5
         # So warmup_steps = (first_fusion_point - 1) - 5 = first_fusion_point - 6
         warmup_steps = first_fusion_point - 6
-        historical_start = first_fusion_point - 50
+        historical_start = first_fusion_point - 5 * LARGE_SCALE_TIME_STRIDE
         historical_end = 0
         num_historical_frames = max(0, 1 - historical_start)
 
-        # Calculate anchor times (10t intervals before first fusion point, within warmup range)
+        # Calculate anchor times (LARGE_SCALE_TIME_STRIDE intervals before first fusion point, within warmup range)
         anchor_times = []
-        for offset in [50, 40, 30, 20, 10]:
+        for i in [5, 4, 3, 2, 1]:
+            offset = i * LARGE_SCALE_TIME_STRIDE
             anchor_t = first_fusion_point - offset
             if 1 <= anchor_t <= first_fusion_point - 1:
                 anchor_times.append(anchor_t)
@@ -438,15 +445,14 @@ class CrossScaleEvaluator:
                 print(f"  Small-scale: t={current_time} (candidate for fusion)")
 
                 # Step 2: Large-scale prediction using frame cache
-                # Construct large-scale input: 5 frames with 10t spacing
-                # Input times: [current_time-40, current_time-30, current_time-20, current_time-10, current_time]
-                # But we don't have current_time yet, so use [t-50, t-40, t-30, t-20, t-10]
+                # Construct large-scale input: 5 frames with LARGE_SCALE_TIME_STRIDE spacing
+                # Input times: [current_time-4*stride, current_time-3*stride, ..., current_time-stride]
                 large_input_times = [
-                    current_time - 50,
-                    current_time - 40,
-                    current_time - 30,
-                    current_time - 20,
-                    current_time - 10,
+                    current_time - 5 * LARGE_SCALE_TIME_STRIDE,
+                    current_time - 4 * LARGE_SCALE_TIME_STRIDE,
+                    current_time - 3 * LARGE_SCALE_TIME_STRIDE,
+                    current_time - 2 * LARGE_SCALE_TIME_STRIDE,
+                    current_time - 1 * LARGE_SCALE_TIME_STRIDE,
                 ]
 
                 # Get frames from cache
@@ -500,9 +506,11 @@ class CrossScaleEvaluator:
                 S = S[1:] + [x_fused]
 
                 # Update B with new anchor (for backward compatibility, though not strictly needed)
-                if current_time % 10 == 1:  # Only update B at 10t intervals (t=31, 41, 51, ...)
+                if current_time % LARGE_SCALE_TIME_STRIDE == 1:  # Only update B at stride intervals
                     B = B[1:] + [x_fused]
-                    updated_anchor_times = [current_time - 40 + (i * 10) for i in range(5)]
+                    updated_anchor_times = [
+                        current_time - 4 * LARGE_SCALE_TIME_STRIDE + (i * LARGE_SCALE_TIME_STRIDE) for i in range(5)
+                    ]
                     print(f"  B updated: anchors now at t={updated_anchor_times}")
 
                 # Step 4: Continue with small-scale for next (fusion_interval - 1) steps
@@ -584,23 +592,31 @@ class CrossScaleEvaluator:
         predictions = []
 
         with torch.no_grad():
-            # Phase 0: Load historical ground truth frames at t=-19 and t=-9
+            # Phase 0: Load historical ground truth frames at t=-2*stride and t=-stride
             historical_frames = []
-            if sample_idx >= 20:
-                # Load frame at t=-19 (20 samples back)
-                hist_sample_19 = self.small_scale_dataset[sample_idx - 20]
-                hist_frame_19 = hist_sample_19["data"]["input_seq"][0, -1].to(self.device)  # (C, H, W)
-                historical_frames.append(hist_frame_19.clone())
-                print(f"Loaded historical frame at t=-19 from sample {sample_idx - 20}")
+            if sample_idx >= 2 * LARGE_SCALE_TIME_STRIDE:
+                # Load frame at t=-2*stride (2*stride samples back)
+                hist_sample_2stride = self.small_scale_dataset[sample_idx - 2 * LARGE_SCALE_TIME_STRIDE]
+                hist_frame_2stride = hist_sample_2stride["data"]["input_seq"][0, -1].to(self.device)  # (C, H, W)
+                historical_frames.append(hist_frame_2stride.clone())
+                print(
+                    f"Loaded historical frame at t=-{2 * LARGE_SCALE_TIME_STRIDE} \
+                        from sample {sample_idx - 2 * LARGE_SCALE_TIME_STRIDE}"
+                )
 
-                # Load frame at t=-9 (10 samples back)
-                hist_sample_9 = self.small_scale_dataset[sample_idx - 10]
-                hist_frame_9 = hist_sample_9["data"]["input_seq"][0, -1].to(self.device)  # (C, H, W)
-                historical_frames.append(hist_frame_9.clone())
-                print(f"Loaded historical frame at t=-9 from sample {sample_idx - 10}")
+                # Load frame at t=-stride (stride samples back)
+                hist_sample_stride = self.small_scale_dataset[sample_idx - LARGE_SCALE_TIME_STRIDE]
+                hist_frame_stride = hist_sample_stride["data"]["input_seq"][0, -1].to(self.device)  # (C, H, W)
+                historical_frames.append(hist_frame_stride.clone())
+                print(
+                    f"Loaded historical frame at t=-{LARGE_SCALE_TIME_STRIDE} from sample\
+                         {sample_idx - LARGE_SCALE_TIME_STRIDE}"
+                )
             else:
                 # If not enough history, fall back to using early frames from initial_frames
-                print(f"Warning: sample_idx={sample_idx} < 20, cannot load historical frames")
+                print(
+                    f"Warning: sample_idx={sample_idx} < {2 * LARGE_SCALE_TIME_STRIDE}, cannot load historical frames"
+                )
                 print("Using first two frames from initial_frames as fallback")
                 historical_frames = [initial_frames[0, 0].clone(), initial_frames[0, 1].clone()]
 
@@ -2061,20 +2077,21 @@ def main():
     parser.add_argument(
         "--small_scale_checkpoint",
         type=str,
-        default="logs/flow_swin_1plane/runs/2025-11-02_14-11-12-461089/checkpoints/step_10800.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
+        "runs/2026-01-10_11-08-38-752656/checkpoints/step_187000.ckpt",
         help="Path to small-scale model checkpoint (t spacing)",
     )
     parser.add_argument(
         "--large_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/"
-        "flow_swin_1plane/runs/2026-01-07_15-00-40-043313/checkpoints/step_66600.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
+        "runs/2026-01-10_19-55-28-216423/checkpoints/step_53000.ckpt",
         help="Path to large-scale model checkpoint (10t spacing)",
     )
     parser.add_argument("--sample_idx", type=int, default=0, help="Sample index to evaluate")
     parser.add_argument("--num_predictions", type=int, default=80, help="Number of future steps to predict")
     parser.add_argument(
-        "--fusion_weight", type=float, default=0.8, help="Fusion weight α (0-1): x_fused = (1-α)*x_small + α*x_large"
+        "--fusion_weight", type=float, default=0.95, help="Fusion weight α (0-1): x_fused = (1-α)*x_small + α*x_large"
     )
     parser.add_argument(
         "--generate_videos", action="store_true", help="Generate videos comparing MR-PC and small-scale predictions"
@@ -2157,8 +2174,8 @@ def main():
         "file_pattern": "*u-v-w_scale2-3_ylayer2_ts*.h5",  # Explicitly specify yslice54 to avoid loading other y-slices
         "resolution_scale": (2, 3, 1),
         "y_slice": 54,
-        "train_ratio": 0.7,
-        "valid_ratio": 0.15,
+        "train_ratio": 0.8,
+        "valid_ratio": 0.05,
         "test_ratio": 0.15,
         "enable_normalization": True,
         "norm_stats": "norm_stats_3ch_1plane_u-v-w_scale2-3_ylayer2.json",

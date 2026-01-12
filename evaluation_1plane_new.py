@@ -41,9 +41,10 @@ from evaluation_modules.utils import get_default_monitor_points  # noqa: E402
 warnings.filterwarnings("ignore")
 
 # ========================================
-# 🎯 CONFIGURATION: Modify this value to change prediction length everywhere
+# 🎯 CONFIGURATION: Modify these values to change settings everywhere
 # ========================================
-DEFAULT_FUTURE_STEPS = 50  # Number of future steps to predict for 1-plane
+DEFAULT_FUTURE_STEPS = 300  # Number of future steps to predict for 1-plane
+DEFAULT_TIME_STRIDE = 1  # Time stride for dataset loading (1=consecutive, 5=5t spacing, 10=10t spacing)
 
 
 def create_1plane_monitor_points():
@@ -75,6 +76,7 @@ def run_comprehensive_1plane_evaluation(
     num_samples: int = 3,
     num_future_steps: int = DEFAULT_FUTURE_STEPS,
     output_dir: str = "evaluation_1plane_outputs",
+    time_stride: int = DEFAULT_TIME_STRIDE,
 ):
     """
     Run comprehensive 1-plane flow model evaluation.
@@ -86,6 +88,7 @@ def run_comprehensive_1plane_evaluation(
         num_samples: Number of samples to evaluate per split
         num_future_steps: Number of future steps to predict
         output_dir: Output directory for results
+        time_stride: Time stride for dataset loading (default: 10)
     """
     print("🚀 Starting Modular 1-Plane Flow Evaluation")
     print("=" * 60)
@@ -94,6 +97,7 @@ def run_comprehensive_1plane_evaluation(
     print(f"Output directory: {output_dir}")
     print(f"Samples per split: {num_samples}")
     print(f"Future steps: {num_future_steps}")
+    print(f"Time stride: {time_stride}")
 
     # Determine monitoring points for 1-plane
     if custom_points:
@@ -113,6 +117,7 @@ def run_comprehensive_1plane_evaluation(
         save_predictions=save_predictions,
         monitor_points=monitor_points,
         output_base_dir=output_dir,
+        time_stride=time_stride,
     )
 
     try:
@@ -207,12 +212,19 @@ def main() -> None:
 
     parser.add_argument("--config-overrides", nargs="*", default=[], help="Hydra config overrides")
 
+    parser.add_argument(
+        "--time-stride",
+        type=int,
+        default=DEFAULT_TIME_STRIDE,
+        help=f"Time stride for dataset loading (default: {DEFAULT_TIME_STRIDE})",
+    )
+
     args = parser.parse_args()
 
     # Use default checkpoint path if not provided
     if args.checkpoint_path is None:
-        args.checkpoint_path = "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane"
-        "/runs/2026-01-09_10-53-50-465113/checkpoints/step_31000.ckpt"
+        args.checkpoint_path = "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs"
+        "/2026-01-10_11-08-38-752656/checkpoints/step_170000.ckpt"
         print(f"Using default checkpoint: {args.checkpoint_path}")
 
     # Check if checkpoint exists
@@ -237,6 +249,7 @@ def main() -> None:
                     num_samples=args.num_samples,
                     num_future_steps=args.num_future_steps,
                     output_dir=args.output_dir,
+                    time_stride=args.time_stride,
                 )
         except Exception as e:
             print(f"⚠️ Hydra configuration failed: {e}, running without configuration management")
@@ -248,6 +261,7 @@ def main() -> None:
                 num_samples=args.num_samples,
                 num_future_steps=args.num_future_steps,
                 output_dir=args.output_dir,
+                time_stride=args.time_stride,
             )
     else:
         print("⚠️ Hydra not available, running without configuration management")
@@ -259,6 +273,7 @@ def main() -> None:
             num_samples=args.num_samples,
             num_future_steps=args.num_future_steps,
             output_dir=args.output_dir,
+            time_stride=args.time_stride,
         )
 
 
