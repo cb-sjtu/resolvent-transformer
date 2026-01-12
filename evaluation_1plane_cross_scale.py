@@ -2077,8 +2077,7 @@ def main():
     parser.add_argument(
         "--small_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
-        "runs/2026-01-10_11-08-38-752656/checkpoints/step_187000.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_fno_1plane/runs/2026-01-12_17-48-10-198789/checkpoints/step_4200.ckpt",
         help="Path to small-scale model checkpoint (t spacing)",
     )
     parser.add_argument(
