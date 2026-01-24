@@ -53,8 +53,8 @@ from src.datasets.flow_sequence_2d.flow_sequence_1plane import FlowSequence1Plan
 # ========================================
 # 🎯 CONFIGURATION: Modify these values to change settings everywhere
 # ========================================
-SMALL_SCALE_TIME_STRIDE = 1  # Small-scale model: consecutive frames (1t spacing)
-LARGE_SCALE_TIME_STRIDE = 5  # Large-scale model: every 10th frame (10t spacing)
+SMALL_SCALE_TIME_STRIDE = 5  # Small-scale model: consecutive frames (1t spacing)
+LARGE_SCALE_TIME_STRIDE = 10  # Large-scale model: every 10th frame (10t spacing)
 
 
 class CrossScaleEvaluator:
@@ -2077,20 +2077,21 @@ def main():
     parser.add_argument(
         "--small_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/flow_lstm_1plane/runs/2026-01-12_20-37-20-581473/checkpoints/step_19800.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/\
+            2026-01-10_19-55-28-216423/checkpoints/step_53000.ckpt",
         help="Path to small-scale model checkpoint (t spacing)",
     )
     parser.add_argument(
         "--large_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
-        "runs/2026-01-10_19-55-28-216423/checkpoints/step_53000.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/\
+            2026-01-10_18-13-41-758111/checkpoints/step_67000.ckpt",
         help="Path to large-scale model checkpoint (10t spacing)",
     )
     parser.add_argument("--sample_idx", type=int, default=0, help="Sample index to evaluate")
     parser.add_argument("--num_predictions", type=int, default=80, help="Number of future steps to predict")
     parser.add_argument(
-        "--fusion_weight", type=float, default=0.95, help="Fusion weight α (0-1): x_fused = (1-α)*x_small + α*x_large"
+        "--fusion_weight", type=float, default=0.8, help="Fusion weight α (0-1): x_fused = (1-α)*x_small + α*x_large"
     )
     parser.add_argument(
         "--generate_videos", action="store_true", help="Generate videos comparing MR-PC and small-scale predictions"
