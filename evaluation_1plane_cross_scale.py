@@ -2077,15 +2077,15 @@ def main():
     parser.add_argument(
         "--small_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/\
-            2026-01-10_19-55-28-216423/checkpoints/step_53000.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/\
+            runs/2026-01-10_11-08-38-752656/checkpoints/step_193000.ckpt",
         help="Path to small-scale model checkpoint (t spacing)",
     )
     parser.add_argument(
         "--large_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/\
-            2026-01-10_18-13-41-758111/checkpoints/step_67000.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs\
+            /2026-01-10_18-13-41-758111/checkpoints/step_67000.ckpt",
         help="Path to large-scale model checkpoint (10t spacing)",
     )
     parser.add_argument("--sample_idx", type=int, default=0, help="Sample index to evaluate")
