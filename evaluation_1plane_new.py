@@ -43,7 +43,7 @@ warnings.filterwarnings("ignore")
 # ========================================
 # 🎯 CONFIGURATION: Modify these values to change settings everywhere
 # ========================================
-DEFAULT_FUTURE_STEPS = 100  # Number of future steps to predict for 1-plane
+DEFAULT_FUTURE_STEPS = 200  # Number of future steps to predict for 1-plane
 DEFAULT_TIME_STRIDE = 1  # Time stride for dataset loading (1=consecutive, 5=5t spacing, 10=10t spacing)
 
 
@@ -223,8 +223,10 @@ def main() -> None:
 
     # Use default checkpoint path if not provided
     if args.checkpoint_path is None:
-        args.checkpoint_path = "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/\
-            runs/2026-01-10_19-55-28-216423/checkpoints/step_53000.ckpt"
+        args.checkpoint_path = (
+            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/"
+            "2026-01-10_11-08-38-752656/checkpoints/step_193000.ckpt"
+        )
         print(f"Using default checkpoint: {args.checkpoint_path}")
 
     # Check if checkpoint exists

@@ -889,8 +889,10 @@ def main():
         checkpoint_path = args.checkpoint_path
     else:
         # Default to the hardcoded path if no argument provided
-        checkpoint_path = "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/"
-        "runs/2026-01-10_11-08-38-752656/checkpoints/step_170000.ckpt"
+        checkpoint_path = (
+            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/"
+            "2026-01-10_11-08-38-752656/checkpoints/step_193000.ckpt"
+        )
 
     # Load model config (simplified for direct usage)
     from omegaconf import OmegaConf

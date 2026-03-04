@@ -53,7 +53,7 @@ from src.datasets.flow_sequence_2d.flow_sequence_1plane import FlowSequence1Plan
 # ========================================
 # 🎯 CONFIGURATION: Modify these values to change settings everywhere
 # ========================================
-SMALL_SCALE_TIME_STRIDE = 5  # Small-scale model: consecutive frames (1t spacing)
+SMALL_SCALE_TIME_STRIDE = 1  # Small-scale model: consecutive frames (1t spacing)
 LARGE_SCALE_TIME_STRIDE = 10  # Large-scale model: every 10th frame (10t spacing)
 
 
@@ -172,6 +172,7 @@ class CrossScaleEvaluator:
             time_stride=time_stride,
             enable_normalization=self.data_config.get("enable_normalization", True),
             norm_stats=self.data_config.get("norm_stats", None),
+            filter_discontinuity=self.data_config.get("filter_discontinuity", True),
         )
 
         print(f"Dataset size: {len(dataset)}")
@@ -569,111 +570,76 @@ class CrossScaleEvaluator:
         return pred_array
 
     def pure_large_scale_prediction(
-        self, initial_frames: torch.Tensor, num_predictions: int = 100, sample_idx: int = 0
+        self,
+        num_predictions: int = 100,
+        sample_idx: int = 0,
     ) -> np.ndarray:
         """Pure large-scale autoregressive prediction (baseline).
 
-        Uses the same historical frame strategy as MR-PC for fair comparison:
-        - Loads ground truth frames at t=-19 and t=-9 from dataset
-        - Uses anchors at [-19, -9, 1, 11, 21] to predict t=31
-        - Then continues autoregressively with 10t spacing
+        Starts at t=6 (same as small-scale baseline) by loading 5 GT frames directly
+        from the dataset (validation set) as the initial input — no small-scale warm-up.
+
+        Input frames for the first prediction at t=6:
+            t = 6 - 5*STRIDE, ..., 6 - STRIDE  (e.g. t=-44,-34,-24,-14,-4 for STRIDE=10)
+        All frames are loaded from HDF5 and normalized before being fed to the model.
+        Subsequent predictions continue autoregressively every LARGE_SCALE_TIME_STRIDE steps.
 
         Args:
-            initial_frames: Initial input sequence (1, 5, C, H, W) at t=1,2,3,4,5
-            num_predictions: Number of steps to predict
-            sample_idx: Index of current sample (needed to access historical frames)
+            num_predictions: Number of steps to predict (each step advances LARGE_SCALE_TIME_STRIDE)
+            sample_idx: Index of current sample in the test split
 
         Returns:
-            Predictions array of shape (num_predictions, C, H, W)
+            Predictions array of shape (num_predictions, C, H, W) in normalized space,
+            covering t=6, 6+STRIDE, 6+2*STRIDE, ...
         """
         print(f"\nRunning pure large-scale baseline ({num_predictions} steps)...")
+        print(f"  First prediction at t=6, step={LARGE_SCALE_TIME_STRIDE}t")
+
+        # Index offsets relative to base_idx for the 5 input frames
+        # To predict at t=6: need frames at t = 6 - j*STRIDE for j in [5,4,3,2,1]
+        # t=k maps to timesteps index base_idx + (k-1), so offset = k - 1
+        input_offsets = [(6 - j * LARGE_SCALE_TIME_STRIDE) - 1 for j in [5, 4, 3, 2, 1]]
+        # e.g. STRIDE=10 → [-45, -35, -25, -15, -5]
+
+        base_idx = self.small_scale_dataset.indices[sample_idx]
+        print(f"  base_idx: {base_idx}")
+        print(f"  GT input frame indices: {[base_idx + o for o in input_offsets]}")
 
         self.large_scale_model.eval()
         predictions = []
 
+        # Load 5 GT frames directly from HDF5 and normalize
+        B = []
+        for offset in input_offsets:
+            idx = base_idx + offset
+            if idx < 0 or idx >= len(self.small_scale_dataset.timesteps):
+                raise ValueError(
+                    f"Required frame at timesteps index {idx} is out of range "
+                    f"[0, {len(self.small_scale_dataset.timesteps)}). "
+                    f"base_idx={base_idx}, offset={offset}"
+                )
+            timestep = self.small_scale_dataset.timesteps[idx]
+            fpath = self.small_scale_dataset.file_dict[timestep]
+
+            with h5py.File(fpath, "r") as f:
+                data = f["data"][()]  # (C, H, W)
+                frame = np.stack([data[i] for i in range(len(self.small_scale_dataset.field_names))], axis=0)
+
+            frame_normalized = self.small_scale_dataset.normalize(torch.from_numpy(frame).float())
+            B.append(frame_normalized.to(self.device))
+
+        loaded_timesteps = [self.small_scale_dataset.timesteps[base_idx + o] for o in input_offsets]
+        print(f"  Loaded GT frames at timesteps: {loaded_timesteps}")
+
         with torch.no_grad():
-            # Phase 0: Load historical ground truth frames at t=-2*stride and t=-stride
-            historical_frames = []
-            if sample_idx >= 2 * LARGE_SCALE_TIME_STRIDE:
-                # Load frame at t=-2*stride (2*stride samples back)
-                hist_sample_2stride = self.small_scale_dataset[sample_idx - 2 * LARGE_SCALE_TIME_STRIDE]
-                hist_frame_2stride = hist_sample_2stride["data"]["input_seq"][0, -1].to(self.device)  # (C, H, W)
-                historical_frames.append(hist_frame_2stride.clone())
-                print(
-                    f"Loaded historical frame at t=-{2 * LARGE_SCALE_TIME_STRIDE} \
-                        from sample {sample_idx - 2 * LARGE_SCALE_TIME_STRIDE}"
-                )
-
-                # Load frame at t=-stride (stride samples back)
-                hist_sample_stride = self.small_scale_dataset[sample_idx - LARGE_SCALE_TIME_STRIDE]
-                hist_frame_stride = hist_sample_stride["data"]["input_seq"][0, -1].to(self.device)  # (C, H, W)
-                historical_frames.append(hist_frame_stride.clone())
-                print(
-                    f"Loaded historical frame at t=-{LARGE_SCALE_TIME_STRIDE} from sample\
-                         {sample_idx - LARGE_SCALE_TIME_STRIDE}"
-                )
-            else:
-                # If not enough history, fall back to using early frames from initial_frames
-                print(
-                    f"Warning: sample_idx={sample_idx} < {2 * LARGE_SCALE_TIME_STRIDE}, cannot load historical frames"
-                )
-                print("Using first two frames from initial_frames as fallback")
-                historical_frames = [initial_frames[0, 0].clone(), initial_frames[0, 1].clone()]
-
-            # Initialize anchor queue B with historical frames
-            B = historical_frames.copy()  # [t=-19, t=-9]
-
-            # Add t=1 from initial frames
-            B.append(initial_frames[0, 0].clone())
-
-            # Phase 1: Warm-up - predict t=6 to t=30 using small-scale model, collect anchors at t=11, 21
-            print("\nPhase 1: Warm-up (small-scale) - predicting t=6 to t=30")
-            S = [initial_frames[0, i].clone() for i in range(5)]  # t=1,2,3,4,5
-            all_frames = S.copy()
-            current_time = 5
-
-            warmup_steps = 25  # Predict from t=6 to t=30
-            for _ in range(warmup_steps):
-                small_input = torch.stack(S, dim=0).unsqueeze(0)  # (1, 5, C, H, W)
-                next_pred = self.small_scale_model(small_input)[0]  # (C, H, W)
-
-                current_time += 1
-                all_frames.append(next_pred.clone())
-                S = S[1:] + [next_pred]
-
-                # Collect anchors at t=11 and t=21
-                if current_time in [11, 21]:
-                    B.append(next_pred.clone())
-                    print(f"  Collected anchor at t={current_time}")
-
-            # B now contains: [t=-19, t=-9, t=1, t=11, t=21]
-            print("Anchor queue B ready with 5 frames: t=[-19, -9, 1, 11, 21]")
-
-            # Phase 2: Main loop - use large-scale model autoregressively
-            print("\nPhase 2: Large-scale predictions (every 10t)")
-            print("=" * 60)
-
-            remaining = num_predictions
             prediction_count = 0
-
-            while remaining > 0:
-                # Prepare input for large-scale model
+            while len(predictions) < num_predictions:
                 large_input = torch.stack(B, dim=0).unsqueeze(0)  # (1, 5, C, H, W)
-
-                # Large-scale prediction
                 next_pred = self.large_scale_model(large_input)[0]  # (C, H, W)
-
-                # Store prediction
                 predictions.append(next_pred.cpu())
-                prediction_count += 1
-
-                # Update anchor queue
                 B = B[1:] + [next_pred]
-
-                remaining -= 1
-
-                # Log every 10 predictions
-                if prediction_count % 10 == 0:
+                prediction_count += 1
+                if prediction_count % 100 == 0:
                     print(f"  Generated {prediction_count}/{num_predictions} predictions")
 
         pred_array = torch.stack(predictions, dim=0).cpu().numpy()
@@ -706,7 +672,7 @@ class CrossScaleEvaluator:
         pred_seq_small = self.pure_small_scale_prediction(input_seq, num_predictions)
 
         # 3. Perform pure large-scale baseline
-        pred_seq_large = self.pure_large_scale_prediction(input_seq, num_predictions, sample_idx)
+        pred_seq_large = self.pure_large_scale_prediction(num_predictions, sample_idx)
 
         # Denormalize all predictions
         pred_seq_mrpc_denorm = (
@@ -2077,15 +2043,15 @@ def main():
     parser.add_argument(
         "--small_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/\
-            2026-01-16_10-52-55-494359/checkpoints/step_198000.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/"
+        "2026-01-10_11-08-38-752656/checkpoints/step_193000.ckpt",
         help="Path to small-scale model checkpoint (t spacing)",
     )
     parser.add_argument(
         "--large_scale_checkpoint",
         type=str,
-        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/\
-            2026-01-10_18-13-41-758111/checkpoints/step_67000.ckpt",
+        default="/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/"
+        "2026-01-10_18-13-41-758111/checkpoints/step_67000.ckpt",
         help="Path to large-scale model checkpoint (10t spacing)",
     )
     parser.add_argument("--sample_idx", type=int, default=0, help="Sample index to evaluate")
