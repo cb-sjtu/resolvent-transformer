@@ -216,5 +216,6 @@ data_show/
 
 visualization/
 scripts/
+data_fan/
 # ------------------------------------------------------------------------------------------------
 # The following are for project-specific configs
