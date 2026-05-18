@@ -26,7 +26,9 @@ class VideoCreator:
         self.videos_dir = self.output_dir / "videos"
         self.videos_dir.mkdir(exist_ok=True, parents=True)
 
-    def create_prediction_video(self, evaluator, sample_idx: int = 0, num_future: int = 30) -> Path:
+    def create_prediction_video(
+        self, evaluator, sample_idx: int = 0, num_future: int = 30
+    ) -> Path:
         """
         Create video showing autoregressive prediction vs ground truth.
 
@@ -48,7 +50,9 @@ class VideoCreator:
         ground_truth_seq = sample.get("target_seq", None)
 
         # Run autoregressive prediction (with denormalization)
-        predictions = self._run_autoregressive_prediction(evaluator.model, input_seq, num_future, evaluator.dataset)
+        predictions = self._run_autoregressive_prediction(
+            evaluator.model, input_seq, num_future, evaluator.dataset
+        )
 
         # Prepare ground truth frames if available (denormalized for proper visualization)
         if ground_truth_seq is not None:
@@ -56,18 +60,24 @@ class VideoCreator:
             for i in range(min(num_future, ground_truth_seq.shape[1])):
                 gt_frame = ground_truth_seq[0, i]  # (C, H, W)
                 if evaluator.dataset is not None:
-                    gt_frame = evaluator.dataset.denormalize(gt_frame.unsqueeze(0))[0]  # Denormalize
+                    gt_frame = evaluator.dataset.denormalize(gt_frame.unsqueeze(0))[
+                        0
+                    ]  # Denormalize
                 ground_truth_frames.append(gt_frame)
         else:
             # Generate synthetic ground truth or use model predictions
             ground_truth_frames = predictions  # Fallback
 
         # Create the video
-        video_path = self._create_comparison_video(predictions, ground_truth_frames, sample_idx, "autoregressive")
+        video_path = self._create_comparison_video(
+            predictions, ground_truth_frames, sample_idx, "autoregressive"
+        )
 
         return video_path
 
-    def _run_autoregressive_prediction(self, model, input_seq, num_steps: int, dataset=None):
+    def _run_autoregressive_prediction(
+        self, model, input_seq, num_steps: int, dataset=None
+    ):
         """Run autoregressive prediction for num_steps.
 
         IMPORTANT: This implements TRUE autoregressive prediction, where:
@@ -112,7 +122,9 @@ class VideoCreator:
                 # Store prediction (denormalized for proper visualization)
                 pred_frame = next_pred[0]  # Remove batch dimension: (C, H, W)
                 if dataset is not None:
-                    pred_frame = dataset.denormalize(pred_frame.unsqueeze(0))[0]  # Denormalize
+                    pred_frame = dataset.denormalize(pred_frame.unsqueeze(0))[
+                        0
+                    ]  # Denormalize
                 predictions.append(pred_frame)
 
                 # Update current sequence for next prediction
@@ -124,7 +136,9 @@ class VideoCreator:
                 # Example: [0,2,4,6,8] → predict 10, then [2,4,6,8,10] → predict 12
                 current_seq = torch.cat(
                     [
-                        current_seq[:, 1:],  # Remove first frame (keep sequence length fixed)
+                        current_seq[
+                            :, 1:
+                        ],  # Remove first frame (keep sequence length fixed)
                         next_pred_with_time,  # Add new prediction
                     ],
                     dim=1,
@@ -133,7 +147,11 @@ class VideoCreator:
         return predictions
 
     def _create_comparison_video(
-        self, predictions: list, ground_truth: list, sample_idx: int, mode: str = "comparison"
+        self,
+        predictions: list,
+        ground_truth: list,
+        sample_idx: int,
+        mode: str = "comparison",
     ) -> Path:
         """
         Create comparison video between predictions and ground truth.
@@ -151,7 +169,9 @@ class VideoCreator:
 
         # Create figure
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-        fig.suptitle(f"Flow Prediction vs Ground Truth - Sample {sample_idx}", fontsize=14)
+        fig.suptitle(
+            f"Flow Prediction vs Ground Truth - Sample {sample_idx}", fontsize=14
+        )
 
         # Initialize with first frame
         pred_0 = ensure_numpy_array(predictions[0])
@@ -186,27 +206,41 @@ class VideoCreator:
             global_vmin, global_vmax = pred_mag_0.min(), pred_mag_0.max()
 
         # Initialize plots
-        im1 = axes[0, 0].imshow(truth_mag_0, cmap="plasma", aspect="auto", vmin=global_vmin, vmax=global_vmax)
+        im1 = axes[0, 0].imshow(
+            truth_mag_0,
+            cmap="plasma",
+            aspect="auto",
+            vmin=global_vmin,
+            vmax=global_vmax,
+        )
         axes[0, 0].set_title("Ground Truth")
         axes[0, 0].axis("off")
         plt.colorbar(im1, ax=axes[0, 0], fraction=0.046, pad=0.04)
 
-        im2 = axes[0, 1].imshow(pred_mag_0, cmap="plasma", aspect="auto", vmin=global_vmin, vmax=global_vmax)
+        im2 = axes[0, 1].imshow(
+            pred_mag_0, cmap="plasma", aspect="auto", vmin=global_vmin, vmax=global_vmax
+        )
         axes[0, 1].set_title("Prediction")
         axes[0, 1].axis("off")
         plt.colorbar(im2, ax=axes[0, 1], fraction=0.046, pad=0.04)
 
         # Error plot
         error_0 = np.abs(truth_mag_0 - pred_mag_0)
-        im3 = axes[1, 0].imshow(error_0, cmap="Reds", aspect="auto", vmin=0, vmax=error_0.max())
+        im3 = axes[1, 0].imshow(
+            error_0, cmap="Reds", aspect="auto", vmin=0, vmax=error_0.max()
+        )
         axes[1, 0].set_title("Absolute Error")
         axes[1, 0].axis("off")
         plt.colorbar(im3, ax=axes[1, 0], fraction=0.046, pad=0.04)
 
         # Text info
         axes[1, 1].axis("off")
-        time_text = axes[1, 1].text(0.1, 0.8, "", transform=axes[1, 1].transAxes, fontsize=12)
-        error_text = axes[1, 1].text(0.1, 0.6, "", transform=axes[1, 1].transAxes, fontsize=12)
+        time_text = axes[1, 1].text(
+            0.1, 0.8, "", transform=axes[1, 1].transAxes, fontsize=12
+        )
+        error_text = axes[1, 1].text(
+            0.1, 0.6, "", transform=axes[1, 1].transAxes, fontsize=12
+        )
 
         def animate(frame):
             """Animation function."""
@@ -238,13 +272,17 @@ class VideoCreator:
             return [im1, im2, im3, time_text, error_text]
 
         # Create animation
-        anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=200, blit=True, repeat=True)
+        anim = animation.FuncAnimation(
+            fig, animate, frames=num_frames, interval=200, blit=True, repeat=True
+        )
 
         # Save video
         video_path = self.videos_dir / f"{mode}_sample_{sample_idx}.mp4"
 
         try:
-            writer = animation.FFMpegWriter(fps=5, metadata=dict(artist="Flow Evaluation"), bitrate=1800)
+            writer = animation.FFMpegWriter(
+                fps=5, metadata=dict(artist="Flow Evaluation"), bitrate=1800
+            )
             anim.save(video_path, writer=writer)
             print(f"Video saved: {video_path}")
         except Exception as e:

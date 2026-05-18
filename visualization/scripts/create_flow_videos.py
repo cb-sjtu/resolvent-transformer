@@ -27,7 +27,9 @@ def compute_velocity_magnitude(velocity_data):
         Velocity magnitude with shape (H, W)
     """
     if velocity_data.ndim != 3 or velocity_data.shape[0] < 3:
-        raise ValueError(f"Expected 3D array with at least 3 channels, got shape {velocity_data.shape}")
+        raise ValueError(
+            f"Expected 3D array with at least 3 channels, got shape {velocity_data.shape}"
+        )
 
     u, v, w = velocity_data[0], velocity_data[1], velocity_data[2]
     magnitude = np.sqrt(u**2 + v**2 + w**2)
@@ -92,7 +94,9 @@ def create_preprocessed_flow_videos(
                 magnitude = compute_velocity_magnitude(data)
                 all_magnitudes.append(magnitude)
             else:
-                print(f"Warning: File {file_path} has only {data.shape[0]} channels, expected >= 3")
+                print(
+                    f"Warning: File {file_path} has only {data.shape[0]} channels, expected >= 3"
+                )
                 all_magnitudes.append(np.zeros((data.shape[1], data.shape[2])))
 
     all_data = np.array(all_data)  # Shape: (T, C, H, W)
@@ -114,20 +118,40 @@ def create_preprocessed_flow_videos(
 
     # Create combined video with 4 subplots: u, v, w, magnitude
     create_combined_video(
-        all_data, all_magnitudes, channel_ranges, mag_vmin, mag_vmax, field_names, output_dir, fps, file_list
+        all_data,
+        all_magnitudes,
+        channel_ranges,
+        mag_vmin,
+        mag_vmax,
+        field_names,
+        output_dir,
+        fps,
+        file_list,
     )
 
     # Create individual channel videos
-    create_individual_videos(all_data, channel_ranges, field_names, output_dir, fps, file_list)
+    create_individual_videos(
+        all_data, channel_ranges, field_names, output_dir, fps, file_list
+    )
 
     # Create magnitude-only video
-    create_magnitude_video(all_magnitudes, mag_vmin, mag_vmax, output_dir, fps, file_list)
+    create_magnitude_video(
+        all_magnitudes, mag_vmin, mag_vmax, output_dir, fps, file_list
+    )
 
     print("Video creation completed!")
 
 
 def create_combined_video(
-    all_data, all_magnitudes, channel_ranges, mag_vmin, mag_vmax, field_names, output_dir, fps, file_list
+    all_data,
+    all_magnitudes,
+    channel_ranges,
+    mag_vmin,
+    mag_vmax,
+    field_names,
+    output_dir,
+    fps,
+    file_list,
 ):
     """Create combined video showing all channels and magnitude."""
     print("Creating combined video...")
@@ -140,7 +164,11 @@ def create_combined_video(
 
     # u channel
     im_u = axes[0, 0].imshow(
-        all_data[0, 0], cmap="viridis", aspect="auto", vmin=channel_ranges["u"][0], vmax=channel_ranges["u"][1]
+        all_data[0, 0],
+        cmap="viridis",
+        aspect="auto",
+        vmin=channel_ranges["u"][0],
+        vmax=channel_ranges["u"][1],
     )
     axes[0, 0].set_title("u velocity")
     axes[0, 0].axis("off")
@@ -149,7 +177,11 @@ def create_combined_video(
 
     # v channel
     im_v = axes[0, 1].imshow(
-        all_data[0, 1], cmap="viridis", aspect="auto", vmin=channel_ranges["v"][0], vmax=channel_ranges["v"][1]
+        all_data[0, 1],
+        cmap="viridis",
+        aspect="auto",
+        vmin=channel_ranges["v"][0],
+        vmax=channel_ranges["v"][1],
     )
     axes[0, 1].set_title("v velocity")
     axes[0, 1].axis("off")
@@ -158,7 +190,11 @@ def create_combined_video(
 
     # w channel
     im_w = axes[1, 0].imshow(
-        all_data[0, 2], cmap="viridis", aspect="auto", vmin=channel_ranges["w"][0], vmax=channel_ranges["w"][1]
+        all_data[0, 2],
+        cmap="viridis",
+        aspect="auto",
+        vmin=channel_ranges["w"][0],
+        vmax=channel_ranges["w"][1],
     )
     axes[1, 0].set_title("w velocity")
     axes[1, 0].axis("off")
@@ -166,7 +202,9 @@ def create_combined_video(
     ims.append(im_w)
 
     # Magnitude
-    im_mag = axes[1, 1].imshow(all_magnitudes[0], cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax)
+    im_mag = axes[1, 1].imshow(
+        all_magnitudes[0], cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax
+    )
     axes[1, 1].set_title("Velocity Magnitude")
     axes[1, 1].axis("off")
     plt.colorbar(im_mag, ax=axes[1, 1], fraction=0.046, pad=0.04)
@@ -191,7 +229,14 @@ def create_combined_video(
         return ims + [time_text]
 
     # Create animation
-    anim = animation.FuncAnimation(fig, animate, frames=len(file_list), interval=1000 // fps, blit=True, repeat=True)
+    anim = animation.FuncAnimation(
+        fig,
+        animate,
+        frames=len(file_list),
+        interval=1000 // fps,
+        blit=True,
+        repeat=True,
+    )
 
     # Save video
     video_path = os.path.join(output_dir, "flow_combined_evolution.mp4")
@@ -199,16 +244,22 @@ def create_combined_video(
     plt.close(fig)
 
 
-def create_individual_videos(all_data, channel_ranges, field_names, output_dir, fps, file_list):
+def create_individual_videos(
+    all_data, channel_ranges, field_names, output_dir, fps, file_list
+):
     """Create individual videos for each channel."""
     for c, channel_name in enumerate(field_names[: all_data.shape[1]]):
         print(f"Creating video for {channel_name} channel...")
 
         fig_single, ax_single = plt.subplots(1, 1, figsize=(8, 6))
-        fig_single.suptitle(f"Temporal Evolution of {channel_name.upper()} Velocity", fontsize=14)
+        fig_single.suptitle(
+            f"Temporal Evolution of {channel_name.upper()} Velocity", fontsize=14
+        )
 
         vmin, vmax = channel_ranges[channel_name]
-        im_single = ax_single.imshow(all_data[0, c], cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax)
+        im_single = ax_single.imshow(
+            all_data[0, c], cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax
+        )
         ax_single.axis("off")
         cb_single = plt.colorbar(im_single, ax=ax_single, fraction=0.046, pad=0.04)
         cb_single.set_label(f"{channel_name} velocity")
@@ -221,23 +272,34 @@ def create_individual_videos(all_data, channel_ranges, field_names, output_dir, 
             return [im_single, time_text_single]
 
         anim_single = animation.FuncAnimation(
-            fig_single, animate_single, frames=len(file_list), interval=1000 // fps, blit=True, repeat=True
+            fig_single,
+            animate_single,
+            frames=len(file_list),
+            interval=1000 // fps,
+            blit=True,
+            repeat=True,
         )
 
         # Save individual channel video
-        video_path_single = os.path.join(output_dir, f"flow_{channel_name}_evolution.mp4")
+        video_path_single = os.path.join(
+            output_dir, f"flow_{channel_name}_evolution.mp4"
+        )
         save_animation(anim_single, video_path_single, fps)
         plt.close(fig_single)
 
 
-def create_magnitude_video(all_magnitudes, mag_vmin, mag_vmax, output_dir, fps, file_list):
+def create_magnitude_video(
+    all_magnitudes, mag_vmin, mag_vmax, output_dir, fps, file_list
+):
     """Create magnitude-only video."""
     print("Creating magnitude video...")
 
     fig_mag, ax_mag = plt.subplots(1, 1, figsize=(8, 6))
     fig_mag.suptitle("Temporal Evolution of Velocity Magnitude", fontsize=14)
 
-    im_mag_only = ax_mag.imshow(all_magnitudes[0], cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax)
+    im_mag_only = ax_mag.imshow(
+        all_magnitudes[0], cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax
+    )
     ax_mag.axis("off")
     cb_mag_only = plt.colorbar(im_mag_only, ax=ax_mag, fraction=0.046, pad=0.04)
     cb_mag_only.set_label("Velocity Magnitude")
@@ -250,7 +312,12 @@ def create_magnitude_video(all_magnitudes, mag_vmin, mag_vmax, output_dir, fps, 
         return [im_mag_only, time_text_mag]
 
     anim_mag = animation.FuncAnimation(
-        fig_mag, animate_magnitude, frames=len(file_list), interval=1000 // fps, blit=True, repeat=True
+        fig_mag,
+        animate_magnitude,
+        frames=len(file_list),
+        interval=1000 // fps,
+        blit=True,
+        repeat=True,
     )
 
     video_path_mag = os.path.join(output_dir, "flow_magnitude_evolution.mp4")
@@ -264,7 +331,9 @@ def save_animation(anim, video_path, fps):
 
     try:
         # Try to save as MP4
-        writer = animation.FFMpegWriter(fps=fps, metadata=dict(artist="Flow Visualization"), bitrate=1800)
+        writer = animation.FFMpegWriter(
+            fps=fps, metadata=dict(artist="Flow Visualization"), bitrate=1800
+        )
         anim.save(video_path, writer=writer)
         print(f"Video saved successfully: {video_path}")
     except Exception as e:
@@ -277,12 +346,16 @@ def save_animation(anim, video_path, fps):
             print(f"GIF saved successfully: {gif_path}")
         except Exception as e2:
             print(f"Error saving GIF: {e2}")
-            print("Please ensure ffmpeg is installed for MP4 output or pillow for GIF output")
+            print(
+                "Please ensure ffmpeg is installed for MP4 output or pillow for GIF output"
+            )
 
 
 def main():
     """Main function."""
-    parser = argparse.ArgumentParser(description="Create flow data visualization videos")
+    parser = argparse.ArgumentParser(
+        description="Create flow data visualization videos"
+    )
     parser.add_argument(
         "--data_dir",
         type=str,
@@ -295,11 +368,24 @@ def main():
         default="/home/sh/CB/icon-thewell-dev/visualization/videos",
         help="Directory to save output videos",
     )
-    parser.add_argument("--max_frames", type=int, default=100, help="Maximum number of frames to process (0 for all)")
-    parser.add_argument("--fps", type=int, default=10, help="Frames per second for output video")
-    parser.add_argument("--fields", nargs="+", default=["u", "v", "w"], help="Field names to visualize")
     parser.add_argument(
-        "--percentiles", nargs=2, type=float, default=[1, 99], help="Percentiles for colorbar range (min max)"
+        "--max_frames",
+        type=int,
+        default=100,
+        help="Maximum number of frames to process (0 for all)",
+    )
+    parser.add_argument(
+        "--fps", type=int, default=10, help="Frames per second for output video"
+    )
+    parser.add_argument(
+        "--fields", nargs="+", default=["u", "v", "w"], help="Field names to visualize"
+    )
+    parser.add_argument(
+        "--percentiles",
+        nargs=2,
+        type=float,
+        default=[1, 99],
+        help="Percentiles for colorbar range (min max)",
     )
 
     args = parser.parse_args()

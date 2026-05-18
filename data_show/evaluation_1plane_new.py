@@ -134,7 +134,9 @@ def run_comprehensive_1plane_evaluation(
 
             for sample_idx in range(actual_num_samples):
                 print(f"\n🎯 Sample {sample_idx + 1}/{actual_num_samples}")
-                evaluator.evaluate_1plane_sample(sample_idx=sample_idx, split=split, num_future=num_future_steps)
+                evaluator.evaluate_1plane_sample(
+                    sample_idx=sample_idx, split=split, num_future=num_future_steps
+                )
 
         # Create comprehensive 1-plane analysis
         print(f"\n{'=' * 60}")
@@ -182,11 +184,19 @@ def run_comprehensive_1plane_evaluation(
 
 def main() -> None:
     """Main function with command line interface."""
-    parser = argparse.ArgumentParser(description="Modular 1-Plane Flow Model Evaluation")
+    parser = argparse.ArgumentParser(
+        description="Modular 1-Plane Flow Model Evaluation"
+    )
 
-    parser.add_argument("checkpoint_path", nargs="?", default=None, help="Path to model checkpoint")
+    parser.add_argument(
+        "checkpoint_path", nargs="?", default=None, help="Path to model checkpoint"
+    )
 
-    parser.add_argument("--save-predictions", action="store_true", help="Save prediction results as H5 files")
+    parser.add_argument(
+        "--save-predictions",
+        action="store_true",
+        help="Save prediction results as H5 files",
+    )
 
     parser.add_argument(
         "--custom-points",
@@ -195,25 +205,36 @@ def main() -> None:
         help="Use custom 1-plane monitoring points instead of default grid",
     )
 
-    parser.add_argument("--num-samples", type=int, default=1, help="Number of samples to evaluate per dataset split")
-
     parser.add_argument(
-        "--num-future-steps", type=int, default=DEFAULT_FUTURE_STEPS, help="Number of future steps to predict"
+        "--num-samples",
+        type=int,
+        default=1,
+        help="Number of samples to evaluate per dataset split",
     )
 
     parser.add_argument(
-        "--output-dir", type=str, default="evaluation_1plane_outputs", help="Output directory for all results"
+        "--num-future-steps",
+        type=int,
+        default=DEFAULT_FUTURE_STEPS,
+        help="Number of future steps to predict",
     )
 
-    parser.add_argument("--config-overrides", nargs="*", default=[], help="Hydra config overrides")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="evaluation_1plane_outputs",
+        help="Output directory for all results",
+    )
+
+    parser.add_argument(
+        "--config-overrides", nargs="*", default=[], help="Hydra config overrides"
+    )
 
     args = parser.parse_args()
 
     # Use default checkpoint path if not provided
     if args.checkpoint_path is None:
-        args.checkpoint_path = (
-            "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/2025-11-02_14-11-12-461089/checkpoints/last.ckpt"
-        )
+        args.checkpoint_path = "/home/sh/CB/icon-thewell-dev/logs/flow_swin_1plane/runs/2025-11-02_14-11-12-461089/checkpoints/last.ckpt"
         print(f"Using default checkpoint: {args.checkpoint_path}")
 
     # Check if checkpoint exists
@@ -228,7 +249,10 @@ def main() -> None:
     if HYDRA_AVAILABLE:
         try:
             with hydra.initialize(version_base="1.3", config_path="configs"):
-                hydra.compose(config_name="train_flow_swin_1plane", overrides=args.config_overrides)
+                hydra.compose(
+                    config_name="train_flow_swin_1plane",
+                    overrides=args.config_overrides,
+                )
 
                 # Run evaluation
                 run_comprehensive_1plane_evaluation(
@@ -240,7 +264,9 @@ def main() -> None:
                     output_dir=args.output_dir,
                 )
         except Exception as e:
-            print(f"⚠️ Hydra configuration failed: {e}, running without configuration management")
+            print(
+                f"⚠️ Hydra configuration failed: {e}, running without configuration management"
+            )
             # Run evaluation without Hydra
             run_comprehensive_1plane_evaluation(
                 checkpoint_path=args.checkpoint_path,

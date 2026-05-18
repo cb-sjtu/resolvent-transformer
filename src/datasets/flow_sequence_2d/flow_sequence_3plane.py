@@ -81,7 +81,9 @@ class FlowSequence3PlaneDataset(Dataset):
             files = sorted(glob.glob(os.path.join(data_dir, pattern_for_slice)))
 
             if not files:
-                raise ValueError(f"No files found for y_slice {y_slice} with pattern: {pattern_for_slice}")
+                raise ValueError(
+                    f"No files found for y_slice {y_slice} with pattern: {pattern_for_slice}"
+                )
 
             self.files_by_plane[y_slice] = files
 
@@ -109,16 +111,22 @@ class FlowSequence3PlaneDataset(Dataset):
         self.num_samples = self.num_frames - total_frames_needed + 1
 
         if self.num_samples <= 0:
-            raise ValueError(f"Not enough frames. Need at least {total_frames_needed}, got {self.num_frames}")
+            raise ValueError(
+                f"Not enough frames. Need at least {total_frames_needed}, got {self.num_frames}"
+            )
 
         print(f"Found {self.num_frames} common timesteps across all planes")
         print(f"Y-planes: {list(self.files_by_plane.keys())}")
-        print(f"Files per plane: {[len(files) for files in self.files_by_plane.values()]}")
+        print(
+            f"Files per plane: {[len(files) for files in self.files_by_plane.values()]}"
+        )
 
         # Filter out sequences that span the discontinuity between timestep 1080 and 1081
         # Remove sequences with starting timesteps that would include the discontinuity
         discontinuity_timestep = 1081
-        exclude_start = discontinuity_timestep - total_frames_needed + 1  # Adjusted for max_k_steps
+        exclude_start = (
+            discontinuity_timestep - total_frames_needed + 1
+        )  # Adjusted for max_k_steps
         exclude_end = discontinuity_timestep  # 1081
 
         valid_indices = []
@@ -133,11 +141,15 @@ class FlowSequence3PlaneDataset(Dataset):
             # This happens if the sequence starts from exclude_start to exclude_end
             if exclude_start <= start_timestep <= exclude_end:
                 excluded_count += 1
-                print(f"Excluding sequence starting at timestep {start_timestep} (would span discontinuity)")
+                print(
+                    f"Excluding sequence starting at timestep {start_timestep} (would span discontinuity)"
+                )
             else:
                 valid_indices.append(i)
 
-        print(f"Excluded {excluded_count} sequences due to discontinuity at timestep {discontinuity_timestep}")
+        print(
+            f"Excluded {excluded_count} sequences due to discontinuity at timestep {discontinuity_timestep}"
+        )
         print(f"Valid samples: {len(valid_indices)} (originally {self.num_samples})")
 
         # Update num_samples to reflect filtered data
@@ -151,11 +163,19 @@ class FlowSequence3PlaneDataset(Dataset):
         if split == "train":
             self.indices = [self.valid_base_indices[i] for i in range(0, train_samples)]
         elif split == "val":
-            self.indices = [self.valid_base_indices[i] for i in range(train_samples, train_samples + valid_samples)]
+            self.indices = [
+                self.valid_base_indices[i]
+                for i in range(train_samples, train_samples + valid_samples)
+            ]
         else:  # test
-            self.indices = [self.valid_base_indices[i] for i in range(train_samples + valid_samples, self.num_samples)]
+            self.indices = [
+                self.valid_base_indices[i]
+                for i in range(train_samples + valid_samples, self.num_samples)
+            ]
 
-        print(f"Created {split} dataset with {len(self.indices)} samples from {self.num_frames} files")
+        print(
+            f"Created {split} dataset with {len(self.indices)} samples from {self.num_frames} files"
+        )
 
         # Get data shape and y_slices from first file
         self._get_data_shape_and_slices(y_slices)
@@ -173,7 +193,9 @@ class FlowSequence3PlaneDataset(Dataset):
 
             # Check that data shape is 3D and has at least the required number of channels
             if len(data_multi_channel.shape) != 3:
-                raise ValueError(f"Expected 3D data shape (C, H, W), got {data_multi_channel.shape}")
+                raise ValueError(
+                    f"Expected 3D data shape (C, H, W), got {data_multi_channel.shape}"
+                )
 
             if data_multi_channel.shape[0] < len(self.field_names):
                 raise ValueError(
@@ -192,7 +214,9 @@ class FlowSequence3PlaneDataset(Dataset):
             # Get 2D shape from the data (H, W)
             self.data_shape = data_multi_channel.shape[1:]  # (H, W)
 
-            print(f"Fields: {self.field_names} ({self.num_channels_per_plane} channels per plane)")
+            print(
+                f"Fields: {self.field_names} ({self.num_channels_per_plane} channels per plane)"
+            )
             print(f"Data shape per file: {data_multi_channel.shape}")
             print(f"Selected y_slices: {self.y_slices}")
             print(f"2D shape per plane: {self.data_shape}")
@@ -217,7 +241,9 @@ class FlowSequence3PlaneDataset(Dataset):
                 with open(norm_stats_path) as f:
                     stats = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError) as e:
-                print(f"Warning: Could not load normalization stats from {norm_stats_path}: {e}")
+                print(
+                    f"Warning: Could not load normalization stats from {norm_stats_path}: {e}"
+                )
                 print("Normalization will be disabled.")
                 self.mean = None
                 self.std = None
@@ -225,7 +251,9 @@ class FlowSequence3PlaneDataset(Dataset):
         elif isinstance(norm_stats, dict):
             stats = norm_stats
         else:
-            raise ValueError(f"norm_stats must be dict or file path, got {type(norm_stats)}")
+            raise ValueError(
+                f"norm_stats must be dict or file path, got {type(norm_stats)}"
+            )
 
         # Extract per-channel statistics
         try:
@@ -244,16 +272,24 @@ class FlowSequence3PlaneDataset(Dataset):
                         self.std.append(float(per_channel_stats[channel_key]["std"]))
                     else:
                         # Fallback to global stats if channel not found
-                        print(f"Warning: No stats found for {channel_key}, using global stats")
+                        print(
+                            f"Warning: No stats found for {channel_key}, using global stats"
+                        )
                         self.mean.append(float(stats["mean"]))
                         self.std.append(float(stats["std"]))
 
                 # Convert to tensors for efficient computation
-                self.mean = torch.tensor(self.mean, dtype=torch.float32).view(-1, 1, 1)  # (num_channels, 1, 1)
-                self.std = torch.tensor(self.std, dtype=torch.float32).view(-1, 1, 1)  # (num_channels, 1, 1)
+                self.mean = torch.tensor(self.mean, dtype=torch.float32).view(
+                    -1, 1, 1
+                )  # (num_channels, 1, 1)
+                self.std = torch.tensor(self.std, dtype=torch.float32).view(
+                    -1, 1, 1
+                )  # (num_channels, 1, 1)
                 self.per_channel_norm = True
 
-                print(f"{self.num_total_channels}-channel normalization enabled for {self.split} split:")
+                print(
+                    f"{self.num_total_channels}-channel normalization enabled for {self.split} split:"
+                )
                 for ch_idx in range(min(6, len(self.mean))):  # Show first 6 channels
                     print(
                         f"  channel_{ch_idx:02d}: mean={self.mean[ch_idx, 0, 0]:.6f}, std={self.std[ch_idx, 0, 0]:.6f}"
@@ -266,16 +302,22 @@ class FlowSequence3PlaneDataset(Dataset):
                 self.mean = float(stats["mean"])
                 self.std = float(stats["std"])
                 self.per_channel_norm = False
-                print(f"Global normalization enabled for {self.split} split: mean={self.mean:.6f}, std={self.std:.6f}")
+                print(
+                    f"Global normalization enabled for {self.split} split: mean={self.mean:.6f}, std={self.std:.6f}"
+                )
 
             # Validate std is not zero
             if self.per_channel_norm:
                 for i in range(len(self.std)):
                     if abs(self.std[i, 0, 0]) < 1e-8:
-                        print(f"Warning: Standard deviation for channel {i:02d} is very small")
+                        print(
+                            f"Warning: Standard deviation for channel {i:02d} is very small"
+                        )
             else:
                 if abs(self.std) < 1e-8:
-                    print("Warning: Standard deviation is very small, normalization might be unstable")
+                    print(
+                        "Warning: Standard deviation is very small, normalization might be unstable"
+                    )
 
         except (KeyError, TypeError, ValueError) as e:
             print(f"Warning: Invalid normalization stats format: {e}")
@@ -346,9 +388,7 @@ class FlowSequence3PlaneDataset(Dataset):
             - Channels 6-8: Plane 2 (y_slice[2]) - [u, v, w]
         """
         base_idx = self.indices[idx]
-        description = (
-            f"dataset: {self.__class__.__name__}, idx: {idx}, planes: {self.y_slices}, fields: {self.field_names}"
-        )
+        description = f"dataset: {self.__class__.__name__}, idx: {idx}, planes: {self.y_slices}, fields: {self.field_names}"
 
         # Load input sequence + target frames for all planes and channels
         frames = []
@@ -364,7 +404,9 @@ class FlowSequence3PlaneDataset(Dataset):
             # 遍历3个平面，每个平面对应不同的文件
             for y_slice in self.y_slices:
                 # Find the file for this y_slice and timestep
-                target_filename = f"u-v-w-p_scale4-6-1_yslice{y_slice}_t{timestep:05d}.h5"
+                target_filename = (
+                    f"u-v-w-p_scale4-6-1_yslice{y_slice}_t{timestep:05d}.h5"
+                )
                 fpath = os.path.join(self.data_dir, target_filename)
 
                 if not os.path.exists(fpath):
@@ -387,11 +429,15 @@ class FlowSequence3PlaneDataset(Dataset):
             frames.append(multi_channel_frame)
 
         # Split into input and target sequences
-        input_seq = np.stack(frames[: self.input_length], axis=0)  # (input_length, num_total_channels, H, W)
+        input_seq = np.stack(
+            frames[: self.input_length], axis=0
+        )  # (input_length, num_total_channels, H, W)
         target_frames = frames[self.input_length :]  # List of max_k_steps frames
 
         # Convert to tensors
-        input_seq = torch.from_numpy(input_seq).float()  # (input_length, num_total_channels, H, W)
+        input_seq = torch.from_numpy(
+            input_seq
+        ).float()  # (input_length, num_total_channels, H, W)
         target_seq = torch.from_numpy(
             np.stack(target_frames, axis=0)
         ).float()  # (max_k_steps, num_total_channels, H, W)
@@ -401,14 +447,22 @@ class FlowSequence3PlaneDataset(Dataset):
         target_seq = self.normalize(target_seq)
 
         # Add leading batch dimension of 1
-        input_seq = input_seq.unsqueeze(0)  # (1, input_length, num_total_channels, H, W)
-        target_seq = target_seq.unsqueeze(0)  # (1, max_k_steps, num_total_channels, H, W)
+        input_seq = input_seq.unsqueeze(
+            0
+        )  # (1, input_length, num_total_channels, H, W)
+        target_seq = target_seq.unsqueeze(
+            0
+        )  # (1, max_k_steps, num_total_channels, H, W)
 
         # Structure like original dataset
         data = {"input_seq": input_seq}
         label = target_seq
 
-        return {"description": np.array([description], dtype="<U200"), "data": data, "label": label}
+        return {
+            "description": np.array([description], dtype="<U200"),
+            "data": data,
+            "label": label,
+        }
 
     def get_channel_info(self):
         """Return information about channel organization."""
@@ -430,7 +484,9 @@ class FlowSequence3PlaneDataset(Dataset):
 
             # 物理通道
             for field_name in self.field_names:
-                channel_mapping.append(f"ch{ch_idx}: plane{plane_idx}_y{y_slice}_{field_name}")
+                channel_mapping.append(
+                    f"ch{ch_idx}: plane{plane_idx}_y{y_slice}_{field_name}"
+                )
                 ch_idx += 1
 
         info["channel_mapping"] = channel_mapping

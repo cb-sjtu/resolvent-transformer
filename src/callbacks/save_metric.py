@@ -22,19 +22,41 @@ class SaveMetric(L.Callback):
         super().__init__()
         self.dirpath = dirpath
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs: dict, batch: PyTree, batch_idx, dataloader_idx=0):
+    def on_validation_batch_end(
+        self,
+        trainer,
+        pl_module,
+        outputs: dict,
+        batch: PyTree,
+        batch_idx,
+        dataloader_idx=0,
+    ):
         """Cache valid batch outputs. Only save metrics since they are smaller than preds and errors."""
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
-        valid_dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
+        valid_dirpath = (
+            Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
+        )
         self._save_metrics(valid_dirpath, batch, outputs, trainer.global_rank)
 
-    def on_test_batch_end(self, trainer, pl_module, outputs: dict, batch: PyTree, batch_idx, dataloader_idx=0):
+    def on_test_batch_end(
+        self,
+        trainer,
+        pl_module,
+        outputs: dict,
+        batch: PyTree,
+        batch_idx,
+        dataloader_idx=0,
+    ):
         """Cache test batch outputs. Only save metrics since they are smaller than preds and errors."""
         dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
-        test_dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
+        test_dirpath = (
+            Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
+        )
         self._save_metrics(test_dirpath, batch, outputs, trainer.global_rank)
 
-    def _save_metrics(self, dirpath: Path, batch: PyTree, outputs: dict, rank: int) -> None:
+    def _save_metrics(
+        self, dirpath: Path, batch: PyTree, outputs: dict, rank: int
+    ) -> None:
         dirpath.mkdir(parents=True, exist_ok=True)
 
         # save descriptions

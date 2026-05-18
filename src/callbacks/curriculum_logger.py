@@ -9,11 +9,16 @@ class CurriculumLogger(L.Callback):
     def __init__(self):
         super().__init__()
 
-    def on_train_batch_start(self, trainer: L.Trainer, pl_module: L.LightningModule, batch, batch_idx: int):
+    def on_train_batch_start(
+        self, trainer: L.Trainer, pl_module: L.LightningModule, batch, batch_idx: int
+    ):
         """Log curriculum parameters at the start of each training batch."""
 
         # Check if the module has curriculum learning capabilities
-        if not (hasattr(pl_module, "get_teacher_forcing_ratio") and hasattr(pl_module, "get_current_k_steps")):
+        if not (
+            hasattr(pl_module, "get_teacher_forcing_ratio")
+            and hasattr(pl_module, "get_current_k_steps")
+        ):
             return
 
         # Get current epoch
@@ -39,7 +44,9 @@ class CurriculumLogger(L.Callback):
                     metrics.update(
                         {
                             "curriculum/ss_schedule_type": pl_module.ss_schedule_type,
-                            "curriculum/ss_decay_epochs": float(pl_module.ss_decay_epochs),
+                            "curriculum/ss_decay_epochs": float(
+                                pl_module.ss_decay_epochs
+                            ),
                             "curriculum/ss_initial_ratio": pl_module.ss_initial_ratio,
                             "curriculum/ss_final_ratio": pl_module.ss_final_ratio,
                         }
@@ -60,7 +67,10 @@ class CurriculumLogger(L.Callback):
         """Log curriculum parameters at the start of each epoch."""
 
         # Check if the module has curriculum learning capabilities
-        if not (hasattr(pl_module, "get_teacher_forcing_ratio") and hasattr(pl_module, "get_current_k_steps")):
+        if not (
+            hasattr(pl_module, "get_teacher_forcing_ratio")
+            and hasattr(pl_module, "get_current_k_steps")
+        ):
             return
 
         current_epoch = pl_module.current_epoch

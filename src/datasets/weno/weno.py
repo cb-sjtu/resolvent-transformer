@@ -27,7 +27,9 @@ class WenoDataset(Dataset):
         else:
             self.file_paths = file_paths
 
-        log.info(f"{len(self.file_paths)} files found in {file_paths}: {self.file_paths}")
+        log.info(
+            f"{len(self.file_paths)} files found in {file_paths}: {self.file_paths}"
+        )
 
         self.demo_num = demo_num
         self.base_seed = base_seed
@@ -57,7 +59,9 @@ class WenoDataset(Dataset):
         # so that the results can be reproduced regardless of workers, devices, etc.
         if self.base_seed is not None:
             rng = torch.Generator()
-            rng.manual_seed(self.base_seed + idx)  # randomness is only from the seed and idx
+            rng.manual_seed(
+                self.base_seed + idx
+            )  # randomness is only from the seed and idx
         else:
             rng = None
 
@@ -113,7 +117,9 @@ class WenoDataset(Dataset):
 
         # Convert to pytree format
         data = {
-            "description": np.array([equation] * demo_cond_k.shape[0], dtype=np.dtypes.StringDType()),
+            "description": np.array(
+                [equation] * demo_cond_k.shape[0], dtype=np.dtypes.StringDType()
+            ),
             "data": {
                 "demo_cond_k": demo_cond_k,
                 "demo_cond_v": demo_cond_v,

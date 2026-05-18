@@ -55,9 +55,17 @@ class BaseDataModule(LightningDataModule):
         """
         called on each process on GPU
         """
-        self.train_datasets = [self.get_train_dataset_from_cfg(cfg) for cfg in self.cfg.data.train.values()]
-        self.valid_datasets = [self.get_valid_test_dataset_from_cfg(cfg) for cfg in self.cfg.data.valid.values()]
-        self.test_datasets = [self.get_valid_test_dataset_from_cfg(cfg) for cfg in self.cfg.data.test.values()]
+        self.train_datasets = [
+            self.get_train_dataset_from_cfg(cfg) for cfg in self.cfg.data.train.values()
+        ]
+        self.valid_datasets = [
+            self.get_valid_test_dataset_from_cfg(cfg)
+            for cfg in self.cfg.data.valid.values()
+        ]
+        self.test_datasets = [
+            self.get_valid_test_dataset_from_cfg(cfg)
+            for cfg in self.cfg.data.test.values()
+        ]
 
     def get_train_dataset_from_cfg(self, cfg):
         """
@@ -126,12 +134,16 @@ class BaseDataModule(LightningDataModule):
             # we will wrap the dataloader in CycleLoader,
             # therefore lightning cannot automatically handle DistributedSampler and epoch management
             # use cfg.base_seed as seed. DistributedSampler will add epochs to the seed when __iter__() is called
-            sampler = DistributedSampler(dataset=dataset, shuffle=True, seed=cfg.base_seed, drop_last=True)
+            sampler = DistributedSampler(
+                dataset=dataset, shuffle=True, seed=cfg.base_seed, drop_last=True
+            )
             dataloader = DataLoader(dataset=dataset, sampler=sampler, **common_kwargs)
             return {"dataloader": dataloader, "sampler": sampler}
         else:
             # if not distributed, a plain sampler will suffice
-            dataloader = DataLoader(dataset=dataset, shuffle=True, drop_last=True, **common_kwargs)
+            dataloader = DataLoader(
+                dataset=dataset, shuffle=True, drop_last=True, **common_kwargs
+            )
             return {"dataloader": dataloader, "sampler": None}
 
     def get_valid_test_dataloader(self, dataset, cfg):
@@ -185,14 +197,18 @@ class BaseDataModule(LightningDataModule):
         """
         return a list of dataloaders for separate validation
         """
-        dataloaders = [self.get_valid_test_dataloader(**ds) for ds in self.valid_datasets]
+        dataloaders = [
+            self.get_valid_test_dataloader(**ds) for ds in self.valid_datasets
+        ]
         return dataloaders  # don't wrap with CycleLoader
 
     def test_dataloader(self):
         """
         return a list of dataloaders for separate test
         """
-        dataloaders = [self.get_valid_test_dataloader(**ds) for ds in self.test_datasets]
+        dataloaders = [
+            self.get_valid_test_dataloader(**ds) for ds in self.test_datasets
+        ]
         return dataloaders  # don't wrap with CycleLoader
 
     def teardown(self, stage=None):

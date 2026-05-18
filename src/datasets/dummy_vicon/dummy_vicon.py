@@ -13,7 +13,9 @@ from src.datasets import dataset_utils as dsu
 
 
 class DummyViconDataset(Dataset):
-    def __init__(self, ex_num: int, f_shape: tuple[int, int, int], g_shape: tuple[int, int, int]):
+    def __init__(
+        self, ex_num: int, f_shape: tuple[int, int, int], g_shape: tuple[int, int, int]
+    ):
         self.ex_num = ex_num
         self.f_shape = f_shape  # (f_dim, f_h, f_w)
         self.g_shape = g_shape  # (g_dim, g_h, g_w)

@@ -129,7 +129,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         print(f"Loading 1-plane model from {self.checkpoint_path}")
 
         # Load checkpoint
-        checkpoint = torch.load(self.checkpoint_path, map_location="cpu", weights_only=False)
+        checkpoint = torch.load(
+            self.checkpoint_path, map_location="cpu", weights_only=False
+        )
 
         # Extract hyperparameters from checkpoint
         if "hyper_parameters" in checkpoint:
@@ -145,7 +147,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         # Extract hyperparameters from checkpoint to recreate the module
         if "hyper_parameters" in checkpoint:
             # Create the Lightning module with the same config
-            model = FlowSwin2DLitModule.load_from_checkpoint(self.checkpoint_path, map_location="cpu")
+            model = FlowSwin2DLitModule.load_from_checkpoint(
+                self.checkpoint_path, map_location="cpu"
+            )
         else:
             # Fallback: create module with current config
             print("No hyperparameters found, using current config...")
@@ -153,7 +157,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             from omegaconf import OmegaConf
 
             # Create a config that includes the model
-            module_cfg = OmegaConf.create({"model": self.model_config, "loss_fn": "mse"})
+            module_cfg = OmegaConf.create(
+                {"model": self.model_config, "loss_fn": "mse"}
+            )
             model = FlowSwin2DLitModule(module_cfg)
 
             # Load the state dict manually
@@ -166,7 +172,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
     def _load_datasets(self):
         """Load 1-plane specific datasets (adapted from original evaluation.py)."""
-        from src.datasets.flow_sequence_2d.flow_sequence_1plane import FlowSequence1PlaneDataset
+        from src.datasets.flow_sequence_2d.flow_sequence_1plane import (
+            FlowSequence1PlaneDataset,
+        )
 
         data_dir = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow/new/"
 
@@ -205,9 +213,13 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             f"Dataset sizes - Train: {len(self.train_dataset)}, "
             f"Val: {len(self.val_dataset)}, Test: {len(self.test_dataset)}"
         )
-        print(f"Channel info: {self.test_dataset.get_channel_info()['num_channels']} total channels")
+        print(
+            f"Channel info: {self.test_dataset.get_channel_info()['num_channels']} total channels"
+        )
 
-    def evaluate_1plane_sample(self, sample_idx: int, split: str = "test", num_future: int = 10):
+    def evaluate_1plane_sample(
+        self, sample_idx: int, split: str = "test", num_future: int = 10
+    ):
         """
         Evaluate a single sample with 1-plane specific analysis (adapted from 2D evaluator).
 
@@ -226,7 +238,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
         # Get sample data
         sample = dataset[sample_idx]
-        input_seq = sample["data"]["input_seq"]  # Could be [1, T, C, H, W] or [T, C, H, W]
+        input_seq = sample["data"][
+            "input_seq"
+        ]  # Could be [1, T, C, H, W] or [T, C, H, W]
 
         # Handle batch dimension properly
         if len(input_seq.shape) == 5:  # [1, T, C, H, W]
@@ -253,10 +267,16 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         print(f"  Predicting {num_future} future steps...")
 
         # Run evaluations (similar to 2D evaluator)
-        self._evaluate_1plane_autoregressive(input_seq, ground_truth_frames, sample_idx, split, num_future)
-        self._evaluate_1plane_teacher_forcing(input_seq, ground_truth_frames, sample_idx, split, num_future)
+        self._evaluate_1plane_autoregressive(
+            input_seq, ground_truth_frames, sample_idx, split, num_future
+        )
+        self._evaluate_1plane_teacher_forcing(
+            input_seq, ground_truth_frames, sample_idx, split, num_future
+        )
 
-    def _evaluate_1plane_autoregressive(self, input_seq, ground_truth_frames, sample_idx, split, num_future):
+    def _evaluate_1plane_autoregressive(
+        self, input_seq, ground_truth_frames, sample_idx, split, num_future
+    ):
         """Evaluate using autoregressive prediction (adapted from 2D evaluator)."""
         print("  🔄 1-Plane Autoregressive evaluation...")
 
@@ -281,27 +301,45 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
                     raise ValueError(f"Unexpected prediction shape: {next_pred.shape}")
 
                 # Store prediction (denormalized for proper evaluation)
-                pred_frame_normalized = next_pred[0]  # Remove batch dimension: (C, H, W)
-                pred_frame_denorm = dataset.denormalize(pred_frame_normalized.unsqueeze(0))[0].cpu()  # (C, H, W)
+                pred_frame_normalized = next_pred[
+                    0
+                ]  # Remove batch dimension: (C, H, W)
+                pred_frame_denorm = dataset.denormalize(
+                    pred_frame_normalized.unsqueeze(0)
+                )[0].cpu()  # (C, H, W)
                 predictions.append(pred_frame_denorm)
 
                 # Record for time series monitoring (use denormalized data)
-                gt_frame = ground_truth_frames[step] if step < len(ground_truth_frames) else None
+                gt_frame = (
+                    ground_truth_frames[step]
+                    if step < len(ground_truth_frames)
+                    else None
+                )
                 gt_frame_denorm = None
                 if gt_frame is not None:
-                    gt_frame_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[0].cpu()  # (C, H, W)
+                    gt_frame_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[
+                        0
+                    ].cpu()  # (C, H, W)
 
-                self.record_timestep_data(pred_frame_denorm, split, "ar", step, gt_frame_denorm)
+                self.record_timestep_data(
+                    pred_frame_denorm, split, "ar", step, gt_frame_denorm
+                )
 
                 # Update sequence for next prediction
                 next_pred_with_time = next_pred.unsqueeze(1)  # Add time dimension
-                current_seq = torch.cat([current_seq[:, 1:], next_pred_with_time], dim=1)
+                current_seq = torch.cat(
+                    [current_seq[:, 1:], next_pred_with_time], dim=1
+                )
 
         # Create 1-plane visualization for first prediction
         if predictions:
-            predictions_tensor = torch.stack(predictions[: min(10, len(predictions))], dim=0)  # Limit to 10 steps
+            predictions_tensor = torch.stack(
+                predictions[: min(10, len(predictions))], dim=0
+            )  # Limit to 10 steps
             targets_tensor = (
-                torch.stack(ground_truth_frames[: min(10, len(ground_truth_frames))], dim=0)
+                torch.stack(
+                    ground_truth_frames[: min(10, len(ground_truth_frames))], dim=0
+                )
                 if ground_truth_frames
                 else None
             )
@@ -314,7 +352,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
                 num_future=len(predictions_tensor),
             )
 
-    def _evaluate_1plane_teacher_forcing(self, input_seq, ground_truth_frames, sample_idx, split, num_future):
+    def _evaluate_1plane_teacher_forcing(
+        self, input_seq, ground_truth_frames, sample_idx, split, num_future
+    ):
         """Evaluate using teacher forcing (adapted from 2D evaluator)."""
         print("  📖 1-Plane Teacher forcing evaluation...")
 
@@ -338,23 +378,34 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
                     raise ValueError(f"Unexpected prediction shape: {next_pred.shape}")
 
                 # Store prediction (denormalized)
-                pred_frame_normalized = next_pred[0]  # Remove batch dimension: (C, H, W)
-                pred_frame_denorm = dataset.denormalize(pred_frame_normalized.unsqueeze(0))[0].cpu()  # (C, H, W)
+                pred_frame_normalized = next_pred[
+                    0
+                ]  # Remove batch dimension: (C, H, W)
+                pred_frame_denorm = dataset.denormalize(
+                    pred_frame_normalized.unsqueeze(0)
+                )[0].cpu()  # (C, H, W)
                 predictions.append(pred_frame_denorm)
 
                 # Get ground truth for this step
                 gt_frame_denorm = None
                 if step < len(ground_truth_frames):
                     gt_frame = ground_truth_frames[step]
-                    gt_frame_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[0].cpu()
+                    gt_frame_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[
+                        0
+                    ].cpu()
 
                 # Record for time series monitoring
-                self.record_timestep_data(pred_frame_denorm, split, "tf", step, gt_frame_denorm)
+                self.record_timestep_data(
+                    pred_frame_denorm, split, "tf", step, gt_frame_denorm
+                )
 
                 # Update input with ground truth for next prediction (teacher forcing)
                 if step + 1 < len(ground_truth_frames):
                     gt_frame_next = (
-                        ground_truth_frames[step].to(self.device).unsqueeze(0).unsqueeze(1)
+                        ground_truth_frames[step]
+                        .to(self.device)
+                        .unsqueeze(0)
+                        .unsqueeze(1)
                     )  # (1, 1, C, H, W)
                     input_seq = torch.cat([input_seq[:, 1:], gt_frame_next], dim=1)
 
@@ -381,15 +432,21 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             f.write("# 1-Plane Time Series Monitoring Report\n\n")
             f.write("## Monitoring Configuration\n\n")
             f.write(f"- **Monitor Points**: {len(self.time_monitor.monitor_points)}\n")
-            f.write(f"- **Point Locations (z, x)**: {self.time_monitor.monitor_points}\n")
+            f.write(
+                f"- **Point Locations (z, x)**: {self.time_monitor.monitor_points}\n"
+            )
             f.write(f"- **Field Names**: {self.field_names}\n")
             f.write(f"- **Number of Planes**: {self.num_planes}\n")
             f.write(f"- **Y-slice Position**: {self.plane_y_position}\n")
             f.write(f"- **Total Channels**: {self.total_channels}\n\n")
 
             f.write("## Generated Outputs\n\n")
-            f.write("- **Individual Point Plots**: `time_series_plots/time_series_point_*.png`\n")
-            f.write("- **Component Overview Plots**: `time_series_plots/time_series_all_points_*.png`\n")
+            f.write(
+                "- **Individual Point Plots**: `time_series_plots/time_series_point_*.png`\n"
+            )
+            f.write(
+                "- **Component Overview Plots**: `time_series_plots/time_series_all_points_*.png`\n"
+            )
             f.write("- **Time Series Data**: `time_series_data/*.csv`\n\n")
 
             f.write("## 1-Plane Data Format\n\n")
@@ -423,9 +480,13 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
         def patched_record_timestep(pred_data, split, mode, timestep, gt_data=None):
             # Only record data from the first sample (when timesteps array is small)
             max_recorded_steps = len(monitor.time_series_data[split][mode]["timesteps"])
-            max_steps_per_sample = MAX_RECORDED_TIMESTEPS  # Use the configurable constant
+            max_steps_per_sample = (
+                MAX_RECORDED_TIMESTEPS  # Use the configurable constant
+            )
             if max_recorded_steps >= max_steps_per_sample:
-                print(f"    ⏭️ Skipping timestep {timestep} (already have {max_recorded_steps} steps)")
+                print(
+                    f"    ⏭️ Skipping timestep {timestep} (already have {max_recorded_steps} steps)"
+                )
                 return
 
             # Extract prediction values
@@ -438,22 +499,32 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             # Record prediction values for each point
             for component in ["u", "v", "w"]:
                 for i, value in enumerate(pred_values[component]):
-                    monitor.time_series_data[split][mode][f"{component}_pred"][i].append(value)
+                    monitor.time_series_data[split][mode][f"{component}_pred"][
+                        i
+                    ].append(value)
                     # Debug: Log the first few values (only from first sample)
-                    if timestep < 3 and i == 0:  # Only log first point for first few timesteps
-                        print(f"    🔍 Recorded {split}-{mode} t={timestep} {component}_pred[{i}] = {value:.6f}")
+                    if (
+                        timestep < 3 and i == 0
+                    ):  # Only log first point for first few timesteps
+                        print(
+                            f"    🔍 Recorded {split}-{mode} t={timestep} {component}_pred[{i}] = {value:.6f}"
+                        )
 
             # Record ground truth values if available
             if gt_data is not None:
                 gt_values = patched_extract_point_values(gt_data, timestep)
                 for component in ["u", "v", "w"]:
                     for i, value in enumerate(gt_values[component]):
-                        monitor.time_series_data[split][mode][f"{component}_gt"][i].append(value)
+                        monitor.time_series_data[split][mode][f"{component}_gt"][
+                            i
+                        ].append(value)
             else:
                 # Fill with None if no ground truth available
                 for component in ["u", "v", "w"]:
                     for i in range(len(monitor.monitor_points)):
-                        monitor.time_series_data[split][mode][f"{component}_gt"][i].append(None)
+                        monitor.time_series_data[split][mode][f"{component}_gt"][
+                            i
+                        ].append(None)
 
         def patched_extract_point_values(flow_data, timestep=0):
             """Extract flow field values at monitoring points for 1-plane data."""
@@ -528,10 +599,17 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
                 ax.set_ylabel(f"{component.upper()} Value")
 
                 for mode in ["ar", "tf"]:
-                    if split in monitor.time_series_data and mode in monitor.time_series_data[split]:
+                    if (
+                        split in monitor.time_series_data
+                        and mode in monitor.time_series_data[split]
+                    ):
                         timesteps = monitor.time_series_data[split][mode]["timesteps"]
-                        pred_values = monitor.time_series_data[split][mode][f"{component}_pred"][point_idx]
-                        gt_values = monitor.time_series_data[split][mode][f"{component}_gt"][point_idx]
+                        pred_values = monitor.time_series_data[split][mode][
+                            f"{component}_pred"
+                        ][point_idx]
+                        gt_values = monitor.time_series_data[split][mode][
+                            f"{component}_gt"
+                        ][point_idx]
 
                         print(
                             f"    🎨 Plotting {component}_pred: timesteps={len(timesteps)}, "
@@ -541,7 +619,11 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
                             print(f"    🎨 Pred values sample: {pred_values[:3]}")
 
                         # Plot predictions
-                        if timesteps and pred_values and len(timesteps) == len(pred_values):
+                        if (
+                            timesteps
+                            and pred_values
+                            and len(timesteps) == len(pred_values)
+                        ):
                             ax.plot(
                                 timesteps,
                                 pred_values,
@@ -551,7 +633,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
                                 marker="o",
                                 markersize=4,
                             )
-                            print(f"    ✅ Plotted {len(pred_values)} prediction points for {component}")
+                            print(
+                                f"    ✅ Plotted {len(pred_values)} prediction points for {component}"
+                            )
                         else:
                             print(
                                 f"    ❌ Cannot plot {component}_pred: timesteps={len(timesteps)}, "
@@ -560,7 +644,11 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
                         # Plot ground truth
                         if gt_values and any(v is not None for v in gt_values):
-                            valid_gt = [(t, gt) for t, gt in zip(timesteps, gt_values, strict=False) if gt is not None]
+                            valid_gt = [
+                                (t, gt)
+                                for t, gt in zip(timesteps, gt_values, strict=False)
+                                if gt is not None
+                            ]
                             if valid_gt:
                                 gt_times, gt_vals = zip(*valid_gt, strict=False)
                                 ax.plot(
@@ -578,7 +666,8 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
             plt.tight_layout()
             output_path = (
-                output_dir / f"time_series_point_{point_idx}_y{self.plane_y_position}_z{z_idx}_x{x_idx}_{split}.png"
+                output_dir
+                / f"time_series_point_{point_idx}_y{self.plane_y_position}_z{z_idx}_x{x_idx}_{split}.png"
             )
             plt.savefig(output_path, dpi=150, bbox_inches="tight")
             plt.close()
@@ -586,26 +675,39 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
         monitor.plot_point_time_series = patched_plot_point_time_series
 
-        def patched_plot_all_points_component(component, output_dir, split="test", mode="ar"):
+        def patched_plot_all_points_component(
+            component, output_dir, split="test", mode="ar"
+        ):
             """Plot all points for a specific component (1-plane version)."""
             if component not in ["u", "v", "w"]:
-                raise ValueError(f"Component must be one of ['u', 'v', 'w'], got {component}")
+                raise ValueError(
+                    f"Component must be one of ['u', 'v', 'w'], got {component}"
+                )
 
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
 
             fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-            ax.set_title(f"All Points - {component.upper()} Component ({split.upper()}, {mode.upper()})")
+            ax.set_title(
+                f"All Points - {component.upper()} Component ({split.upper()}, {mode.upper()})"
+            )
             ax.set_xlabel("Timestep")
             ax.set_ylabel(f"{component.upper()} Value")
 
             colors = plt.cm.tab10(np.linspace(0, 1, len(monitor.monitor_points)))
 
             for i, (z_idx, x_idx) in enumerate(monitor.monitor_points):
-                if split in monitor.time_series_data and mode in monitor.time_series_data[split]:
+                if (
+                    split in monitor.time_series_data
+                    and mode in monitor.time_series_data[split]
+                ):
                     timesteps = monitor.time_series_data[split][mode]["timesteps"]
-                    pred_values = monitor.time_series_data[split][mode][f"{component}_pred"][i]
-                    gt_values = monitor.time_series_data[split][mode][f"{component}_gt"][i]
+                    pred_values = monitor.time_series_data[split][mode][
+                        f"{component}_pred"
+                    ][i]
+                    gt_values = monitor.time_series_data[split][mode][
+                        f"{component}_gt"
+                    ][i]
 
                     # Plot predictions
                     if timesteps and pred_values and len(timesteps) == len(pred_values):
@@ -622,7 +724,11 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
                     # Plot ground truth
                     if gt_values and any(v is not None for v in gt_values):
-                        valid_gt = [(t, gt) for t, gt in zip(timesteps, gt_values, strict=False) if gt is not None]
+                        valid_gt = [
+                            (t, gt)
+                            for t, gt in zip(timesteps, gt_values, strict=False)
+                            if gt is not None
+                        ]
                         if valid_gt:
                             gt_times, gt_vals = zip(*valid_gt, strict=False)
                             ax.plot(
@@ -640,7 +746,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
             ax.grid(True, alpha=0.3)
 
             plt.tight_layout()
-            output_path = output_dir / f"time_series_all_points_{component}_{split}_{mode}.png"
+            output_path = (
+                output_dir / f"time_series_all_points_{component}_{split}_{mode}.png"
+            )
             plt.savefig(output_path, dpi=150, bbox_inches="tight")
             plt.close()
             print(f"All points {component} time series plot saved: {output_path}")
@@ -649,7 +757,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
         def patched_generate_all_plots(output_dir, split="test"):
             """Generate all time series plots (1-plane version)."""
-            print(f"Generating time series plots for {len(monitor.monitor_points)} monitoring points...")
+            print(
+                f"Generating time series plots for {len(monitor.monitor_points)} monitoring points..."
+            )
 
             ts_dir = Path(output_dir) / "time_series_plots"
             ts_dir.mkdir(parents=True, exist_ok=True)
@@ -675,8 +785,15 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
             for split in ["train", "val", "test"]:
                 for mode in ["ar", "tf"]:
-                    if split in monitor.time_series_data and mode in monitor.time_series_data[split]:
-                        data_dict = {"timestep": monitor.time_series_data[split][mode]["timesteps"]}
+                    if (
+                        split in monitor.time_series_data
+                        and mode in monitor.time_series_data[split]
+                    ):
+                        data_dict = {
+                            "timestep": monitor.time_series_data[split][mode][
+                                "timesteps"
+                            ]
+                        }
 
                         # Add data for each point and component
                         num_timesteps = len(data_dict["timestep"])
@@ -684,13 +801,21 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
                             for i, (z_idx, x_idx) in enumerate(monitor.monitor_points):
                                 # Prediction data
                                 pred_col_name = f"{component}_pred_point{i}_y{self.plane_y_position}_z{z_idx}_x{x_idx}"
-                                pred_data = monitor.time_series_data[split][mode][f"{component}_pred"][i]
-                                data_dict[pred_col_name] = pred_data + [None] * (num_timesteps - len(pred_data))
+                                pred_data = monitor.time_series_data[split][mode][
+                                    f"{component}_pred"
+                                ][i]
+                                data_dict[pred_col_name] = pred_data + [None] * (
+                                    num_timesteps - len(pred_data)
+                                )
 
                                 # Ground truth data
                                 gt_col_name = f"{component}_gt_point{i}_y{self.plane_y_position}_z{z_idx}_x{x_idx}"
-                                gt_data = monitor.time_series_data[split][mode][f"{component}_gt"][i]
-                                data_dict[gt_col_name] = gt_data + [None] * (num_timesteps - len(gt_data))
+                                gt_data = monitor.time_series_data[split][mode][
+                                    f"{component}_gt"
+                                ][i]
+                                data_dict[gt_col_name] = gt_data + [None] * (
+                                    num_timesteps - len(gt_data)
+                                )
 
                         # Save to CSV
                         if data_dict["timestep"]:  # Only save if we have data
@@ -707,7 +832,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
         return monitor
 
-    def _create_1plane_visualization(self, predictions, targets, sample_idx, split, num_future):
+    def _create_1plane_visualization(
+        self, predictions, targets, sample_idx, split, num_future
+    ):
         """Create comprehensive 1-plane visualization."""
         import matplotlib.pyplot as plt
 
@@ -717,7 +844,9 @@ class Flow1PlaneEvaluator(BaseFlowEvaluator):
 
         # Create single-plane comparison plot
         fig, axes = plt.subplots(1, self.num_fields_per_plane, figsize=(16, 5))
-        fig.suptitle(f"1-Plane Prediction vs Target (Sample {sample_idx}, {split})", fontsize=16)
+        fig.suptitle(
+            f"1-Plane Prediction vs Target (Sample {sample_idx}, {split})", fontsize=16
+        )
 
         for field_idx in range(self.num_fields_per_plane):
             ax = axes[field_idx]

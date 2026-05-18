@@ -33,7 +33,9 @@ class VizRolloutError(Viz):
         )
         self.category = "viz_rollout_error"
 
-    def get_image(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0) -> Image.Image:
+    def get_image(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
+    ) -> Image.Image:
         """
         rollout_metrics: (n_samples, n_steps) - L2 norm of errors
         """
@@ -53,7 +55,13 @@ class VizRolloutError(Viz):
 
         # Plot individual trajectories with different colors
         for i in range(n_samples):
-            ax.plot(x_time, rollout_metrics[i, :n_steps], color=traj_colors[i], alpha=0.3, linewidth=1)
+            ax.plot(
+                x_time,
+                rollout_metrics[i, :n_steps],
+                color=traj_colors[i],
+                alpha=0.3,
+                linewidth=1,
+            )
 
         # Calculate and plot mean trajectory with contrasting color
         mean_metrics = np.mean(rollout_metrics[:n_samples, :n_steps], axis=0)
@@ -61,7 +69,13 @@ class VizRolloutError(Viz):
 
         # Use complementary color for mean and shaded area
         ax.plot(x_time, mean_metrics, color="black", linewidth=2.5, label="Mean Error")
-        ax.fill_between(x_time, mean_metrics - std_metrics, mean_metrics + std_metrics, color="black", alpha=0.3)
+        ax.fill_between(
+            x_time,
+            mean_metrics - std_metrics,
+            mean_metrics + std_metrics,
+            color="black",
+            alpha=0.3,
+        )
 
         ax.grid(True, linestyle="--", alpha=0.7)
         ax.set_title("Rollout Error", fontsize=14)
@@ -71,7 +85,9 @@ class VizRolloutError(Viz):
             ax.set_ylim(bottom=0)
 
         # Add epoch and step information
-        fig.suptitle(f"Epoch {trainer.current_epoch}, Step {trainer.global_step}", fontsize=16)
+        fig.suptitle(
+            f"Epoch {trainer.current_epoch}, Step {trainer.global_step}", fontsize=16
+        )
 
         # Optimize layout
         plt.tight_layout()

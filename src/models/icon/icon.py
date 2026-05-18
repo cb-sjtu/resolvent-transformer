@@ -41,14 +41,18 @@ class ICON(nn.Module):
         data_shape = pu.get_shape(data, exclude_batch=True)
         key = (pu.to_hashable_pytree(data_shape), mode, shot_num_min)
         if key not in self.basic_mask:
-            basic_mask, index_pos, out_mask = mu.build_matrices(data_shape, mode=mode, shot_num_min=shot_num_min)
+            basic_mask, index_pos, out_mask = mu.build_matrices(
+                data_shape, mode=mode, shot_num_min=shot_num_min
+            )
             device = next(self.parameters()).device
             self.basic_mask[key] = basic_mask.to(device)
             self.index_pos[key] = index_pos.to(device)
             self.out_mask[key] = out_mask.to(device)
         return self.basic_mask[key], self.index_pos[key], self.out_mask[key]
 
-    def _basic_forward(self, data, mode, index_pos, basic_mask, shot_num_min, need_weights=False):
+    def _basic_forward(
+        self, data, mode, index_pos, basic_mask, shot_num_min, need_weights=False
+    ):
         """
         basic forward of the model, with flexibility, no post-processing
         """
@@ -63,7 +67,9 @@ class ICON(nn.Module):
         sequence = self.pre_projection(sequence)  # [batchsize, total_len, model_dim]
 
         if self.function_pe is not None:
-            sequence = sequence + self.function_pe(index_pos)  # [batchsize, total_len, model_dim]
+            sequence = sequence + self.function_pe(
+                index_pos
+            )  # [batchsize, total_len, model_dim]
         else:
             pass  # no pe, see https://arxiv.org/pdf/2203.16634
 
@@ -83,7 +89,10 @@ class ICON(nn.Module):
         # so we need to invert the mask here
         if need_weights:
             sequence, weights = self.transformer(
-                sequence, mask=~basic_mask, src_key_padding_mask=data_mask, need_weights=True
+                sequence,
+                mask=~basic_mask,
+                src_key_padding_mask=data_mask,
+                need_weights=True,
             )
             sequence = self.post_projection(sequence)  # [batchsize, total_len, out_dim]
             return sequence, weights
@@ -98,7 +107,9 @@ class ICON(nn.Module):
         """
         training forward, predict demo_qoi_v from shot_num_min, and quest_qoi_v
         """
-        basic_mask, index_pos, out_mask = self._get_matrices(data, mode="train", shot_num_min=self.shot_num_min)
+        basic_mask, index_pos, out_mask = self._get_matrices(
+            data, mode="train", shot_num_min=self.shot_num_min
+        )
 
         sequence = self._basic_forward(
             data=data,
@@ -111,7 +122,9 @@ class ICON(nn.Module):
         sequence = sequence[:, out_mask, :]  # [batchsize, out_len, dim]
         if reshape:
             sequence = einops.rearrange(
-                sequence, "b (x qoi_len) dim -> b x qoi_len dim", qoi_len=data["demo_qoi_v"].shape[-2]
+                sequence,
+                "b (x qoi_len) dim -> b x qoi_len dim",
+                qoi_len=data["demo_qoi_v"].shape[-2],
             )  # [batchsize, x, qoi_len, dim], x depends on demo_num and shot_num_min
         return sequence
 
@@ -123,7 +136,12 @@ class ICON(nn.Module):
         basic_mask, index_pos, _ = self._get_matrices(data, mode="test", shot_num_min=0)
         if need_weights:
             sequence, weights = self._basic_forward(
-                data=data, mode="test", index_pos=index_pos, basic_mask=basic_mask, shot_num_min=None, need_weights=True
+                data=data,
+                mode="test",
+                index_pos=index_pos,
+                basic_mask=basic_mask,
+                shot_num_min=None,
+                need_weights=True,
             )
             quest_qoi_len = data["quest_qoi_mask"].shape[-1]
             sequence = sequence[:, None, -quest_qoi_len:, :]

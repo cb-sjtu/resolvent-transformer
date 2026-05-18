@@ -42,15 +42,21 @@ class Vicon(nn.Module):
             out_features=self.dim_channel * self.patch_resolution**2,
         )
 
-        self.patch_pos_encoding = nn.Parameter(torch.randn(self.patch_num_in * self.patch_num_in, self.dim_token))
-        self.func_pos_encoding = nn.Parameter(torch.randn(self.ex_num * 2, self.dim_token))
+        self.patch_pos_encoding = nn.Parameter(
+            torch.randn(self.patch_num_in * self.patch_num_in, self.dim_token)
+        )
+        self.func_pos_encoding = nn.Parameter(
+            torch.randn(self.ex_num * 2, self.dim_token)
+        )
 
         self.transformer = transformer
 
         mask = (
             1
             - build_alternating_block_lowtri_mask(
-                self.ex_num, self.patch_num_in * self.patch_num_in, self.patch_num_out * self.patch_num_out
+                self.ex_num,
+                self.patch_num_in * self.patch_num_in,
+                self.patch_num_out * self.patch_num_out,
             )
         ).bool()
         self.register_buffer("mask", mask)
@@ -60,7 +66,9 @@ class Vicon(nn.Module):
         d = self.dim_token
 
         # Prepare the pairs (f, g)
-        x = torch.cat((f[:, :, None, :, :], g[:, :, None, :, :]), dim=2)  # (bs, pairs, 2, c, h, w)
+        x = torch.cat(
+            (f[:, :, None, :, :], g[:, :, None, :, :]), dim=2
+        )  # (bs, pairs, 2, c, h, w)
         bs, pairs, _, c, h, w = x.shape
 
         feature = x.view(-1, *x.shape[-3:])  # (bs * pairs * 2, c, h, w)
@@ -74,20 +82,32 @@ class Vicon(nn.Module):
         feature = feature + self.patch_pos_encoding  # (bs * pairs * 2, p * p, d_model)
         feature = feature.view(bs, -1, p * p, d)  # (bs, pairs * 2, p * p, d_model)
 
-        func_pos_encoding = self.func_pos_encoding.view(1, -1, 1, d)  # (1, cfg["ex_num"] * 2, 1, d_model)
-        func_pos_encoding = func_pos_encoding[:, : pairs * 2, :, :]  # (1, pairs * 2, 1, d_model)
+        func_pos_encoding = self.func_pos_encoding.view(
+            1, -1, 1, d
+        )  # (1, cfg["ex_num"] * 2, 1, d_model)
+        func_pos_encoding = func_pos_encoding[
+            :, : pairs * 2, :, :
+        ]  # (1, pairs * 2, 1, d_model)
         feature = feature + func_pos_encoding  # (bs, pairs * 2, p * p, d_model)
         feature = feature.view(bs, -1, d)  # (bs, pairs * 2 * p * p, d_model)
 
-        mask = self.mask[: pairs * 2 * p * p, : pairs * 2 * p * p]  # (pairs * 2 * p * p, pairs * 2 * p * p)
-        feature = self.transformer(feature, mask=mask)  # (bs, pairs * 2 * p * p, d_model)
+        mask = self.mask[
+            : pairs * 2 * p * p, : pairs * 2 * p * p
+        ]  # (pairs * 2 * p * p, pairs * 2 * p * p)
+        feature = self.transformer(
+            feature, mask=mask
+        )  # (bs, pairs * 2 * p * p, d_model)
         feature = feature.view(bs, pairs, 2, p * p, d)  # (bs, pairs, 2, p * p, d_model)
         feature = feature[:, :, 0, :, :]  # (bs, pairs, p * p, d_model) the predicted g
 
         feature = self.post_proj(feature)  # (bs, pairs, p * p, c * h * w)
 
-        feature = feature.view(bs * pairs, *feature.shape[-2:])  # (bs * pairs, p * p, c * h * w)
-        feature = depatchify(feature, patch_num=p, c=c, h=h, w=w)  # (bs * pairs, c, ph, pw)
+        feature = feature.view(
+            bs * pairs, *feature.shape[-2:]
+        )  # (bs * pairs, p * p, c * h * w)
+        feature = depatchify(
+            feature, patch_num=p, c=c, h=h, w=w
+        )  # (bs * pairs, c, ph, pw)
         feature = feature.view(bs, pairs, *feature.shape[-3:])  # (bs, pairs, c, ph, pw)
 
         ex_pred = feature[:, :-1, :, :, :]  # (bs, ex_num, c, h, w)

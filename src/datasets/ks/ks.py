@@ -57,16 +57,22 @@ class KSDataset(Dataset):
         sample_idx = idx // self.n_windows_per_traj
         time_idx = idx % self.n_windows_per_traj + self.time_index_offset
         time_in_offset = time_idx + self.n_input_times
-        input_fields = torch.Tensor(self.file[self.split][self.dataset][sample_idx, time_idx:time_in_offset]).unsqueeze(
-            0
-        )
+        input_fields = torch.Tensor(
+            self.file[self.split][self.dataset][sample_idx, time_idx:time_in_offset]
+        ).unsqueeze(0)
         output_fields = torch.Tensor(
-            self.file[self.split][self.dataset][sample_idx, time_in_offset : (time_in_offset + self.n_output_times)]
+            self.file[self.split][self.dataset][
+                sample_idx, time_in_offset : (time_in_offset + self.n_output_times)
+            ]
         ).unsqueeze(0)
         x = torch.Tensor(self.file[self.split]["x"][sample_idx])
-        input_t = torch.Tensor(self.file[self.split]["t"][sample_idx, time_idx:time_in_offset])
+        input_t = torch.Tensor(
+            self.file[self.split]["t"][sample_idx, time_idx:time_in_offset]
+        )
         output_t = torch.Tensor(
-            self.file[self.split]["t"][sample_idx, time_in_offset : (time_in_offset + self.n_output_times)]
+            self.file[self.split]["t"][
+                sample_idx, time_in_offset : (time_in_offset + self.n_output_times)
+            ]
         )
         description = f"KS equation, input_t={input_t}, output_t={output_t[0:2]}..., x_shape={x.shape}"
 

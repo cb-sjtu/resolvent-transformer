@@ -36,7 +36,9 @@ class NopRolloutLitModule(BaseLitModule):
 
         self.valid_metrics = torch.nn.ModuleDict(
             {
-                self.cfg.data.valid[key].name: MetricCollection({k: MeanMetric() for k in self.metric_names})
+                self.cfg.data.valid[key].name: MetricCollection(
+                    {k: MeanMetric() for k in self.metric_names}
+                )
                 for key in self.cfg.data.valid
             }
         )
@@ -121,9 +123,16 @@ class NopRolloutLitModule(BaseLitModule):
         Returns:
             PyTree containing metrics with batch dimension
         """
-        metrics = einops.reduce(errors["rollout_errors"] ** 2, "b t ... -> b t", "mean") ** 0.5  # L2 norm, keep t dim
-        metrics_step_0 = einops.reduce(errors["error_step_0"] ** 2, "b ... -> b", "mean") ** 0.5
-        metrics_step_1 = einops.reduce(errors["error_step_1"] ** 2, "b ... -> b", "mean") ** 0.5
+        metrics = (
+            einops.reduce(errors["rollout_errors"] ** 2, "b t ... -> b t", "mean")
+            ** 0.5
+        )  # L2 norm, keep t dim
+        metrics_step_0 = (
+            einops.reduce(errors["error_step_0"] ** 2, "b ... -> b", "mean") ** 0.5
+        )
+        metrics_step_1 = (
+            einops.reduce(errors["error_step_1"] ** 2, "b ... -> b", "mean") ** 0.5
+        )
         return {
             "rollout_error": metrics,
             "error_step_0": metrics_step_0,

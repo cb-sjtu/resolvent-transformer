@@ -7,7 +7,13 @@ import einops
 import torch
 import torch.nn as nn
 
-from .swin_transformer import PatchEmbed2D, PatchExpand2D, PatchMerging2D, SwinTransformerBlock2D, TemporalAttention
+from .swin_transformer import (
+    PatchEmbed2D,
+    PatchExpand2D,
+    PatchMerging2D,
+    SwinTransformerBlock2D,
+    TemporalAttention,
+)
 
 # 简化版本：直接使用原始SwinTransformer2DWithMerging的逻辑，只是将通道数改为12
 
@@ -57,7 +63,9 @@ class SwinTransformer3PlaneSimple(nn.Module):
             window_size = [7, 7]
 
         # Validate depths parameter
-        assert len(depths) % 2 == 1, "depths must have odd length for symmetric encoder-decoder structure"
+        assert len(depths) % 2 == 1, (
+            "depths must have odd length for symmetric encoder-decoder structure"
+        )
 
         self.input_shape = input_shape
         self.sequence_length = sequence_length
@@ -92,7 +100,9 @@ class SwinTransformer3PlaneSimple(nn.Module):
         )
 
         # Temporal position embedding
-        self.temporal_pos_embed = nn.Parameter(torch.zeros(1, sequence_length, self.num_channels, 1, 1))
+        self.temporal_pos_embed = nn.Parameter(
+            torch.zeros(1, sequence_length, self.num_channels, 1, 1)
+        )
         nn.init.trunc_normal_(self.temporal_pos_embed, std=0.02)
 
         # Enhanced patch embedding with channel attention
@@ -117,8 +127,14 @@ class SwinTransformer3PlaneSimple(nn.Module):
         self.pos_drop = nn.Dropout(drop_rate)
 
         # Stochastic depth
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths_encoder))]
-        dpr_decoder = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths_decoder))]
+        dpr = [
+            x.item()
+            for x in torch.linspace(0, drop_path_rate, sum(self.depths_encoder))
+        ]
+        dpr_decoder = [
+            x.item()
+            for x in torch.linspace(0, drop_path_rate, sum(self.depths_decoder))
+        ]
 
         # Build encoder layers
         self.layers = nn.ModuleList()
@@ -131,7 +147,9 @@ class SwinTransformer3PlaneSimple(nn.Module):
                         dim=int(embed_dim * 2**i_layer),
                         num_heads=num_heads,
                         window_size=window_size,
-                        shift_size=(0, 0) if (i % 2 == 0) else tuple(ws // 2 for ws in window_size),
+                        shift_size=(0, 0)
+                        if (i % 2 == 0)
+                        else tuple(ws // 2 for ws in window_size),
                         mlp_ratio=mlp_ratio,
                         qkv_bias=qkv_bias,
                         drop=drop_rate,
@@ -147,7 +165,10 @@ class SwinTransformer3PlaneSimple(nn.Module):
             # Add patch merging layer (except for the last layer)
             if i_layer < self.num_layers - 1:
                 downsample = PatchMerging2D(
-                    input_resolution=(self.patch_H // (2**i_layer), self.patch_W // (2**i_layer)),
+                    input_resolution=(
+                        self.patch_H // (2**i_layer),
+                        self.patch_W // (2**i_layer),
+                    ),
                     dim=int(embed_dim * 2**i_layer),
                     norm_layer=norm_layer,
                 )
@@ -162,10 +183,13 @@ class SwinTransformer3PlaneSimple(nn.Module):
 
         for i_layer in range(self.num_layers_decoder):
             # After upsampling, dimension is halved, then doubled by concatenation
-            dim_after_upsample = int(embed_dim * 2 ** (self.num_encoder_layers - 1 - i_layer)) // 2
+            dim_after_upsample = (
+                int(embed_dim * 2 ** (self.num_encoder_layers - 1 - i_layer)) // 2
+            )
             concat_linear = (
                 nn.Linear(
-                    2 * dim_after_upsample,  # Input: concatenated features (upsampled + skip)
+                    2
+                    * dim_after_upsample,  # Input: concatenated features (upsampled + skip)
                     dim_after_upsample,  # Output: back to upsampled dimension
                 )
                 if i_layer < self.num_layers_decoder - 1
@@ -179,7 +203,9 @@ class SwinTransformer3PlaneSimple(nn.Module):
                         dim=dim_after_upsample,
                         num_heads=num_heads,
                         window_size=window_size,
-                        shift_size=(0, 0) if (i % 2 == 0) else tuple(ws // 2 for ws in window_size),
+                        shift_size=(0, 0)
+                        if (i % 2 == 0)
+                        else tuple(ws // 2 for ws in window_size),
                         mlp_ratio=mlp_ratio,
                         qkv_bias=qkv_bias,
                         drop=drop_rate,
@@ -211,7 +237,9 @@ class SwinTransformer3PlaneSimple(nn.Module):
         # Final patch expanding layer
         if self.final_upsample == "expand_first":
             # Calculate final dimension after all processing
-            final_dim = int(embed_dim * 2 ** (self.num_encoder_layers - self.num_layers_decoder))
+            final_dim = int(
+                embed_dim * 2 ** (self.num_encoder_layers - self.num_layers_decoder)
+            )
             self.up = PatchExpand2D(
                 input_resolution=(self.patch_H, self.patch_W),
                 dim=final_dim,
@@ -237,13 +265,19 @@ class SwinTransformer3PlaneSimple(nn.Module):
             BT, C, H, W = x.shape
             B = BT // (self.sequence_length * self.num_channels)
             T = self.sequence_length
-            x = einops.rearrange(x, "(b t c) h w -> b t c h w", b=B, t=T, c=self.num_channels)
+            x = einops.rearrange(
+                x, "(b t c) h w -> b t c h w", b=B, t=T, c=self.num_channels
+            )
         else:
             B, T, C, H, W = x.shape
 
-        assert self.sequence_length == T, f"Expected sequence length {self.sequence_length}, got {T}"
+        assert self.sequence_length == T, (
+            f"Expected sequence length {self.sequence_length}, got {T}"
+        )
         assert self.num_channels == C, f"Expected {self.num_channels} channels, got {C}"
-        assert tuple(self.input_shape) == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
+        assert tuple(self.input_shape) == (H, W), (
+            f"Expected shape {self.input_shape}, got {(H, W)}"
+        )
 
         # Add temporal position embedding
         x = x + self.temporal_pos_embed  # (B, T, C=12, H, W)
@@ -254,7 +288,9 @@ class SwinTransformer3PlaneSimple(nn.Module):
 
         # Enhanced patch embedding with channel attention
         # Input: (B, T*C, H, W) -> Output: (B, T, N, embed_dim)
-        x, (patch_H, patch_W) = self.patch_embed(x, sequence_length=self.sequence_length)
+        x, (patch_H, patch_W) = self.patch_embed(
+            x, sequence_length=self.sequence_length
+        )
         x = self.pos_drop(x)
 
         # Apply temporal attention across T dimension
@@ -268,12 +304,17 @@ class SwinTransformer3PlaneSimple(nn.Module):
         x_downsample = []
 
         # Encoder
-        for i_layer, (layer, downsample) in enumerate(zip(self.layers, self.downsample_layers, strict=False)):
+        for i_layer, (layer, downsample) in enumerate(
+            zip(self.layers, self.downsample_layers, strict=False)
+        ):
             # Store current features for skip connection
             x_downsample.append(x)
 
             # Apply transformer blocks
-            current_resolution = (self.patch_H // (2**i_layer), self.patch_W // (2**i_layer))
+            current_resolution = (
+                self.patch_H // (2**i_layer),
+                self.patch_W // (2**i_layer),
+            )
             for block in layer:
                 x = block(x, current_resolution[0], current_resolution[1])
 
@@ -283,7 +324,12 @@ class SwinTransformer3PlaneSimple(nn.Module):
 
         # Decoder with skip connections
         for i_layer, (layer_up, layer, concat_back_dim) in enumerate(
-            zip(self.upsample_layers, self.layers_decoder, self.concat_back_dim, strict=False)
+            zip(
+                self.upsample_layers,
+                self.layers_decoder,
+                self.concat_back_dim,
+                strict=False,
+            )
         ):
             # Apply transformer blocks first
             current_resolution = (
@@ -297,7 +343,9 @@ class SwinTransformer3PlaneSimple(nn.Module):
             if i_layer < self.num_layers_decoder - 1:
                 x = layer_up(x)
                 # Concatenate with encoder features (skip connection)
-                skip_idx = self.num_encoder_layers - 2 - i_layer  # Correct skip connection index
+                skip_idx = (
+                    self.num_encoder_layers - 2 - i_layer
+                )  # Correct skip connection index
                 if skip_idx >= 0:
                     x = torch.cat([x, x_downsample[skip_idx]], -1)
                     x = concat_back_dim(x)

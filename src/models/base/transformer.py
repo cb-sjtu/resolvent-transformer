@@ -16,7 +16,16 @@ from torch.nn import MultiheadAttention as BaseMultiheadAttention
 
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads, dropout, batch_first=True, sdpa="default", device=None, dtype=None):
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        dropout,
+        batch_first=True,
+        sdpa="default",
+        device=None,
+        dtype=None,
+    ):
         """
         batch_first: useless, we always use batch_first=True
         """
@@ -25,7 +34,9 @@ class MultiheadAttention(nn.Module):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
+        assert self.head_dim * num_heads == embed_dim, (
+            "embed_dim must be divisible by num_heads"
+        )
 
         self.sdpa = sdpa
 
@@ -41,7 +52,14 @@ class MultiheadAttention(nn.Module):
         self.dropout = dropout
 
     def forward(
-        self, query, key, value, attn_mask=None, key_padding_mask=None, need_weights=False, average_attn_weights=False
+        self,
+        query,
+        key,
+        value,
+        attn_mask=None,
+        key_padding_mask=None,
+        need_weights=False,
+        average_attn_weights=False,
     ):
         """
         attn_mask: (batch_size, num_heads, query_len, key_len) or (query_len, key_len) which can be broadcasted
@@ -50,9 +68,13 @@ class MultiheadAttention(nn.Module):
         batch_size, seq_len, _ = query.shape
 
         # Project inputs to Q, K, V using einops
-        q = einops.rearrange(self.q_proj(query), "b s (h d) -> b h s d", h=self.num_heads)
+        q = einops.rearrange(
+            self.q_proj(query), "b s (h d) -> b h s d", h=self.num_heads
+        )
         k = einops.rearrange(self.k_proj(key), "b s (h d) -> b h s d", h=self.num_heads)
-        v = einops.rearrange(self.v_proj(value), "b s (h d) -> b h s d", h=self.num_heads)
+        v = einops.rearrange(
+            self.v_proj(value), "b s (h d) -> b h s d", h=self.num_heads
+        )
 
         # Handle attention masks
         if key_padding_mask is None and attn_mask is None:
@@ -62,7 +84,9 @@ class MultiheadAttention(nn.Module):
         elif key_padding_mask is not None and attn_mask is None:
             effective_attn_mask = einops.rearrange(key_padding_mask, "b s -> b 1 1 s")
         elif key_padding_mask is not None and attn_mask is not None:
-            effective_attn_mask = attn_mask * einops.rearrange(key_padding_mask, "b s -> b 1 1 s")
+            effective_attn_mask = attn_mask * einops.rearrange(
+                key_padding_mask, "b s -> b 1 1 s"
+            )
         else:
             raise ValueError("Invalid input")
 
@@ -71,7 +95,9 @@ class MultiheadAttention(nn.Module):
         else:
             raise ValueError(f"Unknown scaled dot-product attention: {self.sdpa}")
 
-        attn_output = attn_fn(q, k, v, attn_mask=effective_attn_mask, dropout_p=self.dropout)
+        attn_output = attn_fn(
+            q, k, v, attn_mask=effective_attn_mask, dropout_p=self.dropout
+        )
 
         # Concatenate heads and project output using einops
         attn_output = einops.rearrange(attn_output, "b h s d -> b s (h d)")
@@ -93,11 +119,20 @@ class MultiheadAttention(nn.Module):
 def get_mha(mha, d_model, nhead, dropout, factory_kwargs):
     if mha == "built-in":
         attn = BaseMultiheadAttention(
-            embed_dim=d_model, num_heads=nhead, dropout=dropout, batch_first=True, **factory_kwargs
+            embed_dim=d_model,
+            num_heads=nhead,
+            dropout=dropout,
+            batch_first=True,
+            **factory_kwargs,
         )
     elif mha == "custom":
         attn = MultiheadAttention(
-            embed_dim=d_model, num_heads=nhead, dropout=dropout, batch_first=True, sdpa="default", **factory_kwargs
+            embed_dim=d_model,
+            num_heads=nhead,
+            dropout=dropout,
+            batch_first=True,
+            sdpa="default",
+            **factory_kwargs,
         )
     else:
         raise ValueError(f"Unknown multi-head attention: {mha}")
@@ -106,7 +141,17 @@ def get_mha(mha, d_model, nhead, dropout, factory_kwargs):
 
 
 class TransformerEncoderLayer(nn.Module):
-    def __init__(self, d_model, nhead, dim_feedforward, dropout=0.0, ff=True, mha="built-in", device=None, dtype=None):
+    def __init__(
+        self,
+        d_model,
+        nhead,
+        dim_feedforward,
+        dropout=0.0,
+        ff=True,
+        mha="built-in",
+        device=None,
+        dtype=None,
+    ):
         super().__init__()
 
         factory_kwargs = {"device": device, "dtype": dtype}
@@ -126,7 +171,13 @@ class TransformerEncoderLayer(nn.Module):
             self.dropout3 = Dropout(dropout)
             self.activation = nn.GELU()
 
-    def forward(self, src: torch.Tensor, src_mask=None, src_key_padding_mask=None, need_weights=False):
+    def forward(
+        self,
+        src: torch.Tensor,
+        src_mask=None,
+        src_key_padding_mask=None,
+        need_weights=False,
+    ):
         x = src
         # fmt: off
         if need_weights:
@@ -174,7 +225,9 @@ class TransformerEncoder(nn.Module):
         weights = []
         for i in range(self.num_layers):
             if need_weights:
-                x, weight = self.layers[i](x, mask, src_key_padding_mask, need_weights=True)
+                x, weight = self.layers[i](
+                    x, mask, src_key_padding_mask, need_weights=True
+                )
                 weights.append(weight)
             else:
                 x = self.layers[i](x, mask, src_key_padding_mask, need_weights=False)
@@ -184,7 +237,17 @@ class TransformerEncoder(nn.Module):
 
 
 class TransformerDecoderLayer(nn.Module):
-    def __init__(self, d_model, nhead, dim_feedforward, dropout=0.0, ff=True, mha="built-in", device=None, dtype=None):
+    def __init__(
+        self,
+        d_model,
+        nhead,
+        dim_feedforward,
+        dropout=0.0,
+        ff=True,
+        mha="built-in",
+        device=None,
+        dtype=None,
+    ):
         """
         Transformer decoder layer, no self attention
         """

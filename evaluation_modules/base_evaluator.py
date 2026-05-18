@@ -60,14 +60,18 @@ class BaseFlowEvaluator:
             # Extract runs directory path from checkpoint
             # e.g., "/path/logs/flow_swin_2d/runs/2025-09-12_23-16-43-463283/checkpoints/step_30000.ckpt"
             # -> "/path/logs/flow_swin_2d/runs/2025-09-12_23-16-43-463283"
-            checkpoint_dir = Path(checkpoint_path).parent.parent  # Remove "/checkpoints/step_30000.ckpt"
+            checkpoint_dir = Path(
+                checkpoint_path
+            ).parent.parent  # Remove "/checkpoints/step_30000.ckpt"
             self.output_dir = checkpoint_dir / "evaluation_results"
             self.output_dir.mkdir(exist_ok=True, parents=True)
         else:
             # Fallback to custom output directory
             self.output_dir = create_output_directory(output_base_dir)
 
-        self.predictions_dir = self.output_dir / "predictions" if save_predictions else None
+        self.predictions_dir = (
+            self.output_dir / "predictions" if save_predictions else None
+        )
 
         # Initialize components
         self.time_monitor = TimeSeriesMonitor(monitor_points)
@@ -99,7 +103,9 @@ class BaseFlowEvaluator:
 
         try:
             self.wandb_run = wandb.init(
-                project="flow-evaluation", name=f"eval_{Path(self.checkpoint_path).stem}", job_type="evaluation"
+                project="flow-evaluation",
+                name=f"eval_{Path(self.checkpoint_path).stem}",
+                job_type="evaluation",
             )
         except Exception as e:
             print(f"Failed to initialize wandb: {e}")
@@ -115,7 +121,12 @@ class BaseFlowEvaluator:
         print(f"Updated {len(points)} monitoring points")
 
     def record_timestep_data(
-        self, pred_data: torch.Tensor, split: str, mode: str, timestep: int, gt_data: torch.Tensor = None
+        self,
+        pred_data: torch.Tensor,
+        split: str,
+        mode: str,
+        timestep: int,
+        gt_data: torch.Tensor = None,
     ):
         """Record prediction and ground truth data for time series monitoring."""
         self.time_monitor.record_timestep(pred_data, split, mode, timestep, gt_data)

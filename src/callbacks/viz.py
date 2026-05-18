@@ -34,7 +34,9 @@ class Viz(L.Callback):
         self.test_batches_log = eval(test_batches_log)
         self.category = "viz_base"  # override this in the child class
 
-    def get_image(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0) -> Image.Image:
+    def get_image(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
+    ) -> Image.Image:
         """
         This is just a dummy function to test the callback and show basic usage.
         you can inherit this callback class and override this function.
@@ -42,21 +44,34 @@ class Viz(L.Callback):
         fig = plt.figure(figsize=(4, 3))
         ax = fig.add_subplot(111)
         ax.plot([0, 1, 2])
-        img = vu.merge_images([[fig]])  # merge a list of list of matplotlib plots or PIL images
+        img = vu.merge_images(
+            [[fig]]
+        )  # merge a list of list of matplotlib plots or PIL images
         plt.close("all")
         return img  # PIL image
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
+    def on_validation_batch_end(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
+    ):
         if batch_idx in self.valid_batches_log or batch_idx in self.valid_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
-            img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
+            img = self.get_image(
+                trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
+            )
             if img is None:
                 return
 
         if batch_idx in self.valid_batches_local:
-            dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
+            dirpath = (
+                Path(self.dirpath)
+                / "valid"
+                / f"step_{trainer.global_step}"
+                / dataset_name
+            )
             dirpath.mkdir(parents=True, exist_ok=True)
-            img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
+            img.save(
+                dirpath / f"{batch_idx}_rank{trainer.global_rank}.png"
+            )  # save image in all processes
 
         if batch_idx in self.valid_batches_log:
             self.log_image(
@@ -70,17 +85,28 @@ class Viz(L.Callback):
                 f"_{batch_idx}_rank{trainer.global_rank}.png",
             )
 
-    def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
+    def on_test_batch_end(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
+    ):
         if batch_idx in self.test_batches_log or batch_idx in self.test_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
-            img = self.get_image(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
+            img = self.get_image(
+                trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
+            )
             if img is None:
                 return
 
         if batch_idx in self.test_batches_local:
-            dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
+            dirpath = (
+                Path(self.dirpath)
+                / "test"
+                / f"step_{trainer.global_step}"
+                / dataset_name
+            )
             dirpath.mkdir(parents=True, exist_ok=True)
-            img.save(dirpath / f"{batch_idx}_rank{trainer.global_rank}.png")  # save image in all processes
+            img.save(
+                dirpath / f"{batch_idx}_rank{trainer.global_rank}.png"
+            )  # save image in all processes
 
         if batch_idx in self.test_batches_log:
             self.log_image(
@@ -103,7 +129,9 @@ class Viz(L.Callback):
     ):
         for logger in trainer.loggers:
             if isinstance(logger, loggers.WandbLogger):
-                logger.log_image(key=f"{self.category}/{key}", images=[img], step=trainer.global_step)
+                logger.log_image(
+                    key=f"{self.category}/{key}", images=[img], step=trainer.global_step
+                )
             elif isinstance(logger, loggers.TensorBoardLogger):
                 # do whatever the tensorboard logger supports
                 pass

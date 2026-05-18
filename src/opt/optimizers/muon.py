@@ -58,7 +58,9 @@ def zeropower_via_newtonschulz5(G: torch.Tensor, steps: int):
     # Perform the NS iterations
     for _ in range(steps):
         A = X @ X.mT
-        B = b * A + c * A @ A  # adapted from suggestion by @jxbz, @leloykun, and @YouJiacheng
+        B = (
+            b * A + c * A @ A
+        )  # adapted from suggestion by @jxbz, @leloykun, and @YouJiacheng
         X = a * X + B @ X
 
     if G.size(0) > G.size(1):
@@ -233,13 +235,23 @@ class Muon(torch.optim.Optimizer):
 
     @classmethod
     def split_muon_adamw_params(
-        cls, net: nn.Module, criterion: Callable[[str, nn.Parameter], bool] = is_muon_param
+        cls,
+        net: nn.Module,
+        criterion: Callable[[str, nn.Parameter], bool] = is_muon_param,
     ) -> tuple[list[nn.Parameter], ...]:
         """
         Extract Muon parameters from named parameters.
         This is useful for debugging or inspecting the parameters that will be optimized by Muon.
         """
-        muon_params = [p for name, p in net.named_parameters() if p.requires_grad and criterion(name, p)]
-        adamw_params = [p for name, p in net.named_parameters() if p.requires_grad and not criterion(name, p)]
+        muon_params = [
+            p
+            for name, p in net.named_parameters()
+            if p.requires_grad and criterion(name, p)
+        ]
+        adamw_params = [
+            p
+            for name, p in net.named_parameters()
+            if p.requires_grad and not criterion(name, p)
+        ]
 
         return muon_params, adamw_params

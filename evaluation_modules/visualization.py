@@ -58,7 +58,10 @@ class FlowVisualizer:
         # Create figure with 5 rows: u, v, w, magnitude, error_magnitude
         num_channels = min(pred_np.shape[0], len(channel_names))
         fig, axes = plt.subplots(5, 2, figsize=(10, 15))
-        fig.suptitle(f"Prediction vs Ground Truth - Sample {sample_idx}, Step {timestep}", fontsize=14)
+        fig.suptitle(
+            f"Prediction vs Ground Truth - Sample {sample_idx}, Step {timestep}",
+            fontsize=14,
+        )
 
         # Plot u, v, w channels
         for c in range(min(3, num_channels)):
@@ -71,13 +74,17 @@ class FlowVisualizer:
             vmax = max(pred_channel.max(), target_channel.max())
 
             # Ground truth
-            im1 = axes[c, 0].imshow(target_channel, cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax)
+            im1 = axes[c, 0].imshow(
+                target_channel, cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax
+            )
             axes[c, 0].set_title(f"{channel_name.upper()} - Ground Truth")
             axes[c, 0].axis("off")
             plt.colorbar(im1, ax=axes[c, 0], fraction=0.046, pad=0.04)
 
             # Prediction
-            im2 = axes[c, 1].imshow(pred_channel, cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax)
+            im2 = axes[c, 1].imshow(
+                pred_channel, cmap="viridis", aspect="auto", vmin=vmin, vmax=vmax
+            )
             axes[c, 1].set_title(f"{channel_name.upper()} - Prediction")
             axes[c, 1].axis("off")
             plt.colorbar(im2, ax=axes[c, 1], fraction=0.046, pad=0.04)
@@ -91,20 +98,26 @@ class FlowVisualizer:
             mag_vmax = max(pred_mag.max(), target_mag.max())
 
             # Ground truth magnitude
-            im3 = axes[3, 0].imshow(target_mag, cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax)
+            im3 = axes[3, 0].imshow(
+                target_mag, cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax
+            )
             axes[3, 0].set_title("Magnitude - Ground Truth")
             axes[3, 0].axis("off")
             plt.colorbar(im3, ax=axes[3, 0], fraction=0.046, pad=0.04)
 
             # Predicted magnitude
-            im4 = axes[3, 1].imshow(pred_mag, cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax)
+            im4 = axes[3, 1].imshow(
+                pred_mag, cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax
+            )
             axes[3, 1].set_title("Magnitude - Prediction")
             axes[3, 1].axis("off")
             plt.colorbar(im4, ax=axes[3, 1], fraction=0.046, pad=0.04)
 
             # Magnitude error
             mag_error = np.abs(target_mag - pred_mag)
-            im5 = axes[4, 0].imshow(mag_error, cmap="Reds", aspect="auto", vmin=0, vmax=mag_error.max())
+            im5 = axes[4, 0].imshow(
+                mag_error, cmap="Reds", aspect="auto", vmin=0, vmax=mag_error.max()
+            )
             axes[4, 0].set_title("Magnitude Error")
             axes[4, 0].axis("off")
             plt.colorbar(im5, ax=axes[4, 0], fraction=0.046, pad=0.04)
@@ -112,9 +125,23 @@ class FlowVisualizer:
             # Error statistics
             mae = np.mean(mag_error)
             rmse = np.sqrt(np.mean(mag_error**2))
-            axes[4, 1].text(0.1, 0.7, f"MAE: {mae:.5f}", transform=axes[4, 1].transAxes, fontsize=12)
-            axes[4, 1].text(0.1, 0.5, f"RMSE: {rmse:.5f}", transform=axes[4, 1].transAxes, fontsize=12)
-            axes[4, 1].text(0.1, 0.3, f"Max Error: {mag_error.max():.5f}", transform=axes[4, 1].transAxes, fontsize=12)
+            axes[4, 1].text(
+                0.1, 0.7, f"MAE: {mae:.5f}", transform=axes[4, 1].transAxes, fontsize=12
+            )
+            axes[4, 1].text(
+                0.1,
+                0.5,
+                f"RMSE: {rmse:.5f}",
+                transform=axes[4, 1].transAxes,
+                fontsize=12,
+            )
+            axes[4, 1].text(
+                0.1,
+                0.3,
+                f"Max Error: {mag_error.max():.5f}",
+                transform=axes[4, 1].transAxes,
+                fontsize=12,
+            )
             axes[4, 1].set_title("Error Statistics")
             axes[4, 1].axis("off")
         else:
@@ -126,7 +153,9 @@ class FlowVisualizer:
         plt.tight_layout()
 
         if save_plot:
-            plot_path = self.plots_dir / f"comparison_sample_{sample_idx}_step_{timestep}.png"
+            plot_path = (
+                self.plots_dir / f"comparison_sample_{sample_idx}_step_{timestep}.png"
+            )
             plt.savefig(plot_path, dpi=150, bbox_inches="tight")
             plt.close(fig)
             return plot_path
@@ -165,7 +194,9 @@ class FlowVisualizer:
         if num_steps == 1:
             axes = axes.reshape(3, 1)
 
-        fig.suptitle(f"Multi-step Prediction Evolution - Sample {sample_idx}", fontsize=16)
+        fig.suptitle(
+            f"Multi-step Prediction Evolution - Sample {sample_idx}", fontsize=16
+        )
 
         # Compute global ranges for consistent coloring
         all_pred_mag = []
@@ -196,18 +227,32 @@ class FlowVisualizer:
                 truth_mag = compute_velocity_magnitude(truth_np)
 
                 # Ground truth
-                im1 = axes[0, i].imshow(truth_mag, cmap="plasma", aspect="auto", vmin=global_vmin, vmax=global_vmax)
+                im1 = axes[0, i].imshow(
+                    truth_mag,
+                    cmap="plasma",
+                    aspect="auto",
+                    vmin=global_vmin,
+                    vmax=global_vmax,
+                )
                 axes[0, i].set_title(f"Truth t+{i + 1}")
                 axes[0, i].axis("off")
 
                 # Prediction
-                im2 = axes[1, i].imshow(pred_mag, cmap="plasma", aspect="auto", vmin=global_vmin, vmax=global_vmax)
+                im2 = axes[1, i].imshow(
+                    pred_mag,
+                    cmap="plasma",
+                    aspect="auto",
+                    vmin=global_vmin,
+                    vmax=global_vmax,
+                )
                 axes[1, i].set_title(f"Pred t+{i + 1}")
                 axes[1, i].axis("off")
 
                 # Error
                 error = np.abs(truth_mag - pred_mag)
-                im3 = axes[2, i].imshow(error, cmap="Reds", aspect="auto", vmin=0, vmax=error.max())
+                im3 = axes[2, i].imshow(
+                    error, cmap="Reds", aspect="auto", vmin=0, vmax=error.max()
+                )
                 mae = np.mean(error)
                 axes[2, i].set_title(f"Error (MAE: {mae:.4f})")
                 axes[2, i].axis("off")
@@ -225,7 +270,9 @@ class FlowVisualizer:
 
         return plot_path
 
-    def plot_error_evolution(self, errors: list[float], error_type: str = "MAE", save_plot: bool = True) -> Path | None:
+    def plot_error_evolution(
+        self, errors: list[float], error_type: str = "MAE", save_plot: bool = True
+    ) -> Path | None:
         """
         Plot error evolution over time steps.
 
@@ -251,7 +298,13 @@ class FlowVisualizer:
         if len(errors) > 2:
             z = np.polyfit(timesteps, errors, 1)
             p = np.poly1d(z)
-            ax.plot(timesteps, p(timesteps), "--", alpha=0.7, label=f"Trend (slope: {z[0]:.6f})")
+            ax.plot(
+                timesteps,
+                p(timesteps),
+                "--",
+                alpha=0.7,
+                label=f"Trend (slope: {z[0]:.6f})",
+            )
             ax.legend()
 
         plt.tight_layout()
@@ -265,6 +318,8 @@ class FlowVisualizer:
             plt.show()
             return None
 
-    def log_plot_to_wandb(self, wandb_logger, plot_path: Path, key: str, caption: str = None):
+    def log_plot_to_wandb(
+        self, wandb_logger, plot_path: Path, key: str, caption: str = None
+    ):
         """Log plot to wandb if available."""
         log_image_to_wandb(wandb_logger, key, plot_path, caption)

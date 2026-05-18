@@ -22,7 +22,9 @@ def compute_velocity_magnitude(velocity_data):
         velocity_data = velocity_data.cpu().numpy()
 
     if velocity_data.ndim != 3 or velocity_data.shape[0] < 3:
-        raise ValueError(f"Expected 3D array with at least 3 channels, got shape {velocity_data.shape}")
+        raise ValueError(
+            f"Expected 3D array with at least 3 channels, got shape {velocity_data.shape}"
+        )
 
     u, v, w = velocity_data[0], velocity_data[1], velocity_data[2]
     magnitude = np.sqrt(u**2 + v**2 + w**2)

@@ -17,7 +17,9 @@ from tqdm import tqdm
 def compute_velocity_magnitude(velocity_data):
     """Compute velocity magnitude from u, v, w components."""
     if velocity_data.ndim != 3 or velocity_data.shape[0] < 3:
-        raise ValueError(f"Expected 3D array with at least 3 channels, got shape {velocity_data.shape}")
+        raise ValueError(
+            f"Expected 3D array with at least 3 channels, got shape {velocity_data.shape}"
+        )
 
     u, v, w = velocity_data[0], velocity_data[1], velocity_data[2]
     magnitude = np.sqrt(u**2 + v**2 + w**2)
@@ -52,7 +54,9 @@ def create_all_frames_video(
 
     # Pre-compute global ranges by sampling every 10th frame
     print("Computing global color ranges from sample frames...")
-    sample_indices = range(0, total_frames, max(1, total_frames // 100))  # Sample 100 frames
+    sample_indices = range(
+        0, total_frames, max(1, total_frames // 100)
+    )  # Sample 100 frames
 
     all_u, all_v, all_w, all_mag = [], [], [], []
 
@@ -90,22 +94,30 @@ def create_all_frames_video(
         first_magnitude = compute_velocity_magnitude(first_data)
 
     # Initialize plots
-    im_u = axes[0, 0].imshow(first_data[0], cmap="viridis", aspect="auto", vmin=u_vmin, vmax=u_vmax)
+    im_u = axes[0, 0].imshow(
+        first_data[0], cmap="viridis", aspect="auto", vmin=u_vmin, vmax=u_vmax
+    )
     axes[0, 0].set_title("u velocity")
     axes[0, 0].axis("off")
     plt.colorbar(im_u, ax=axes[0, 0], fraction=0.046, pad=0.04)
 
-    im_v = axes[0, 1].imshow(first_data[1], cmap="viridis", aspect="auto", vmin=v_vmin, vmax=v_vmax)
+    im_v = axes[0, 1].imshow(
+        first_data[1], cmap="viridis", aspect="auto", vmin=v_vmin, vmax=v_vmax
+    )
     axes[0, 1].set_title("v velocity")
     axes[0, 1].axis("off")
     plt.colorbar(im_v, ax=axes[0, 1], fraction=0.046, pad=0.04)
 
-    im_w = axes[1, 0].imshow(first_data[2], cmap="viridis", aspect="auto", vmin=w_vmin, vmax=w_vmax)
+    im_w = axes[1, 0].imshow(
+        first_data[2], cmap="viridis", aspect="auto", vmin=w_vmin, vmax=w_vmax
+    )
     axes[1, 0].set_title("w velocity")
     axes[1, 0].axis("off")
     plt.colorbar(im_w, ax=axes[1, 0], fraction=0.046, pad=0.04)
 
-    im_mag = axes[1, 1].imshow(first_magnitude, cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax)
+    im_mag = axes[1, 1].imshow(
+        first_magnitude, cmap="plasma", aspect="auto", vmin=mag_vmin, vmax=mag_vmax
+    )
     axes[1, 1].set_title("Velocity Magnitude")
     axes[1, 1].axis("off")
     plt.colorbar(im_mag, ax=axes[1, 1], fraction=0.046, pad=0.04)
@@ -126,13 +138,17 @@ def create_all_frames_video(
         im_mag.set_data(magnitude)
 
         # Update time text
-        time_text.set_text(f"Frame: {frame_idx + 1}/{total_frames} | Time: {frame_idx / fps:.1f}s")
+        time_text.set_text(
+            f"Frame: {frame_idx + 1}/{total_frames} | Time: {frame_idx / fps:.1f}s"
+        )
 
         return [im_u, im_v, im_w, im_mag, time_text]
 
     # Create animation
     print(f"Creating animation with {total_frames} frames...")
-    anim = animation.FuncAnimation(fig, animate, frames=total_frames, interval=1000 // fps, blit=True, repeat=True)
+    anim = animation.FuncAnimation(
+        fig, animate, frames=total_frames, interval=1000 // fps, blit=True, repeat=True
+    )
 
     # Try to save as MP4 first, then GIF
     video_path = os.path.join(output_dir, f"flow_all_{total_frames}_frames.mp4")
@@ -141,7 +157,10 @@ def create_all_frames_video(
         print(f"Saving MP4 video: {video_path}")
         writer = animation.FFMpegWriter(
             fps=fps,
-            metadata=dict(artist="Flow Visualization", title=f"Flow Evolution {total_frames} frames"),
+            metadata=dict(
+                artist="Flow Visualization",
+                title=f"Flow Evolution {total_frames} frames",
+            ),
             bitrate=2400,  # Higher bitrate for better quality
         )
         anim.save(video_path, writer=writer)

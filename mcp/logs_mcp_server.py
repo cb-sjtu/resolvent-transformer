@@ -38,7 +38,10 @@ async def handle_list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "timestamp": {"type": "string", "description": "Run timestamp (e.g., 2025-07-12_18-11-28-389603)"}
+                    "timestamp": {
+                        "type": "string",
+                        "description": "Run timestamp (e.g., 2025-07-12_18-11-28-389603)",
+                    }
                 },
                 "required": ["timestamp"],
             },
@@ -48,7 +51,9 @@ async def handle_list_tools() -> list[Tool]:
             description="Get system metadata and run parameters from wandb",
             inputSchema={
                 "type": "object",
-                "properties": {"timestamp": {"type": "string", "description": "Run timestamp"}},
+                "properties": {
+                    "timestamp": {"type": "string", "description": "Run timestamp"}
+                },
                 "required": ["timestamp"],
             },
         ),
@@ -57,7 +62,9 @@ async def handle_list_tools() -> list[Tool]:
             description="List available datasets and validation steps for a run",
             inputSchema={
                 "type": "object",
-                "properties": {"timestamp": {"type": "string", "description": "Run timestamp"}},
+                "properties": {
+                    "timestamp": {"type": "string", "description": "Run timestamp"}
+                },
                 "required": ["timestamp"],
             },
         ),
@@ -68,9 +75,15 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "timestamp": {"type": "string", "description": "Run timestamp"},
-                    "step": {"type": "integer", "description": "Validation step number"},
+                    "step": {
+                        "type": "integer",
+                        "description": "Validation step number",
+                    },
                     "dataset": {"type": "string", "description": "Dataset name"},
-                    "metric_name": {"type": "string", "description": "Metric name (e.g., 'error', 'loss')"},
+                    "metric_name": {
+                        "type": "string",
+                        "description": "Metric name (e.g., 'error', 'loss')",
+                    },
                 },
                 "required": ["timestamp", "step", "dataset", "metric_name"],
             },
@@ -82,7 +95,10 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "timestamp": {"type": "string", "description": "Run timestamp"},
-                    "step": {"type": "integer", "description": "Validation step number"},
+                    "step": {
+                        "type": "integer",
+                        "description": "Validation step number",
+                    },
                     "dataset": {"type": "string", "description": "Dataset name"},
                 },
                 "required": ["timestamp", "step", "dataset"],
@@ -95,7 +111,10 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "timestamp": {"type": "string", "description": "Run timestamp"},
-                    "step": {"type": "integer", "description": "Validation step number"},
+                    "step": {
+                        "type": "integer",
+                        "description": "Validation step number",
+                    },
                     "dataset": {"type": "string", "description": "Dataset name"},
                 },
                 "required": ["timestamp", "step", "dataset"],
@@ -118,12 +137,19 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
         return await list_datasets_and_steps(arguments["timestamp"])
     elif name == "get_metrics":
         return await get_metrics(
-            arguments["timestamp"], arguments["step"], arguments["dataset"], arguments["metric_name"]
+            arguments["timestamp"],
+            arguments["step"],
+            arguments["dataset"],
+            arguments["metric_name"],
         )
     elif name == "get_sample_descriptions":
-        return await get_sample_descriptions(arguments["timestamp"], arguments["step"], arguments["dataset"])
+        return await get_sample_descriptions(
+            arguments["timestamp"], arguments["step"], arguments["dataset"]
+        )
     elif name == "get_batch_info":
-        return await get_batch_info(arguments["timestamp"], arguments["step"], arguments["dataset"])
+        return await get_batch_info(
+            arguments["timestamp"], arguments["step"], arguments["dataset"]
+        )
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -140,7 +166,9 @@ async def list_runs() -> list[TextContent]:
         runs.sort(reverse=True)  # Most recent first
 
         if runs:
-            result = "Available training runs:\n" + "\n".join(f"- {run}" for run in runs)
+            result = "Available training runs:\n" + "\n".join(
+                f"- {run}" for run in runs
+            )
         else:
             result = "No training runs found in logs directory."
 
@@ -155,12 +183,21 @@ async def get_run_config(timestamp: str) -> list[TextContent]:
         config_path = LOGS_BASE_DIR / timestamp / "config_tree.log"
 
         if not config_path.exists():
-            return [TextContent(type="text", text=f"Config file not found for run {timestamp}")]
+            return [
+                TextContent(
+                    type="text", text=f"Config file not found for run {timestamp}"
+                )
+            ]
 
         with open(config_path) as f:
             config_content = f.read()
 
-        return [TextContent(type="text", text=f"Configuration for run {timestamp}:\n\n{config_content}")]
+        return [
+            TextContent(
+                type="text",
+                text=f"Configuration for run {timestamp}:\n\n{config_content}",
+            )
+        ]
     except Exception as e:
         return [TextContent(type="text", text=f"Error reading config: {str(e)}")]
 
@@ -173,7 +210,11 @@ async def get_run_metadata(timestamp: str) -> list[TextContent]:
         metadata_files = list(wandb_dir.glob("*/files/wandb-metadata.json"))
 
         if not metadata_files:
-            return [TextContent(type="text", text=f"Wandb metadata not found for run {timestamp}")]
+            return [
+                TextContent(
+                    type="text", text=f"Wandb metadata not found for run {timestamp}"
+                )
+            ]
 
         metadata_path = metadata_files[0]  # Take the first one found
 
@@ -181,7 +222,12 @@ async def get_run_metadata(timestamp: str) -> list[TextContent]:
             metadata = json.load(f)
 
         formatted_metadata = json.dumps(metadata, indent=2)
-        return [TextContent(type="text", text=f"Metadata for run {timestamp}:\n\n{formatted_metadata}")]
+        return [
+            TextContent(
+                type="text",
+                text=f"Metadata for run {timestamp}:\n\n{formatted_metadata}",
+            )
+        ]
     except Exception as e:
         return [TextContent(type="text", text=f"Error reading metadata: {str(e)}")]
 
@@ -192,7 +238,11 @@ async def list_datasets_and_steps(timestamp: str) -> list[TextContent]:
         metric_dir = LOGS_BASE_DIR / timestamp / "metric" / "valid"
 
         if not metric_dir.exists():
-            return [TextContent(type="text", text=f"Metrics directory not found for run {timestamp}")]
+            return [
+                TextContent(
+                    type="text", text=f"Metrics directory not found for run {timestamp}"
+                )
+            ]
 
         steps_and_datasets = {}
 
@@ -211,23 +261,36 @@ async def list_datasets_and_steps(timestamp: str) -> list[TextContent]:
 
         return [TextContent(type="text", text=result)]
     except Exception as e:
-        return [TextContent(type="text", text=f"Error listing datasets and steps: {str(e)}")]
+        return [
+            TextContent(type="text", text=f"Error listing datasets and steps: {str(e)}")
+        ]
 
 
-async def get_metrics(timestamp: str, step: int, dataset: str, metric_name: str) -> list[TextContent]:
+async def get_metrics(
+    timestamp: str, step: int, dataset: str, metric_name: str
+) -> list[TextContent]:
     """Get combined metrics across all GPU ranks."""
     try:
-        metric_dir = LOGS_BASE_DIR / timestamp / "metric" / "valid" / f"step_{step}" / dataset
+        metric_dir = (
+            LOGS_BASE_DIR / timestamp / "metric" / "valid" / f"step_{step}" / dataset
+        )
 
         if not metric_dir.exists():
-            return [TextContent(type="text", text=f"Metric directory not found: {metric_dir}")]
+            return [
+                TextContent(
+                    type="text", text=f"Metric directory not found: {metric_dir}"
+                )
+            ]
 
         # Find all rank files for this metric
         metric_files = list(metric_dir.glob(f"{metric_name}_rank*.csv"))
 
         if not metric_files:
             return [
-                TextContent(type="text", text=f"No {metric_name} metric files found for step {step}, dataset {dataset}")
+                TextContent(
+                    type="text",
+                    text=f"No {metric_name} metric files found for step {step}, dataset {dataset}",
+                )
             ]
 
         # Combine all rank files
@@ -238,11 +301,19 @@ async def get_metrics(timestamp: str, step: int, dataset: str, metric_name: str)
                 lines = f.readlines()
                 for i, line in enumerate(lines):
                     if line.strip():
-                        all_metrics.append({"rank": rank, "sample_idx": i, "value": float(line.strip())})
+                        all_metrics.append(
+                            {
+                                "rank": rank,
+                                "sample_idx": i,
+                                "value": float(line.strip()),
+                            }
+                        )
 
         # Create summary
         values = [m["value"] for m in all_metrics]
-        summary = f"Metrics summary for {metric_name} at step {step}, dataset {dataset}:\n"
+        summary = (
+            f"Metrics summary for {metric_name} at step {step}, dataset {dataset}:\n"
+        )
         summary += f"Total samples: {len(all_metrics)}\n"
         summary += f"Mean: {sum(values) / len(values):.6f}\n"
         summary += f"Min: {min(values):.6f}\n"
@@ -260,19 +331,32 @@ async def get_metrics(timestamp: str, step: int, dataset: str, metric_name: str)
         return [TextContent(type="text", text=f"Error getting metrics: {str(e)}")]
 
 
-async def get_sample_descriptions(timestamp: str, step: int, dataset: str) -> list[TextContent]:
+async def get_sample_descriptions(
+    timestamp: str, step: int, dataset: str
+) -> list[TextContent]:
     """Get sample descriptions for a specific step and dataset."""
     try:
-        metric_dir = LOGS_BASE_DIR / timestamp / "metric" / "valid" / f"step_{step}" / dataset
+        metric_dir = (
+            LOGS_BASE_DIR / timestamp / "metric" / "valid" / f"step_{step}" / dataset
+        )
 
         if not metric_dir.exists():
-            return [TextContent(type="text", text=f"Metric directory not found: {metric_dir}")]
+            return [
+                TextContent(
+                    type="text", text=f"Metric directory not found: {metric_dir}"
+                )
+            ]
 
         # Find description files
         desc_files = list(metric_dir.glob("description_rank*.txt"))
 
         if not desc_files:
-            return [TextContent(type="text", text=f"No description files found for step {step}, dataset {dataset}")]
+            return [
+                TextContent(
+                    type="text",
+                    text=f"No description files found for step {step}, dataset {dataset}",
+                )
+            ]
 
         result = f"Sample descriptions for step {step}, dataset {dataset}:\n\n"
 
@@ -286,22 +370,43 @@ async def get_sample_descriptions(timestamp: str, step: int, dataset: str) -> li
 
         return [TextContent(type="text", text=result)]
     except Exception as e:
-        return [TextContent(type="text", text=f"Error getting sample descriptions: {str(e)}")]
+        return [
+            TextContent(
+                type="text", text=f"Error getting sample descriptions: {str(e)}"
+            )
+        ]
 
 
 async def get_batch_info(timestamp: str, step: int, dataset: str) -> list[TextContent]:
     """Get batch information for a specific step and dataset."""
     try:
-        batch_info_dir = LOGS_BASE_DIR / timestamp / "batch_info" / "valid" / f"step_{step}" / dataset
+        batch_info_dir = (
+            LOGS_BASE_DIR
+            / timestamp
+            / "batch_info"
+            / "valid"
+            / f"step_{step}"
+            / dataset
+        )
 
         if not batch_info_dir.exists():
-            return [TextContent(type="text", text=f"Batch info directory not found: {batch_info_dir}")]
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Batch info directory not found: {batch_info_dir}",
+                )
+            ]
 
         # Find rank files
         rank_files = list(batch_info_dir.glob("rank_*.txt"))
 
         if not rank_files:
-            return [TextContent(type="text", text=f"No batch info files found for step {step}, dataset {dataset}")]
+            return [
+                TextContent(
+                    type="text",
+                    text=f"No batch info files found for step {step}, dataset {dataset}",
+                )
+            ]
 
         result = f"Batch information for step {step}, dataset {dataset}:\n\n"
 

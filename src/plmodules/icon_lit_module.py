@@ -30,7 +30,9 @@ class IconLitModule(BaseLitModule):
 
         self.valid_metrics = torch.nn.ModuleDict(
             {
-                self.cfg.data.valid[key].name: MetricCollection({k: MeanMetric() for k in self.metric_names})
+                self.cfg.data.valid[key].name: MetricCollection(
+                    {k: MeanMetric() for k in self.metric_names}
+                )
                 for key in self.cfg.data.valid
             }
         )
@@ -51,11 +53,15 @@ class IconLitModule(BaseLitModule):
         """Loss function for ICON model"""
         pred = self.network_inference(batch["data"], mode="train")
         train_label = self._build_train_label(batch)
-        return einops.reduce((pred - train_label) ** 2, "b num qoi_len dim -> b", "mean")
+        return einops.reduce(
+            (pred - train_label) ** 2, "b num qoi_len dim -> b", "mean"
+        )
 
     def get_preds(self, data: PyTree) -> torch.Tensor:
         """Get predictions"""
-        quest_qoi_v, attn_weights = self.network_inference(data, mode="test", need_weights=True)
+        quest_qoi_v, attn_weights = self.network_inference(
+            data, mode="test", need_weights=True
+        )
         return {
             "quest_qoi_v": quest_qoi_v,
             "attn_weights": attn_weights,
@@ -65,7 +71,9 @@ class IconLitModule(BaseLitModule):
         """Get error metrics"""
         return {
             "quest_qoi_v": einops.reduce(
-                torch.abs(preds["quest_qoi_v"] - batch["label"]), "b 1 qoi_len dim -> b", "mean"
+                torch.abs(preds["quest_qoi_v"] - batch["label"]),
+                "b 1 qoi_len dim -> b",
+                "mean",
             ),
         }
 
@@ -84,7 +92,9 @@ class IconLitModule(BaseLitModule):
         return loss.mean()
 
     ############ validation #############
-    def validation_step(self, batch: PyTree, batch_idx: int, dataloader_idx: int = 0) -> dict:
+    def validation_step(
+        self, batch: PyTree, batch_idx: int, dataloader_idx: int = 0
+    ) -> dict:
         loss = self._loss_function(batch)
         preds = self.get_preds(batch["data"])
         errors = self.get_errors(preds, batch)

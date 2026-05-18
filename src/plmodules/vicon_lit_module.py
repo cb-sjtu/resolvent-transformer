@@ -30,14 +30,20 @@ class ViconLitModule(BaseLitModule):
 
         self.valid_metrics = torch.nn.ModuleDict(
             {
-                self.cfg.data.valid[key].name: MetricCollection({k: MeanMetric() for k in self.metric_names})
+                self.cfg.data.valid[key].name: MetricCollection(
+                    {k: MeanMetric() for k in self.metric_names}
+                )
                 for key in self.cfg.data.valid
             }
         )
 
     def _prompt_normalization(self, x: torch.Tensor):
-        mean = x.mean(dim=(1, 3, 4), keepdim=True)  # Mean across seq, H, W -> (batch_size, 1, dim, 1, 1)
-        std = x.std(dim=(1, 3, 4), keepdim=True) + 1e-5  # Std across seq, H, W -> (batch_size, 1, dim, 1, 1)
+        mean = x.mean(
+            dim=(1, 3, 4), keepdim=True
+        )  # Mean across seq, H, W -> (batch_size, 1, dim, 1, 1)
+        std = (
+            x.std(dim=(1, 3, 4), keepdim=True) + 1e-5
+        )  # Std across seq, H, W -> (batch_size, 1, dim, 1, 1)
 
         x_normalized = (x - mean) / std
 
@@ -124,7 +130,9 @@ class ViconLitModule(BaseLitModule):
         return loss
 
     ############ validation #############
-    def validation_step(self, batch, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+    def validation_step(
+        self, batch, batch_idx: int, dataloader_idx: int = 0
+    ) -> torch.Tensor:
         loss = self._loss_all(batch)
         preds, errors = self._error_all(batch)
 

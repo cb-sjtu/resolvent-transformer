@@ -34,9 +34,7 @@ def compute_global_stats(
         dict: {"mean": float, "std": float}
     """
     # Get all preprocessed files
-    pattern = (
-        f"{field_name}_scale{resolution_scale[0]}-{resolution_scale[1]}-{resolution_scale[2]}_yslice{y_slice}_*.h5"
-    )
+    pattern = f"{field_name}_scale{resolution_scale[0]}-{resolution_scale[1]}-{resolution_scale[2]}_yslice{y_slice}_*.h5"
     file_list = sorted(glob.glob(os.path.join(data_dir, pattern)))
 
     if not file_list:
@@ -102,7 +100,9 @@ def compute_global_stats(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Compute normalization statistics for flow_2d dataset")
+    parser = argparse.ArgumentParser(
+        description="Compute normalization statistics for flow_2d dataset"
+    )
     parser.add_argument(
         "--data_dir",
         type=str,
@@ -111,11 +111,22 @@ def main():
     )
     parser.add_argument("--field_name", type=str, default="u", help="Field name")
     parser.add_argument(
-        "--resolution_scale", type=int, nargs=3, default=[2, 3, 1], help="Resolution scale as three integers"
+        "--resolution_scale",
+        type=int,
+        nargs=3,
+        default=[2, 3, 1],
+        help="Resolution scale as three integers",
     )
     parser.add_argument("--y_slice", type=int, default=5, help="Y slice value")
-    parser.add_argument("--train_ratio", type=float, default=0.7, help="Training data ratio")
-    parser.add_argument("--output", type=str, default=None, help="Output JSON file path (default: auto-generated)")
+    parser.add_argument(
+        "--train_ratio", type=float, default=0.7, help="Training data ratio"
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output JSON file path (default: auto-generated)",
+    )
 
     args = parser.parse_args()
 
@@ -131,7 +142,9 @@ def main():
     # Generate output filename if not provided
     if args.output is None:
         scale_str = f"{args.resolution_scale[0]}-{args.resolution_scale[1]}-{args.resolution_scale[2]}"
-        args.output = f"norm_stats_{args.field_name}_scale{scale_str}_yslice{args.y_slice}.json"
+        args.output = (
+            f"norm_stats_{args.field_name}_scale{scale_str}_yslice{args.y_slice}.json"
+        )
 
     # Save to JSON file
     output_path = os.path.join(args.data_dir, args.output)

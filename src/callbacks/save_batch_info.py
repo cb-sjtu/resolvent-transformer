@@ -39,12 +39,16 @@ class SaveBatchInfo(L.Callback):
 
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
         if batch_idx in self.train_batches_log and trainer.global_rank == 0:
-            tree = ptu.get_print_info(batch, print_lv=self.print_lv_log, info=f"Train Batch # {batch_idx}")
+            tree = ptu.get_print_info(
+                batch, print_lv=self.print_lv_log, info=f"Train Batch # {batch_idx}"
+            )
             rprint(tree)
             rprint("")  # add a newline after each batch
 
         if batch_idx in self.train_batches_local:
-            tree = ptu.get_print_info(batch, print_lv=self.print_lv_local, info=f"Train Batch # {batch_idx}")
+            tree = ptu.get_print_info(
+                batch, print_lv=self.print_lv_local, info=f"Train Batch # {batch_idx}"
+            )
             dirpath = Path(self.dirpath) / "train"
             dirpath.mkdir(parents=True, exist_ok=True)
             filename = Path(self.dirpath) / "train" / f"rank_{trainer.global_rank}.txt"
@@ -52,7 +56,9 @@ class SaveBatchInfo(L.Callback):
                 rprint(tree, file=f)
                 rprint("", file=f)  # add a newline after each batch
 
-    def on_validation_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
+    def on_validation_batch_start(
+        self, trainer, pl_module, batch, batch_idx, dataloader_idx=0
+    ):
         if batch_idx in self.valid_batches_log or batch_idx in self.valid_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
 
@@ -71,7 +77,12 @@ class SaveBatchInfo(L.Callback):
                 print_lv=self.print_lv_local,
                 info=f"Valid Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx}",
             )
-            dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
+            dirpath = (
+                Path(self.dirpath)
+                / "valid"
+                / f"step_{trainer.global_step}"
+                / dataset_name
+            )
             dirpath.mkdir(parents=True, exist_ok=True)
             filename = (
                 Path(self.dirpath)
@@ -85,7 +96,9 @@ class SaveBatchInfo(L.Callback):
                 rprint(tree, file=f)
                 rprint("", file=f)  # add a newline after each batch
 
-    def on_test_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
+    def on_test_batch_start(
+        self, trainer, pl_module, batch, batch_idx, dataloader_idx=0
+    ):
         if batch_idx in self.test_batches_log or batch_idx in self.test_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
 
@@ -104,7 +117,12 @@ class SaveBatchInfo(L.Callback):
                 print_lv=self.print_lv_local,
                 info=f"Test Dataset # {dataloader_idx} - {dataset_name} - Batch {batch_idx}",
             )
-            dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
+            dirpath = (
+                Path(self.dirpath)
+                / "test"
+                / f"step_{trainer.global_step}"
+                / dataset_name
+            )
             dirpath.mkdir(parents=True, exist_ok=True)
             filename = (
                 Path(self.dirpath)

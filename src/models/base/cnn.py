@@ -32,7 +32,9 @@ class Conv2d(nn.Module):
             leading_pattern = " ".join([f"dim{i}" for i in range(len(leading_dims))])
             pattern = f"({leading_pattern}) c h w -> {leading_pattern} c h w"
             output = einops.rearrange(
-                output_flat, pattern, **{f"dim{i}": leading_dims[i] for i in range(len(leading_dims))}
+                output_flat,
+                pattern,
+                **{f"dim{i}": leading_dims[i] for i in range(len(leading_dims))},
             )
         else:
             output = output_flat

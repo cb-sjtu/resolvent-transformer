@@ -28,12 +28,14 @@ def monitor_progress():
                             if line.strip():
                                 print(f"最新状态: {line.strip()}")
                                 break
-            except:
+            except Exception:
                 pass
 
         # Check if video files are being created
         if os.path.exists(video_dir):
-            video_files = [f for f in os.listdir(video_dir) if f.endswith((".mp4", ".gif"))]
+            video_files = [
+                f for f in os.listdir(video_dir) if f.endswith((".mp4", ".gif"))
+            ]
             if video_files:
                 print(f"发现视频文件: {len(video_files)} 个")
                 for vf in video_files:
@@ -44,11 +46,15 @@ def monitor_progress():
 
         # Check if process is still running
         try:
-            result = subprocess.run(["pgrep", "-f", "create_all_frames_video.py"], capture_output=True, text=True)
+            result = subprocess.run(
+                ["pgrep", "-f", "create_all_frames_video.py"],
+                capture_output=True,
+                text=True,
+            )
             if not result.stdout.strip():
                 print("✅ 视频创建进程已完成!")
                 break
-        except:
+        except Exception:
             pass
 
         elapsed = time.time() - start_time

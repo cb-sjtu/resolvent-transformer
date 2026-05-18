@@ -30,8 +30,12 @@ class FlowSwin2DLitModule(BaseLitModule):
         # Scheduled Sampling configuration
         self.scheduled_sampling = getattr(cfg, "scheduled_sampling", {})
         self.ss_enabled = self.scheduled_sampling.get("enabled", False)
-        self.ss_initial_ratio = self.scheduled_sampling.get("initial_teacher_forcing_ratio", 1.0)
-        self.ss_final_ratio = self.scheduled_sampling.get("final_teacher_forcing_ratio", 0.0)
+        self.ss_initial_ratio = self.scheduled_sampling.get(
+            "initial_teacher_forcing_ratio", 1.0
+        )
+        self.ss_final_ratio = self.scheduled_sampling.get(
+            "final_teacher_forcing_ratio", 0.0
+        )
         self.ss_schedule_type = self.scheduled_sampling.get("schedule_type", "linear")
         self.ss_decay_epochs = self.scheduled_sampling.get("decay_epochs", 50)
         self.ss_start_epoch = self.scheduled_sampling.get("start_epoch", 0)
@@ -43,14 +47,22 @@ class FlowSwin2DLitModule(BaseLitModule):
         self.kr_initial_k = self.k_step_rollout.get("initial_k_steps", 1)
         self.kr_max_k = self.k_step_rollout.get("max_k_steps", 16)
         self.kr_schedule = self.k_step_rollout.get("k_increase_schedule", "curriculum")
-        self.kr_curriculum_epochs = self.k_step_rollout.get("curriculum_epochs", [10, 20, 30, 40, 50])
-        self.kr_curriculum_k_values = self.k_step_rollout.get("curriculum_k_values", [1, 2, 4, 8, 16])
+        self.kr_curriculum_epochs = self.k_step_rollout.get(
+            "curriculum_epochs", [10, 20, 30, 40, 50]
+        )
+        self.kr_curriculum_k_values = self.k_step_rollout.get(
+            "curriculum_k_values", [1, 2, 4, 8, 16]
+        )
         self.kr_rollout_weight = self.k_step_rollout.get("rollout_loss_weight", 1.0)
         self.kr_single_weight = self.k_step_rollout.get("single_step_loss_weight", 1.0)
 
         # Step-wise weighting configuration
-        self.kr_step_weights = self.k_step_rollout.get("step_weights", [1.0, 1.0, 1.0, 1.0, 1.0])
-        self.kr_enable_step_weighting = self.k_step_rollout.get("enable_step_weighting", False)
+        self.kr_step_weights = self.k_step_rollout.get(
+            "step_weights", [1.0, 1.0, 1.0, 1.0, 1.0]
+        )
+        self.kr_enable_step_weighting = self.k_step_rollout.get(
+            "enable_step_weighting", False
+        )
 
         # Validate step_weights length matches curriculum_k_values
         if len(self.kr_step_weights) != len(self.kr_curriculum_k_values):
@@ -62,16 +74,23 @@ class FlowSwin2DLitModule(BaseLitModule):
             # Pad or truncate step_weights to match curriculum_k_values
             if len(self.kr_step_weights) < len(self.kr_curriculum_k_values):
                 # Pad with 1.0
-                self.kr_step_weights.extend([1.0] * (len(self.kr_curriculum_k_values) - len(self.kr_step_weights)))
+                self.kr_step_weights.extend(
+                    [1.0]
+                    * (len(self.kr_curriculum_k_values) - len(self.kr_step_weights))
+                )
             else:
                 # Truncate
-                self.kr_step_weights = self.kr_step_weights[: len(self.kr_curriculum_k_values)]
+                self.kr_step_weights = self.kr_step_weights[
+                    : len(self.kr_curriculum_k_values)
+                ]
 
         # Cache for steps_per_epoch (will be set properly during training setup)
         self._cached_steps_per_epoch = None
 
         # Per-channel metrics configuration - dynamically detect number of channels
-        self.enable_per_channel_metrics = getattr(cfg, "enable_per_channel_metrics", True)
+        self.enable_per_channel_metrics = getattr(
+            cfg, "enable_per_channel_metrics", True
+        )
 
         # Get number of channels from model config
         model_num_channels = cfg.model.get("num_channels", 9)
@@ -116,12 +135,17 @@ class FlowSwin2DLitModule(BaseLitModule):
     def _steps_per_epoch(self) -> int:
         """Calculate steps per epoch from dataset size and batch size."""
         # Use cached value if available and valid
-        if self._cached_steps_per_epoch is not None and self._cached_steps_per_epoch > 0:
+        if (
+            self._cached_steps_per_epoch is not None
+            and self._cached_steps_per_epoch > 0
+        ):
             return self._cached_steps_per_epoch
 
         return self._steps_per_epoch_implementation()
 
-    def compute_per_channel_metrics(self, pred: torch.Tensor, target: torch.Tensor) -> dict:
+    def compute_per_channel_metrics(
+        self, pred: torch.Tensor, target: torch.Tensor
+    ) -> dict:
         """Compute per-channel loss and relative error metrics.
 
         Args:
@@ -162,7 +186,9 @@ class FlowSwin2DLitModule(BaseLitModule):
             pred_flat = pred_ch.flatten(start_dim=1)  # (B, H*W)
 
             target_norm = torch.norm(target_flat, dim=1, keepdim=True)  # (B, 1)
-            error_norm = torch.norm(pred_flat - target_flat, dim=1, keepdim=True)  # (B, 1)
+            error_norm = torch.norm(
+                pred_flat - target_flat, dim=1, keepdim=True
+            )  # (B, 1)
 
             ch_rel_error = (error_norm / (target_norm + 1e-8)).mean()
             metrics[f"{ch_name}_rel_error"] = ch_rel_error
@@ -177,10 +203,17 @@ class FlowSwin2DLitModule(BaseLitModule):
                 field_channels = [field_idx + plane_idx * 3 for plane_idx in range(3)]
 
                 # Average metrics for this field
-                field_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in field_channels]).mean()
-                field_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in field_channels]).mean()
+                field_mse = torch.stack(
+                    [metrics[f"{self.channel_names[ch]}_mse"] for ch in field_channels]
+                ).mean()
+                field_mae = torch.stack(
+                    [metrics[f"{self.channel_names[ch]}_mae"] for ch in field_channels]
+                ).mean()
                 field_rel_error = torch.stack(
-                    [metrics[f"{self.channel_names[ch]}_rel_error"] for ch in field_channels]
+                    [
+                        metrics[f"{self.channel_names[ch]}_rel_error"]
+                        for ch in field_channels
+                    ]
                 ).mean()
 
                 metrics[f"field_{field_name}_avg_mse"] = field_mse
@@ -189,12 +222,21 @@ class FlowSwin2DLitModule(BaseLitModule):
 
             # Compute plane-wise metrics (average per plane across all fields)
             for plane_idx in range(3):
-                plane_channels = [plane_idx * 3 + field_idx for field_idx in range(3)]  # 3 fields per plane
+                plane_channels = [
+                    plane_idx * 3 + field_idx for field_idx in range(3)
+                ]  # 3 fields per plane
 
-                plane_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in plane_channels]).mean()
-                plane_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in plane_channels]).mean()
+                plane_mse = torch.stack(
+                    [metrics[f"{self.channel_names[ch]}_mse"] for ch in plane_channels]
+                ).mean()
+                plane_mae = torch.stack(
+                    [metrics[f"{self.channel_names[ch]}_mae"] for ch in plane_channels]
+                ).mean()
                 plane_rel_error = torch.stack(
-                    [metrics[f"{self.channel_names[ch]}_rel_error"] for ch in plane_channels]
+                    [
+                        metrics[f"{self.channel_names[ch]}_rel_error"]
+                        for ch in plane_channels
+                    ]
                 ).mean()
 
                 y_slice = self.y_slices[plane_idx]
@@ -208,12 +250,20 @@ class FlowSwin2DLitModule(BaseLitModule):
                 ch_name = self.channel_names[field_idx]
                 metrics[f"field_{field_name}_avg_mse"] = metrics[f"{ch_name}_mse"]
                 metrics[f"field_{field_name}_avg_mae"] = metrics[f"{ch_name}_mae"]
-                metrics[f"field_{field_name}_avg_rel_error"] = metrics[f"{ch_name}_rel_error"]
+                metrics[f"field_{field_name}_avg_rel_error"] = metrics[
+                    f"{ch_name}_rel_error"
+                ]
 
             # Compute overall plane metrics (average across all fields in the single plane)
-            plane_mse = torch.stack([metrics[f"{self.channel_names[ch]}_mse"] for ch in range(3)]).mean()
-            plane_mae = torch.stack([metrics[f"{self.channel_names[ch]}_mae"] for ch in range(3)]).mean()
-            plane_rel_error = torch.stack([metrics[f"{self.channel_names[ch]}_rel_error"] for ch in range(3)]).mean()
+            plane_mse = torch.stack(
+                [metrics[f"{self.channel_names[ch]}_mse"] for ch in range(3)]
+            ).mean()
+            plane_mae = torch.stack(
+                [metrics[f"{self.channel_names[ch]}_mae"] for ch in range(3)]
+            ).mean()
+            plane_rel_error = torch.stack(
+                [metrics[f"{self.channel_names[ch]}_rel_error"] for ch in range(3)]
+            ).mean()
 
             y_slice = self.y_slices[0]
             metrics[f"plane0_y{y_slice}_avg_mse"] = plane_mse
@@ -233,7 +283,10 @@ class FlowSwin2DLitModule(BaseLitModule):
                 return num_batches
 
             # Second attempt: get from train_dataloader if available
-            if hasattr(self.trainer, "train_dataloader") and self.trainer.train_dataloader is not None:
+            if (
+                hasattr(self.trainer, "train_dataloader")
+                and self.trainer.train_dataloader is not None
+            ):
                 try:
                     steps = len(self.trainer.train_dataloader)
                     if steps > 0:
@@ -254,7 +307,9 @@ class FlowSwin2DLitModule(BaseLitModule):
                                 return steps
                         elif hasattr(self.trainer.train_dataloader, "_dataloader"):
                             print("Found ._dataloader attribute")
-                            underlying_loader = self.trainer.train_dataloader._dataloader
+                            underlying_loader = (
+                                self.trainer.train_dataloader._dataloader
+                            )
                             steps = len(underlying_loader)
                             print(f"Got length {steps} from underlying _dataloader")
                             if steps > 0:
@@ -263,8 +318,14 @@ class FlowSwin2DLitModule(BaseLitModule):
                         else:
                             print("No .dataloader or ._dataloader attribute found")
                             # Let's see what attributes it actually has
-                            attrs = [attr for attr in dir(self.trainer.train_dataloader) if not attr.startswith("__")]
-                            print(f"CycleLoader attributes: {attrs[:10]}...")  # Show first 10
+                            attrs = [
+                                attr
+                                for attr in dir(self.trainer.train_dataloader)
+                                if not attr.startswith("__")
+                            ]
+                            print(
+                                f"CycleLoader attributes: {attrs[:10]}..."
+                            )  # Show first 10
 
                             # Try to access 'loaders' attribute
                             if hasattr(self.trainer.train_dataloader, "loaders"):
@@ -278,36 +339,55 @@ class FlowSwin2DLitModule(BaseLitModule):
 
                                     # If it's a dict, examine its contents
                                     if isinstance(first_loader, dict):
-                                        print(f"First loader is dict with keys: {list(first_loader.keys())}")
+                                        print(
+                                            f"First loader is dict with keys: {list(first_loader.keys())}"
+                                        )
                                         # Look for actual DataLoader in the dict values
                                         for key, value in first_loader.items():
                                             print(f"  Key '{key}': {type(value)}")
                                             try:
                                                 if hasattr(value, "__len__"):
                                                     val_len = len(value)
-                                                    print(f"    Length of '{key}': {val_len}")
-                                                    if val_len > 10:  # Reasonable threshold for real dataset
-                                                        print(f"Found reasonable length {val_len} for key '{key}'")
-                                                        self._cached_steps_per_epoch = val_len
+                                                    print(
+                                                        f"    Length of '{key}': {val_len}"
+                                                    )
+                                                    if (
+                                                        val_len > 10
+                                                    ):  # Reasonable threshold for real dataset
+                                                        print(
+                                                            f"Found reasonable length {val_len} for key '{key}'"
+                                                        )
+                                                        self._cached_steps_per_epoch = (
+                                                            val_len
+                                                        )
                                                         return val_len
                                             except Exception as e4:
-                                                print(f"    Failed to get length of '{key}': {e4}")
+                                                print(
+                                                    f"    Failed to get length of '{key}': {e4}"
+                                                )
                                     else:
                                         # Not a dict, try to get length directly
                                         try:
                                             steps = len(first_loader)
-                                            print(f"Got length {steps} from first loader")
+                                            print(
+                                                f"Got length {steps} from first loader"
+                                            )
                                             if steps > 0:
                                                 self._cached_steps_per_epoch = steps
                                                 return steps
                                         except Exception as e3:
-                                            print(f"Failed to get length from first loader: {e3}")
+                                            print(
+                                                f"Failed to get length from first loader: {e3}"
+                                            )
                     except (TypeError, AttributeError) as e2:
                         print(f"Failed to get length from underlying dataloader: {e2}")
                     pass
 
             # Third attempt: calculate from datamodule
-            if hasattr(self.trainer, "datamodule") and self.trainer.datamodule is not None:
+            if (
+                hasattr(self.trainer, "datamodule")
+                and self.trainer.datamodule is not None
+            ):
                 try:
                     train_dataloader = self.trainer.datamodule.train_dataloader()
                     if train_dataloader is not None:
@@ -316,7 +396,9 @@ class FlowSwin2DLitModule(BaseLitModule):
                             self._cached_steps_per_epoch = steps
                             return steps
                 except (TypeError, AttributeError) as e:
-                    print(f"Failed to get length from datamodule.train_dataloader(): {e}")
+                    print(
+                        f"Failed to get length from datamodule.train_dataloader(): {e}"
+                    )
                     # Try to get length from underlying dataset if it's a CycleLoader
                     try:
                         train_dataloader = self.trainer.datamodule.train_dataloader()
@@ -338,14 +420,19 @@ class FlowSwin2DLitModule(BaseLitModule):
 
             # Fourth attempt: calculate from dataset directly
             print("Attempting to calculate from dataset directly...")
-            if hasattr(self.trainer, "datamodule") and self.trainer.datamodule is not None:
+            if (
+                hasattr(self.trainer, "datamodule")
+                and self.trainer.datamodule is not None
+            ):
                 try:
                     print("Datamodule exists, checking for train_dataset...")
                     # Try to get dataset size and batch size directly
                     if hasattr(self.trainer.datamodule, "train_dataset"):
                         print("Found train_dataset attribute")
                         dataset_size = len(self.trainer.datamodule.train_dataset)
-                        batch_size = getattr(self.trainer.datamodule, "batch_size_per_device", 8)  # default to 8
+                        batch_size = getattr(
+                            self.trainer.datamodule, "batch_size_per_device", 8
+                        )  # default to 8
                         steps = dataset_size // batch_size
                         print(
                             f"Calculated from dataset: {dataset_size} samples / {batch_size} batch_size = {steps} steps"
@@ -356,30 +443,46 @@ class FlowSwin2DLitModule(BaseLitModule):
                     else:
                         print("No train_dataset attribute found")
                         # Let's see what the datamodule has
-                        attrs = [attr for attr in dir(self.trainer.datamodule) if not attr.startswith("__")]
-                        print(f"Datamodule attributes: {attrs[:15]}...")  # Show first 15
+                        attrs = [
+                            attr
+                            for attr in dir(self.trainer.datamodule)
+                            if not attr.startswith("__")
+                        ]
+                        print(
+                            f"Datamodule attributes: {attrs[:15]}..."
+                        )  # Show first 15
 
                         # Try to get dataset using the available method
-                        if hasattr(self.trainer.datamodule, "get_train_dataset_from_cfg"):
+                        if hasattr(
+                            self.trainer.datamodule, "get_train_dataset_from_cfg"
+                        ):
                             print("Found get_train_dataset_from_cfg method")
                             try:
-                                train_dataset = self.trainer.datamodule.get_train_dataset_from_cfg()
+                                train_dataset = (
+                                    self.trainer.datamodule.get_train_dataset_from_cfg()
+                                )
                                 if train_dataset is not None:
                                     # This should give us the 1094 value from len(self.indices)
                                     dataset_size = len(train_dataset)
-                                    print(f"Train dataset size (len(indices)): {dataset_size}")
+                                    print(
+                                        f"Train dataset size (len(indices)): {dataset_size}"
+                                    )
 
                                     # Get batch_size_per_device from datamodule's configuration
                                     batch_size_per_device = None
                                     if hasattr(self.trainer.datamodule, "cfg"):
                                         batch_size_per_device = getattr(
-                                            self.trainer.datamodule.cfg, "batch_size_per_device", None
+                                            self.trainer.datamodule.cfg,
+                                            "batch_size_per_device",
+                                            None,
                                         )
 
                                     if batch_size_per_device is None:
                                         # Try direct attribute access
                                         batch_size_per_device = getattr(
-                                            self.trainer.datamodule, "batch_size_per_device", None
+                                            self.trainer.datamodule,
+                                            "batch_size_per_device",
+                                            None,
                                         )
 
                                     if batch_size_per_device is not None:
@@ -392,9 +495,13 @@ class FlowSwin2DLitModule(BaseLitModule):
                                             self._cached_steps_per_epoch = steps
                                             return steps
                                     else:
-                                        print("Could not find batch_size_per_device in datamodule configuration")
+                                        print(
+                                            "Could not find batch_size_per_device in datamodule configuration"
+                                        )
                             except Exception as e_dataset:
-                                print(f"Failed to get dataset via get_train_dataset_from_cfg: {e_dataset}")
+                                print(
+                                    f"Failed to get dataset via get_train_dataset_from_cfg: {e_dataset}"
+                                )
                 except (TypeError, AttributeError) as e:
                     print(f"Failed to calculate from dataset directly: {e}")
                     pass
@@ -405,19 +512,25 @@ class FlowSwin2DLitModule(BaseLitModule):
             debug_info = []
             try:
                 if hasattr(self.trainer, "num_training_batches"):
-                    debug_info.append(f"trainer.num_training_batches = {self.trainer.num_training_batches}")
+                    debug_info.append(
+                        f"trainer.num_training_batches = {self.trainer.num_training_batches}"
+                    )
             except Exception:
                 debug_info.append("trainer.num_training_batches = <error accessing>")
 
             try:
                 if hasattr(self.trainer, "train_dataloader"):
-                    debug_info.append(f"trainer.train_dataloader exists = {self.trainer.train_dataloader is not None}")
+                    debug_info.append(
+                        f"trainer.train_dataloader exists = {self.trainer.train_dataloader is not None}"
+                    )
             except Exception:
                 debug_info.append("trainer.train_dataloader = <error accessing>")
 
             try:
                 if hasattr(self.trainer, "datamodule"):
-                    debug_info.append(f"trainer.datamodule exists = {self.trainer.datamodule is not None}")
+                    debug_info.append(
+                        f"trainer.datamodule exists = {self.trainer.datamodule is not None}"
+                    )
             except Exception:
                 debug_info.append("trainer.datamodule = <error accessing>")
 
@@ -471,17 +584,23 @@ class FlowSwin2DLitModule(BaseLitModule):
         if effective_epoch < self.ss_start_epoch:
             return 1.0
 
-        progress = min(1.0, (effective_epoch - self.ss_start_epoch) / self.ss_decay_epochs)
+        progress = min(
+            1.0, (effective_epoch - self.ss_start_epoch) / self.ss_decay_epochs
+        )
 
         if self.ss_schedule_type == "linear":
-            ratio = self.ss_initial_ratio - progress * (self.ss_initial_ratio - self.ss_final_ratio)
+            ratio = self.ss_initial_ratio - progress * (
+                self.ss_initial_ratio - self.ss_final_ratio
+            )
         elif self.ss_schedule_type == "exponential":
-            ratio = self.ss_final_ratio + (self.ss_initial_ratio - self.ss_final_ratio) * math.exp(-3 * progress)
+            ratio = self.ss_final_ratio + (
+                self.ss_initial_ratio - self.ss_final_ratio
+            ) * math.exp(-3 * progress)
         elif self.ss_schedule_type == "inverse_sigmoid":
             k = 2.0  # steepness parameter
-            ratio = self.ss_final_ratio + (self.ss_initial_ratio - self.ss_final_ratio) / (
-                1 + math.exp(k * (progress - 0.5))
-            )
+            ratio = self.ss_final_ratio + (
+                self.ss_initial_ratio - self.ss_final_ratio
+            ) / (1 + math.exp(k * (progress - 0.5)))
         else:
             ratio = self.ss_initial_ratio
 
@@ -514,7 +633,11 @@ class FlowSwin2DLitModule(BaseLitModule):
             return self.kr_initial_k
 
     def rollout_prediction(
-        self, input_seq: torch.Tensor, target_seq: torch.Tensor, k_steps: int, teacher_forcing_ratio: float
+        self,
+        input_seq: torch.Tensor,
+        target_seq: torch.Tensor,
+        k_steps: int,
+        teacher_forcing_ratio: float,
     ) -> tuple[list, float]:
         """Perform k-step rollout prediction with scheduled sampling using residual prediction."""
         batch_size, seq_len, channels, height, width = input_seq.shape
@@ -527,7 +650,9 @@ class FlowSwin2DLitModule(BaseLitModule):
         for step in range(k_steps):
             # Residual prediction: model outputs Δu, then compose u_{t+1} = u_t + Δu
             x_last = current_input[:, -1]  # Last frame u_t [B, C, H, W]
-            delta_pred = self.forward(current_input, return_delta=True)  # Δu [B, C, H, W]
+            delta_pred = self.forward(
+                current_input, return_delta=True
+            )  # Δu [B, C, H, W]
             pred = x_last + delta_pred  # u_{t+1} = u_t + Δu [B, C, H, W]
 
             # Calculate loss for this step
@@ -540,14 +665,22 @@ class FlowSwin2DLitModule(BaseLitModule):
             if step < k_steps - 1:  # Not the last step
                 # Per-sample teacher forcing decision
                 B = input_seq.size(0)
-                mask = (torch.rand(B, 1, 1, 1, device=input_seq.device) < teacher_forcing_ratio).float()
+                mask = (
+                    torch.rand(B, 1, 1, 1, device=input_seq.device)
+                    < teacher_forcing_ratio
+                ).float()
 
                 if step < target_seq.shape[1]:
                     # Mix ground truth and prediction based on mask
                     # Both pred and target[:, step] have shape (B, C, H, W)
                     # mask is (B, 1, 1, 1), expand to match (B, C, H, W)
-                    mask_expanded = mask.expand(-1, pred.shape[1], pred.shape[2], pred.shape[3])
-                    mixed_frame = mask_expanded * target_seq[:, step] + (1 - mask_expanded) * pred.detach()
+                    mask_expanded = mask.expand(
+                        -1, pred.shape[1], pred.shape[2], pred.shape[3]
+                    )
+                    mixed_frame = (
+                        mask_expanded * target_seq[:, step]
+                        + (1 - mask_expanded) * pred.detach()
+                    )
                     next_frame = mixed_frame.unsqueeze(1)  # (B, 1, C, H, W)
                     # Record actual teacher forcing fraction for this step
                     tf_frac_step = mask.mean().detach()
@@ -568,7 +701,9 @@ class FlowSwin2DLitModule(BaseLitModule):
 
         # Calculate average teacher forcing fraction
         avg_tf_fraction = (
-            torch.stack(tf_fractions).mean() if tf_fractions else torch.tensor(0.0, device=input_seq.device)
+            torch.stack(tf_fractions).mean()
+            if tf_fractions
+            else torch.tensor(0.0, device=input_seq.device)
         )
 
         return losses, avg_tf_fraction.item()
@@ -590,20 +725,48 @@ class FlowSwin2DLitModule(BaseLitModule):
         k_steps = self.get_current_k_steps(current_epoch)
 
         # Debug logging for curriculum - use only on_step for continuous monitoring
-        self.log("debug/current_epoch", float(current_epoch), on_step=True, on_epoch=False, batch_size=batch_size)
-        self.log("debug/global_step", float(self.global_step), on_step=True, on_epoch=False, batch_size=batch_size)
+        self.log(
+            "debug/current_epoch",
+            float(current_epoch),
+            on_step=True,
+            on_epoch=False,
+            batch_size=batch_size,
+        )
+        self.log(
+            "debug/global_step",
+            float(self.global_step),
+            on_step=True,
+            on_epoch=False,
+            batch_size=batch_size,
+        )
 
         # Log effective epoch calculated from global_step
         steps_per_epoch = self._steps_per_epoch()
         effective_epoch = self.global_step // steps_per_epoch
-        self.log("debug/effective_epoch", float(effective_epoch), on_step=True, on_epoch=False, batch_size=batch_size)
+        self.log(
+            "debug/effective_epoch",
+            float(effective_epoch),
+            on_step=True,
+            on_epoch=False,
+            batch_size=batch_size,
+        )
 
         # Debug k-step curriculum
-        self.log("debug/kr_enabled", float(self.kr_enabled), on_step=True, on_epoch=False, batch_size=batch_size)
+        self.log(
+            "debug/kr_enabled",
+            float(self.kr_enabled),
+            on_step=True,
+            on_epoch=False,
+            batch_size=batch_size,
+        )
         # Convert schedule type to numeric for logging (curriculum=1, fixed=0)
         schedule_numeric = 1.0 if self.kr_schedule == "curriculum" else 0.0
         self.log(
-            "debug/kr_schedule_is_curriculum", schedule_numeric, on_step=True, on_epoch=False, batch_size=batch_size
+            "debug/kr_schedule_is_curriculum",
+            schedule_numeric,
+            on_step=True,
+            on_epoch=False,
+            batch_size=batch_size,
         )
 
         total_loss = 0.0
@@ -613,7 +776,9 @@ class FlowSwin2DLitModule(BaseLitModule):
             # Use the actual k-step target sequence from dataset
             # Limit k_steps to available targets
             actual_k_steps = min(k_steps, target_seq.shape[1])
-            target_k_seq = target_seq[:, :actual_k_steps]  # (B, actual_k_steps, C, H, W)
+            target_k_seq = target_seq[
+                :, :actual_k_steps
+            ]  # (B, actual_k_steps, C, H, W)
 
             # Perform rollout prediction
             rollout_losses, actual_tf_fraction = self.rollout_prediction(
@@ -626,13 +791,19 @@ class FlowSwin2DLitModule(BaseLitModule):
                 total_loss += self.kr_single_weight * single_step_loss
                 # Log single step loss
                 self.log(
-                    "train/single_step_loss", single_step_loss, on_step=True, on_epoch=False, batch_size=batch_size
+                    "train/single_step_loss",
+                    single_step_loss,
+                    on_step=True,
+                    on_epoch=False,
+                    batch_size=batch_size,
                 )
         else:
             # Fallback: Standard single-step prediction loss when k_steps <= 1 or rollout disabled
             if self.kr_single_weight > 0:
                 # Use residual prediction: u_{t+1} = u_t + Δu
-                pred_single = self.forward(input_seq, return_delta=False)  # Get composed prediction
+                pred_single = self.forward(
+                    input_seq, return_delta=False
+                )  # Get composed prediction
                 single_step_loss = self.loss_fn(pred_single, target)
                 total_loss += self.kr_single_weight * single_step_loss
                 # Store for per-channel metrics
@@ -640,13 +811,22 @@ class FlowSwin2DLitModule(BaseLitModule):
                 self.current_target = target.detach()
                 # Log single step loss
                 self.log(
-                    "train/single_step_loss", single_step_loss, on_step=True, on_epoch=False, batch_size=batch_size
+                    "train/single_step_loss",
+                    single_step_loss,
+                    on_step=True,
+                    on_epoch=False,
+                    batch_size=batch_size,
                 )
             rollout_losses = []
             actual_tf_fraction = 0.0  # No teacher forcing when not using rollout
 
         # Process rollout losses (when k_steps > 1)
-        if self.kr_enabled and self.kr_rollout_weight > 0 and k_steps > 1 and rollout_losses:
+        if (
+            self.kr_enabled
+            and self.kr_rollout_weight > 0
+            and k_steps > 1
+            and rollout_losses
+        ):
             # Get current K curriculum index to determine step weights
             # current_k_index = 0
             for _, k_val in enumerate(self.kr_curriculum_k_values):
@@ -664,9 +844,13 @@ class FlowSwin2DLitModule(BaseLitModule):
                         # Apply step-wise weighting from configuration
                         weighted_losses = []
                         for i, step_loss in enumerate(later_losses):
-                            step_idx = i + 1  # step 2, 3, 4, ... (0-indexed in later_losses)
+                            step_idx = (
+                                i + 1
+                            )  # step 2, 3, 4, ... (0-indexed in later_losses)
                             # Use configured weights, fallback to 1.0
-                            weight = self.kr_step_weights[min(step_idx, len(self.kr_step_weights) - 1)]
+                            weight = self.kr_step_weights[
+                                min(step_idx, len(self.kr_step_weights) - 1)
+                            ]
                             weighted_losses.append(weight * step_loss)
 
                         rollout_loss = sum(weighted_losses) / len(weighted_losses)
@@ -686,7 +870,9 @@ class FlowSwin2DLitModule(BaseLitModule):
                         )
                         # Log step weights when enabled
                         if self.kr_enable_step_weighting and i > 0:  # skip first step
-                            weight = self.kr_step_weights[min(i, len(self.kr_step_weights) - 1)]
+                            weight = self.kr_step_weights[
+                                min(i, len(self.kr_step_weights) - 1)
+                            ]
                             self.log(
                                 f"train/rollout_step{i + 1}_weight",
                                 weight,
@@ -701,7 +887,9 @@ class FlowSwin2DLitModule(BaseLitModule):
                     weighted_losses = []
                     for i, step_loss in enumerate(rollout_losses):
                         # Use configured weights, fallback to 1.0
-                        weight = self.kr_step_weights[min(i, len(self.kr_step_weights) - 1)]
+                        weight = self.kr_step_weights[
+                            min(i, len(self.kr_step_weights) - 1)
+                        ]
                         weighted_losses.append(weight * step_loss)
 
                     rollout_loss = sum(weighted_losses) / len(weighted_losses)
@@ -721,7 +909,9 @@ class FlowSwin2DLitModule(BaseLitModule):
                     )
                     # Log step weights when enabled
                     if self.kr_enable_step_weighting:
-                        weight = self.kr_step_weights[min(i, len(self.kr_step_weights) - 1)]
+                        weight = self.kr_step_weights[
+                            min(i, len(self.kr_step_weights) - 1)
+                        ]
                         self.log(
                             f"train/rollout_step{i + 1}_weight",
                             weight,
@@ -732,35 +922,74 @@ class FlowSwin2DLitModule(BaseLitModule):
 
             # Log average rollout loss
             avg_rollout_loss = sum(rollout_losses) / len(rollout_losses)
-            self.log("train/rollout_loss", avg_rollout_loss, on_step=True, on_epoch=False, batch_size=batch_size)
+            self.log(
+                "train/rollout_loss",
+                avg_rollout_loss,
+                on_step=True,
+                on_epoch=False,
+                batch_size=batch_size,
+            )
 
             # Log actual teacher forcing fraction
             self.log(
-                "train/rollout_tf_actual_frac", actual_tf_fraction, on_step=True, on_epoch=False, batch_size=batch_size
+                "train/rollout_tf_actual_frac",
+                actual_tf_fraction,
+                on_step=True,
+                on_epoch=False,
+                batch_size=batch_size,
             )
 
         # Always log k_steps when k-step rollout is enabled
         if self.kr_enabled:
-            self.log("train/k_steps", float(k_steps), on_step=True, on_epoch=False, batch_size=batch_size)
-            # Log additional k-step rollout configuration state
-            self.log("train/kr_max_k_steps", float(self.kr_max_k), on_step=True, on_epoch=False, batch_size=batch_size)
             self.log(
-                "train/kr_rollout_weight", self.kr_rollout_weight, on_step=True, on_epoch=False, batch_size=batch_size
+                "train/k_steps",
+                float(k_steps),
+                on_step=True,
+                on_epoch=False,
+                batch_size=batch_size,
+            )
+            # Log additional k-step rollout configuration state
+            self.log(
+                "train/kr_max_k_steps",
+                float(self.kr_max_k),
+                on_step=True,
+                on_epoch=False,
+                batch_size=batch_size,
             )
             self.log(
-                "train/kr_single_weight", self.kr_single_weight, on_step=True, on_epoch=False, batch_size=batch_size
+                "train/kr_rollout_weight",
+                self.kr_rollout_weight,
+                on_step=True,
+                on_epoch=False,
+                batch_size=batch_size,
+            )
+            self.log(
+                "train/kr_single_weight",
+                self.kr_single_weight,
+                on_step=True,
+                on_epoch=False,
+                batch_size=batch_size,
             )
 
         # If no rollout or single step, fall back to standard prediction
         if total_loss == 0:
-            pred = self.forward(input_seq, return_delta=False)  # Use residual prediction
+            pred = self.forward(
+                input_seq, return_delta=False
+            )  # Use residual prediction
             total_loss = self.loss_fn(pred, target)
             # Store for per-channel metrics
             self.current_pred = pred.detach()
             self.current_target = target.detach()
 
         # Log total loss and curriculum parameters
-        self.log("train/loss", total_loss, on_step=True, on_epoch=False, prog_bar=True, batch_size=batch_size)
+        self.log(
+            "train/loss",
+            total_loss,
+            on_step=True,
+            on_epoch=False,
+            prog_bar=True,
+            batch_size=batch_size,
+        )
 
         # Always log teacher forcing ratio when scheduled sampling is enabled
         if self.ss_enabled:
@@ -785,7 +1014,9 @@ class FlowSwin2DLitModule(BaseLitModule):
             if teacher_forcing_active and self.kr_enabled and k_steps > 1:
                 # Estimate how often teacher forcing would be used based on the ratio
                 # This is an approximation since we don't track actual TF usage in rollout_prediction
-                expected_tf_usage = teacher_forcing_ratio * (k_steps - 1) / k_steps  # Roughly
+                expected_tf_usage = (
+                    teacher_forcing_ratio * (k_steps - 1) / k_steps
+                )  # Roughly
                 self.log(
                     "train/rollout_expected_tf_usage",
                     expected_tf_usage,
@@ -795,16 +1026,28 @@ class FlowSwin2DLitModule(BaseLitModule):
                 )
 
         # Compute and log per-channel metrics for training
-        if self.enable_per_channel_metrics and hasattr(self, "current_pred") and hasattr(self, "current_target"):
+        if (
+            self.enable_per_channel_metrics
+            and hasattr(self, "current_pred")
+            and hasattr(self, "current_target")
+        ):
             # Use the most recent prediction and target from the training step
             try:
-                per_channel_metrics = self.compute_per_channel_metrics(self.current_pred, self.current_target)
+                per_channel_metrics = self.compute_per_channel_metrics(
+                    self.current_pred, self.current_target
+                )
 
                 # Log per-channel metrics (reduced frequency to avoid log spam)
-                if self.global_step % 100 == 0:  # Log every 100 steps for better monitoring
+                if (
+                    self.global_step % 100 == 0
+                ):  # Log every 100 steps for better monitoring
                     for metric_name, metric_value in per_channel_metrics.items():
                         self.log(
-                            f"train/{metric_name}", metric_value, on_step=True, on_epoch=False, batch_size=batch_size
+                            f"train/{metric_name}",
+                            metric_value,
+                            on_step=True,
+                            on_epoch=False,
+                            batch_size=batch_size,
                         )
 
                 # Always log summary metrics
@@ -866,7 +1109,15 @@ class FlowSwin2DLitModule(BaseLitModule):
         batch_size = target.shape[0]
 
         # Log metrics
-        self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True, batch_size=batch_size)
+        self.log(
+            "val/loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
 
         # Compute additional metrics
         mse = F.mse_loss(pred, target)
@@ -881,8 +1132,12 @@ class FlowSwin2DLitModule(BaseLitModule):
 
         # Spectral metrics - fix dimension handling
         # Remove squeeze to handle [B,C,H,W] directly
-        pred_for_fft = pred.squeeze(1) if pred.shape[1] == 1 else pred.mean(dim=1)  # Handle channel dimension properly
-        target_for_fft = target.squeeze(1) if target.shape[1] == 1 else target.mean(dim=1)
+        pred_for_fft = (
+            pred.squeeze(1) if pred.shape[1] == 1 else pred.mean(dim=1)
+        )  # Handle channel dimension properly
+        target_for_fft = (
+            target.squeeze(1) if target.shape[1] == 1 else target.mean(dim=1)
+        )
         pred_fft = torch.fft.fft2(pred_for_fft)
         target_fft = torch.fft.fft2(target_for_fft)
         spectral_error = F.mse_loss(torch.abs(pred_fft), torch.abs(target_fft))
@@ -897,14 +1152,54 @@ class FlowSwin2DLitModule(BaseLitModule):
         grad_error_x = F.mse_loss(pred_grad_x, target_grad_x)
         grad_error_y = F.mse_loss(pred_grad_y, target_grad_y)
 
-        self.log("val/mse", mse, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
-        self.log("val/mae", mae, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
-        self.log("val/rel_error", rel_error, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
         self.log(
-            "val/spectral_error", spectral_error, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size
+            "val/mse",
+            mse,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
         )
-        self.log("val/grad_error_x", grad_error_x, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
-        self.log("val/grad_error_y", grad_error_y, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
+        self.log(
+            "val/mae",
+            mae,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "val/rel_error",
+            rel_error,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "val/spectral_error",
+            spectral_error,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "val/grad_error_x",
+            grad_error_x,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "val/grad_error_y",
+            grad_error_y,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
 
         # Compute and log per-channel metrics for validation
         if self.enable_per_channel_metrics:
@@ -923,7 +1218,9 @@ class FlowSwin2DLitModule(BaseLitModule):
                     )
 
             except Exception as e:
-                print(f"Warning: Failed to compute per-channel metrics in validation: {e}")
+                print(
+                    f"Warning: Failed to compute per-channel metrics in validation: {e}"
+                )
 
         # Return metrics dict for save_metric callback
         metrics = {
@@ -957,7 +1254,14 @@ class FlowSwin2DLitModule(BaseLitModule):
         batch_size = target.shape[0]
 
         # Log metrics
-        self.log("test/loss", loss, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
+        self.log(
+            "test/loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
 
         # Compute comprehensive test metrics
         mse = F.mse_loss(pred, target)
@@ -972,8 +1276,12 @@ class FlowSwin2DLitModule(BaseLitModule):
 
         # Spectral metrics - fix dimension handling
         # Remove squeeze to handle [B,C,H,W] directly
-        pred_for_fft = pred.squeeze(1) if pred.shape[1] == 1 else pred.mean(dim=1)  # Handle channel dimension properly
-        target_for_fft = target.squeeze(1) if target.shape[1] == 1 else target.mean(dim=1)
+        pred_for_fft = (
+            pred.squeeze(1) if pred.shape[1] == 1 else pred.mean(dim=1)
+        )  # Handle channel dimension properly
+        target_for_fft = (
+            target.squeeze(1) if target.shape[1] == 1 else target.mean(dim=1)
+        )
         pred_fft = torch.fft.fft2(pred_for_fft)
         target_fft = torch.fft.fft2(target_for_fft)
         spectral_error = F.mse_loss(torch.abs(pred_fft), torch.abs(target_fft))
@@ -997,15 +1305,62 @@ class FlowSwin2DLitModule(BaseLitModule):
 
         ncc = normalized_cross_correlation(pred_for_fft, target_for_fft)
 
-        self.log("test/mse", mse, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
-        self.log("test/mae", mae, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
-        self.log("test/rel_error", rel_error, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
         self.log(
-            "test/spectral_error", spectral_error, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size
+            "test/mse",
+            mse,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
         )
-        self.log("test/grad_error_x", grad_error_x, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
-        self.log("test/grad_error_y", grad_error_y, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
-        self.log("test/ncc", ncc, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
+        self.log(
+            "test/mae",
+            mae,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "test/rel_error",
+            rel_error,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "test/spectral_error",
+            spectral_error,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "test/grad_error_x",
+            grad_error_x,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "test/grad_error_y",
+            grad_error_y,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        self.log(
+            "test/ncc",
+            ncc,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
 
         # Return metrics dict for save_metric callback
         metrics = {

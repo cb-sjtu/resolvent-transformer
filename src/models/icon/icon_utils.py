@@ -10,10 +10,15 @@ import torch
 
 
 def build_diag_block(cond_len, qoi_kv_len, qoi_k_len):
-    diag_block = np.zeros((cond_len + qoi_kv_len + qoi_k_len, cond_len + qoi_kv_len + qoi_k_len), dtype=bool)
+    diag_block = np.zeros(
+        (cond_len + qoi_kv_len + qoi_k_len, cond_len + qoi_kv_len + qoi_k_len),
+        dtype=bool,
+    )
     diag_block[:, :cond_len] = 1
     diag_block[cond_len : cond_len + qoi_kv_len, cond_len : cond_len + qoi_kv_len] = 1
-    diag_block[cond_len + qoi_kv_len :, cond_len + qoi_kv_len :] = np.eye(qoi_k_len, dtype=bool)
+    diag_block[cond_len + qoi_kv_len :, cond_len + qoi_kv_len :] = np.eye(
+        qoi_k_len, dtype=bool
+    )
     return torch.tensor(diag_block, dtype=torch.bool)
 
 
@@ -35,9 +40,13 @@ def build_bool_sequence(demo_num, mode, shot_num_min):
 
 
 def build_basic_mask(cond_len_list, qoi_kv_len_list, qoi_k_len_list):
-    assert len(cond_len_list) == len(qoi_kv_len_list) == len(qoi_k_len_list), "Length of lists should be equal"
+    assert len(cond_len_list) == len(qoi_kv_len_list) == len(qoi_k_len_list), (
+        "Length of lists should be equal"
+    )
     num = len(cond_len_list)
-    mask_size = sum([cond_len_list[i] + qoi_kv_len_list[i] + qoi_k_len_list[i] for i in range(num)])
+    mask_size = sum(
+        [cond_len_list[i] + qoi_kv_len_list[i] + qoi_k_len_list[i] for i in range(num)]
+    )
     mask = np.zeros((mask_size, mask_size), dtype=bool)
 
     for i in range(num):
@@ -45,21 +54,35 @@ def build_basic_mask(cond_len_list, qoi_kv_len_list, qoi_k_len_list):
             cond_len_i = cond_len_list[i]
             qoi_kv_len_i = qoi_kv_len_list[i]
             qoi_k_len_i = qoi_k_len_list[i]
-            cursor_i = sum([cond_len_list[k] + qoi_kv_len_list[k] + qoi_k_len_list[k] for k in range(i)])
+            cursor_i = sum(
+                [
+                    cond_len_list[k] + qoi_kv_len_list[k] + qoi_k_len_list[k]
+                    for k in range(i)
+                ]
+            )
             block_size_i = cond_len_i + qoi_kv_len_i + qoi_k_len_i
 
             cond_len_j = cond_len_list[j]
             qoi_kv_len_j = qoi_kv_len_list[j]
             qoi_k_len_j = qoi_k_len_list[j]
-            cursor_j = sum([cond_len_list[k] + qoi_kv_len_list[k] + qoi_k_len_list[k] for k in range(j)])
+            cursor_j = sum(
+                [
+                    cond_len_list[k] + qoi_kv_len_list[k] + qoi_k_len_list[k]
+                    for k in range(j)
+                ]
+            )
             block_size_j = cond_len_j + qoi_kv_len_j + qoi_k_len_j
 
             if i == j:
-                mask[cursor_i : cursor_i + block_size_i, cursor_j : cursor_j + block_size_j] = build_diag_block(
-                    cond_len_i, qoi_kv_len_i, qoi_k_len_i
-                )
+                mask[
+                    cursor_i : cursor_i + block_size_i,
+                    cursor_j : cursor_j + block_size_j,
+                ] = build_diag_block(cond_len_i, qoi_kv_len_i, qoi_k_len_i)
             else:
-                mask[cursor_i : cursor_i + block_size_i, cursor_j : cursor_j + cond_len_j + qoi_kv_len_j] = True
+                mask[
+                    cursor_i : cursor_i + block_size_i,
+                    cursor_j : cursor_j + cond_len_j + qoi_kv_len_j,
+                ] = True
 
     return torch.tensor(mask, dtype=torch.bool)
 
@@ -76,9 +99,13 @@ def build_index_integer(cond_len_list, qoi_kv_len_list, qoi_k_len_list):
 
 
 def build_out_mask(cond_len_list, qoi_kv_len_list, qoi_k_len_list, num_range):
-    assert len(cond_len_list) == len(qoi_kv_len_list) == len(qoi_k_len_list), "Length of lists should be equal"
+    assert len(cond_len_list) == len(qoi_kv_len_list) == len(qoi_k_len_list), (
+        "Length of lists should be equal"
+    )
     num = len(cond_len_list)
-    out_mask_size = sum([cond_len_list[i] + qoi_kv_len_list[i] + qoi_k_len_list[i] for i in range(num)])
+    out_mask_size = sum(
+        [cond_len_list[i] + qoi_kv_len_list[i] + qoi_k_len_list[i] for i in range(num)]
+    )
     out_mask = np.zeros((out_mask_size), dtype=bool)
 
     begin, end = num_range
@@ -96,10 +123,14 @@ def build_out_mask(cond_len_list, qoi_kv_len_list, qoi_k_len_list, num_range):
     return torch.tensor(out_mask, dtype=torch.bool)
 
 
-def build_data_sequence(data, cond_bool_list, qoi_kv_bool_list, qoi_k_bool_list, data_quest_qoi_v=None):
+def build_data_sequence(
+    data, cond_bool_list, qoi_kv_bool_list, qoi_k_bool_list, data_quest_qoi_v=None
+):
     demo_cond = torch.cat([data["demo_cond_k"], data["demo_cond_v"]], dim=-1)
     demo_qoi_kv = torch.cat([data["demo_qoi_k"], data["demo_qoi_v"]], dim=-1)
-    demo_qoi_k = torch.nn.functional.pad(data["demo_qoi_k"], (0, data["demo_qoi_v"].shape[-1]))
+    demo_qoi_k = torch.nn.functional.pad(
+        data["demo_qoi_k"], (0, data["demo_qoi_v"].shape[-1])
+    )
 
     if data_quest_qoi_v is None:
         data_quest_qoi_v = torch.zeros(
@@ -113,7 +144,9 @@ def build_data_sequence(data, cond_bool_list, qoi_kv_bool_list, qoi_k_bool_list,
         )
     quest_cond = torch.cat([data["quest_cond_k"], data["quest_cond_v"]], dim=-1)
     quest_qoi_kv = torch.cat([data["quest_qoi_k"], data_quest_qoi_v], dim=-1)
-    quest_qoi_k = torch.nn.functional.pad(data["quest_qoi_k"], (0, data_quest_qoi_v.shape[-1]))
+    quest_qoi_k = torch.nn.functional.pad(
+        data["quest_qoi_k"], (0, data_quest_qoi_v.shape[-1])
+    )
 
     demo_num = data["demo_cond_k"].shape[1]
 
@@ -170,25 +203,37 @@ def build_matrices(data_shape, mode, shot_num_min, returns=("mask", "index", "ou
     quest_cond_len = data_shape["quest_cond_k"][1]
     quest_qoi_len = data_shape["quest_qoi_k"][1]
 
-    cond_bool_list, qoi_kv_bool_list, qoi_k_bool_list = build_bool_sequence(demo_num, mode, shot_num_min)
+    cond_bool_list, qoi_kv_bool_list, qoi_k_bool_list = build_bool_sequence(
+        demo_num, mode, shot_num_min
+    )
 
     cond_len_list_raw = [demo_cond_len] * demo_num + [quest_cond_len]
     qoi_kv_len_list_raw = [demo_qoi_len] * demo_num + [quest_qoi_len]
     qoi_k_len_list_raw = [demo_qoi_len] * demo_num + [quest_qoi_len]
 
-    cond_len_list = [i * j for i, j in zip(cond_bool_list, cond_len_list_raw, strict=False)]
-    qoi_kv_len_list = [i * j for i, j in zip(qoi_kv_bool_list, qoi_kv_len_list_raw, strict=False)]
-    qoi_k_len_list = [i * j for i, j in zip(qoi_k_bool_list, qoi_k_len_list_raw, strict=False)]
+    cond_len_list = [
+        i * j for i, j in zip(cond_bool_list, cond_len_list_raw, strict=False)
+    ]
+    qoi_kv_len_list = [
+        i * j for i, j in zip(qoi_kv_bool_list, qoi_kv_len_list_raw, strict=False)
+    ]
+    qoi_k_len_list = [
+        i * j for i, j in zip(qoi_k_bool_list, qoi_k_len_list_raw, strict=False)
+    ]
 
     return_list = []
     if "mask" in returns:
         basic_mask = build_basic_mask(
-            cond_len_list=cond_len_list, qoi_kv_len_list=qoi_kv_len_list, qoi_k_len_list=qoi_k_len_list
+            cond_len_list=cond_len_list,
+            qoi_kv_len_list=qoi_kv_len_list,
+            qoi_k_len_list=qoi_k_len_list,
         )
         return_list.append(basic_mask)
     if "index" in returns:
         index_pos = build_index_integer(
-            cond_len_list=cond_len_list, qoi_kv_len_list=qoi_kv_len_list, qoi_k_len_list=qoi_k_len_list
+            cond_len_list=cond_len_list,
+            qoi_kv_len_list=qoi_kv_len_list,
+            qoi_k_len_list=qoi_k_len_list,
         )
         return_list.append(index_pos)
     if "out" in returns:

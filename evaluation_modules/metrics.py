@@ -43,7 +43,10 @@ class FlowMetrics:
         return metrics
 
     def compute_relative_errors(
-        self, pred: torch.Tensor, target: torch.Tensor, channel_names: list[str] | None = None
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        channel_names: list[str] | None = None,
     ) -> dict:
         """
         Compute various types of relative errors.
@@ -58,7 +61,9 @@ class FlowMetrics:
         """
         return compute_smart_relative_error(pred, target, channel_names)
 
-    def compute_magnitude_metrics(self, pred: torch.Tensor, target: torch.Tensor) -> dict:
+    def compute_magnitude_metrics(
+        self, pred: torch.Tensor, target: torch.Tensor
+    ) -> dict:
         """
         Compute metrics for velocity magnitude.
 
@@ -104,7 +109,10 @@ class FlowMetrics:
             return {"magnitude": {"error": str(e)}}
 
     def compute_channel_metrics(
-        self, pred: torch.Tensor, target: torch.Tensor, channel_names: list[str] | None = None
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        channel_names: list[str] | None = None,
     ) -> dict:
         """
         Compute metrics for each channel separately.
@@ -133,15 +141,23 @@ class FlowMetrics:
             basic_metrics = self.compute_basic_metrics(pred_channel, target_channel)
 
             # Relative error metrics
-            rel_metrics = self.compute_relative_errors(pred_channel, target_channel, [channel_name])
+            rel_metrics = self.compute_relative_errors(
+                pred_channel, target_channel, [channel_name]
+            )
 
             # Combine metrics
-            channel_metrics[channel_name] = {**basic_metrics, **rel_metrics.get(channel_name, {})}
+            channel_metrics[channel_name] = {
+                **basic_metrics,
+                **rel_metrics.get(channel_name, {}),
+            }
 
         return channel_metrics
 
     def compute_comprehensive_metrics(
-        self, pred: torch.Tensor, target: torch.Tensor, channel_names: list[str] | None = None
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        channel_names: list[str] | None = None,
     ) -> dict:
         """
         Compute all available metrics for the prediction.
@@ -166,7 +182,9 @@ class FlowMetrics:
         metrics["channels"] = self.compute_channel_metrics(pred, target, channel_names)
 
         # Relative error analysis
-        metrics["relative_errors"] = self.compute_relative_errors(pred, target, channel_names)
+        metrics["relative_errors"] = self.compute_relative_errors(
+            pred, target, channel_names
+        )
 
         # Magnitude metrics (if we have at least 3 channels)
         if pred.shape[0] >= 3:
@@ -200,7 +218,9 @@ class FlowMetrics:
             for channel, channel_metrics in metrics["channels"].items():
                 mse = channel_metrics.get("mse", 0)
                 mae = channel_metrics.get("mae", 0)
-                summary_parts.append(f"{channel.upper()} - MSE: {mse:.{precision}f}, MAE: {mae:.{precision}f}")
+                summary_parts.append(
+                    f"{channel.upper()} - MSE: {mse:.{precision}f}, MAE: {mae:.{precision}f}"
+                )
 
         # Magnitude metrics
         if "magnitude" in metrics and isinstance(metrics["magnitude"], dict):
@@ -212,7 +232,9 @@ class FlowMetrics:
 
         return " | ".join(summary_parts)
 
-    def log_metrics_to_wandb(self, metrics: dict, prefix: str = "", step: int | None = None):
+    def log_metrics_to_wandb(
+        self, metrics: dict, prefix: str = "", step: int | None = None
+    ):
         """
         Log metrics to wandb if available.
 

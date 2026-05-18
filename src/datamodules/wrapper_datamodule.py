@@ -40,10 +40,16 @@ class ProcessDatasetWrapper(Dataset):
         image: [..., c, h, w], usually uint between 0 and 255
         return [..., c, h', w'], usually float in [0, 1] or [-1, 1]
         """
-        reshaped_image = image.reshape(-1, *image.shape[-3:])  # (..., c, h, w) -> (n, c, h, w)
-        processed_image = self.image_processor(reshaped_image, return_tensors="pt")["pixel_values"]
+        reshaped_image = image.reshape(
+            -1, *image.shape[-3:]
+        )  # (..., c, h, w) -> (n, c, h, w)
+        processed_image = self.image_processor(reshaped_image, return_tensors="pt")[
+            "pixel_values"
+        ]
         # (n, c, h', w') -> (..., c, h', w')
-        processed_image = processed_image.reshape(image.shape[:-3] + processed_image.shape[-3:])
+        processed_image = processed_image.reshape(
+            image.shape[:-3] + processed_image.shape[-3:]
+        )
         return processed_image
 
 

@@ -49,7 +49,9 @@ def to_tensor_all(batch: PyTree, *args, **kwargs) -> PyTree:
     as our PyTrees are expected to contain `np.ndarray`s with non-numeric objects.
     """
     return optree.tree_map(
-        lambda leaf: torch.tensor(leaf, *args, **kwargs) if isinstance(leaf, np.ndarray) else leaf,
+        lambda leaf: torch.tensor(leaf, *args, **kwargs)
+        if isinstance(leaf, np.ndarray)
+        else leaf,
         batch,
     )
 
@@ -67,7 +69,9 @@ def to_tensor_numeric(batch: PyTree, *args, **kwargs) -> PyTree:
     Return a new pytree with all numpy arrays converted to torch.Tensors, only for numeric batch
     """
     return optree.tree_map(
-        lambda leaf: torch.tensor(leaf, *args, **kwargs) if is_np_numeric(leaf) else leaf,
+        lambda leaf: torch.tensor(leaf, *args, **kwargs)
+        if is_np_numeric(leaf)
+        else leaf,
         batch,
     )
 
@@ -94,7 +98,9 @@ def get_slice_batch(batch: PyTree, bid_list: Sequence[int]) -> PyTree:
     Return a new pytree with the sliced leaves
     """
     return optree.tree_map(
-        lambda leaf: leaf[bid_list] if isinstance(leaf, np.ndarray | torch.Tensor) else leaf,
+        lambda leaf: leaf[bid_list]
+        if isinstance(leaf, np.ndarray | torch.Tensor)
+        else leaf,
         batch,
     )
 
@@ -155,7 +161,9 @@ def get_array_tensor_info(leaf: np.ndarray | torch.Tensor) -> str:
     if isinstance(leaf, np.ndarray):
         if np.issubdtype(leaf.dtype, np.floating):
             range_str = f"range={leaf.min():.3f}:{leaf.max():.3f}"
-        elif not np.issubdtype(leaf.dtype, np.complexfloating):  # should be integer or bool
+        elif not np.issubdtype(
+            leaf.dtype, np.complexfloating
+        ):  # should be integer or bool
             range_str = f"range={leaf.min()}:{leaf.max()}"
         else:
             range_str = ""
@@ -167,7 +175,9 @@ def get_array_tensor_info(leaf: np.ndarray | torch.Tensor) -> str:
             range_str = f"range={leaf.min()}:{leaf.max()}"
         else:
             range_str = ""
-        return f"{type(leaf).__name__} {leaf.shape} {leaf.dtype} {range_str} {leaf.device}"
+        return (
+            f"{type(leaf).__name__} {leaf.shape} {leaf.dtype} {range_str} {leaf.device}"
+        )
 
 
 def get_print_info_lv1(batch: PyTree) -> PyTree:
@@ -178,7 +188,9 @@ def get_print_info_lv1(batch: PyTree) -> PyTree:
     def get_print_info_leaf(leaf):
         if not isinstance(leaf, np.ndarray | torch.Tensor):
             return f"type={type(leaf)}, warning: non-tensor/array leaf"  # this should not happen in general
-        if isinstance(leaf, np.ndarray) and np.issubdtype(leaf.dtype, np.dtypes.StringDType()):
+        if isinstance(leaf, np.ndarray) and np.issubdtype(
+            leaf.dtype, np.dtypes.StringDType()
+        ):
             info_list = [str(s) for s in leaf]
             return truncate_seq(info_list, max_len=4)
         return get_array_tensor_info(leaf)
@@ -194,7 +206,9 @@ def get_print_info_lv2(batch: PyTree) -> PyTree:
     def get_print_info_leaf(leaf):
         if not isinstance(leaf, np.ndarray | torch.Tensor):
             return f"type={type(leaf)}, warning: non-tensor/array leaf"  # this should not happen in general
-        if isinstance(leaf, np.ndarray) and np.issubdtype(leaf.dtype, np.dtypes.StringDType()):
+        if isinstance(leaf, np.ndarray) and np.issubdtype(
+            leaf.dtype, np.dtypes.StringDType()
+        ):
             return [str(s) for s in leaf]
         return get_array_tensor_info(leaf)
 

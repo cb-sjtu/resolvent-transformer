@@ -84,7 +84,9 @@ class FlowSequence1PlaneDataset(Dataset):
         files = sorted(glob.glob(os.path.join(data_dir, file_pattern)))
 
         if not files:
-            raise ValueError(f"No files found with pattern: {file_pattern} in {data_dir}")
+            raise ValueError(
+                f"No files found with pattern: {file_pattern} in {data_dir}"
+            )
 
         # Extract timesteps from filenames
         self.timesteps = []
@@ -104,7 +106,9 @@ class FlowSequence1PlaneDataset(Dataset):
         # Each sample needs input_length + max_k_steps frames with time_stride spacing
         # Total span: (input_length + max_k_steps - 1) * time_stride + 1
         # Example: input=5, target=1, stride=2 -> need frames at [0,2,4,6,8,10] -> span=11
-        total_frames_needed = (self.input_length + self.prediction_step_size - 1) * self.time_stride + 1
+        total_frames_needed = (
+            self.input_length + self.prediction_step_size - 1
+        ) * self.time_stride + 1
         self.num_samples = self.num_frames - total_frames_needed + 1
 
         if self.num_samples <= 0:
@@ -139,7 +143,11 @@ class FlowSequence1PlaneDataset(Dataset):
                 # A sequence starting at index i will access frames at:
                 # i, i+stride, i+2*stride, ..., i+(input_length+prediction_step_size-1)*stride
                 # Note: We use prediction_step_size here, NOT max_k_steps
-                end_idx = i + (self.input_length + self.prediction_step_size - 1) * self.time_stride
+                end_idx = (
+                    i
+                    + (self.input_length + self.prediction_step_size - 1)
+                    * self.time_stride
+                )
                 end_timestep = self.timesteps[end_idx]
 
                 # Exclude if the sequence spans across the discontinuity
@@ -153,15 +161,21 @@ class FlowSequence1PlaneDataset(Dataset):
                 else:
                     valid_indices.append(i)
 
-            print(f"Excluded {excluded_count} sequences due to discontinuity at timestep {discontinuity_timestep}")
-            print(f"Valid samples: {len(valid_indices)} (originally {self.num_samples})")
+            print(
+                f"Excluded {excluded_count} sequences due to discontinuity at timestep {discontinuity_timestep}"
+            )
+            print(
+                f"Valid samples: {len(valid_indices)} (originally {self.num_samples})"
+            )
 
             # Update num_samples to reflect filtered data
             self.num_samples = len(valid_indices)
             self.valid_base_indices = valid_indices
         else:
             # No discontinuity filtering - use all samples
-            print(f"Discontinuity filtering disabled - using all {self.num_samples} samples")
+            print(
+                f"Discontinuity filtering disabled - using all {self.num_samples} samples"
+            )
             self.valid_base_indices = list(range(self.num_samples))
 
         # Split data indices using the filtered valid_base_indices
@@ -171,11 +185,19 @@ class FlowSequence1PlaneDataset(Dataset):
         if split == "train":
             self.indices = [self.valid_base_indices[i] for i in range(0, train_samples)]
         elif split == "val":
-            self.indices = [self.valid_base_indices[i] for i in range(train_samples, train_samples + valid_samples)]
+            self.indices = [
+                self.valid_base_indices[i]
+                for i in range(train_samples, train_samples + valid_samples)
+            ]
         else:  # test
-            self.indices = [self.valid_base_indices[i] for i in range(train_samples + valid_samples, self.num_samples)]
+            self.indices = [
+                self.valid_base_indices[i]
+                for i in range(train_samples + valid_samples, self.num_samples)
+            ]
 
-        print(f"Created {split} dataset with {len(self.indices)} samples from {self.num_frames} files")
+        print(
+            f"Created {split} dataset with {len(self.indices)} samples from {self.num_frames} files"
+        )
 
         # Get data shape from first file
         self._get_data_shape()
@@ -193,7 +215,9 @@ class FlowSequence1PlaneDataset(Dataset):
 
             # Check that data shape is 3D and has at least the required number of channels
             if len(data_multi_channel.shape) != 3:
-                raise ValueError(f"Expected 3D data shape (C, H, W), got {data_multi_channel.shape}")
+                raise ValueError(
+                    f"Expected 3D data shape (C, H, W), got {data_multi_channel.shape}"
+                )
 
             if data_multi_channel.shape[0] < len(self.field_names):
                 raise ValueError(
@@ -228,7 +252,9 @@ class FlowSequence1PlaneDataset(Dataset):
                 with open(norm_stats_path) as f:
                     stats = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError) as e:
-                print(f"Warning: Could not load normalization stats from {norm_stats_path}: {e}")
+                print(
+                    f"Warning: Could not load normalization stats from {norm_stats_path}: {e}"
+                )
                 print("Normalization will be disabled.")
                 self.mean = None
                 self.std = None
@@ -236,7 +262,9 @@ class FlowSequence1PlaneDataset(Dataset):
         elif isinstance(norm_stats, dict):
             stats = norm_stats
         else:
-            raise ValueError(f"norm_stats must be dict or file path, got {type(norm_stats)}")
+            raise ValueError(
+                f"norm_stats must be dict or file path, got {type(norm_stats)}"
+            )
 
         # Extract per-channel statistics
         try:
@@ -255,16 +283,24 @@ class FlowSequence1PlaneDataset(Dataset):
                         self.std.append(float(per_channel_stats[channel_key]["std"]))
                     else:
                         # Fallback to global stats if channel not found
-                        print(f"Warning: No stats found for {channel_key}, using global stats")
+                        print(
+                            f"Warning: No stats found for {channel_key}, using global stats"
+                        )
                         self.mean.append(float(stats["mean"]))
                         self.std.append(float(stats["std"]))
 
                 # Convert to tensors for efficient computation
-                self.mean = torch.tensor(self.mean, dtype=torch.float32).view(-1, 1, 1)  # (num_channels, 1, 1)
-                self.std = torch.tensor(self.std, dtype=torch.float32).view(-1, 1, 1)  # (num_channels, 1, 1)
+                self.mean = torch.tensor(self.mean, dtype=torch.float32).view(
+                    -1, 1, 1
+                )  # (num_channels, 1, 1)
+                self.std = torch.tensor(self.std, dtype=torch.float32).view(
+                    -1, 1, 1
+                )  # (num_channels, 1, 1)
                 self.per_channel_norm = True
 
-                print(f"{self.num_channels}-channel normalization enabled for {self.split} split:")
+                print(
+                    f"{self.num_channels}-channel normalization enabled for {self.split} split:"
+                )
                 for ch_idx in range(len(self.mean)):
                     print(
                         f"  channel_{ch_idx:02d} ({self.field_names[ch_idx]}): "
@@ -276,16 +312,22 @@ class FlowSequence1PlaneDataset(Dataset):
                 self.mean = float(stats["mean"])
                 self.std = float(stats["std"])
                 self.per_channel_norm = False
-                print(f"Global normalization enabled for {self.split} split: mean={self.mean:.6f}, std={self.std:.6f}")
+                print(
+                    f"Global normalization enabled for {self.split} split: mean={self.mean:.6f}, std={self.std:.6f}"
+                )
 
             # Validate std is not zero
             if self.per_channel_norm:
                 for i in range(len(self.std)):
                     if abs(self.std[i, 0, 0]) < 1e-8:
-                        print(f"Warning: Standard deviation for channel {i:02d} is very small")
+                        print(
+                            f"Warning: Standard deviation for channel {i:02d} is very small"
+                        )
             else:
                 if abs(self.std) < 1e-8:
-                    print("Warning: Standard deviation is very small, normalization might be unstable")
+                    print(
+                        "Warning: Standard deviation is very small, normalization might be unstable"
+                    )
 
         except (KeyError, TypeError, ValueError) as e:
             print(f"Warning: Invalid normalization stats format: {e}")
@@ -356,9 +398,7 @@ class FlowSequence1PlaneDataset(Dataset):
             - Channel 2: w (spanwise velocity)
         """
         base_idx = self.indices[idx]
-        description = (
-            f"dataset: {self.__class__.__name__}, idx: {idx}, y_slice: {self.y_slice}, fields: {self.field_names}"
-        )
+        description = f"dataset: {self.__class__.__name__}, idx: {idx}, y_slice: {self.y_slice}, fields: {self.field_names}"
 
         # Load input sequence + target frames with time_stride spacing
         frames = []
@@ -388,12 +428,18 @@ class FlowSequence1PlaneDataset(Dataset):
             frames.append(multi_channel_frame)
 
         # Split into input and target sequences
-        input_seq = np.stack(frames[: self.input_length], axis=0)  # (input_length, num_channels, H, W)
+        input_seq = np.stack(
+            frames[: self.input_length], axis=0
+        )  # (input_length, num_channels, H, W)
         target_frames = frames[self.input_length :]  # List of max_k_steps frames
 
         # Convert to tensors
-        input_seq = torch.from_numpy(input_seq).float()  # (input_length, num_channels, H, W)
-        target_seq = torch.from_numpy(np.stack(target_frames, axis=0)).float()  # (max_k_steps, num_channels, H, W)
+        input_seq = torch.from_numpy(
+            input_seq
+        ).float()  # (input_length, num_channels, H, W)
+        target_seq = torch.from_numpy(
+            np.stack(target_frames, axis=0)
+        ).float()  # (max_k_steps, num_channels, H, W)
 
         # Apply normalization
         input_seq = self.normalize(input_seq)
@@ -407,7 +453,11 @@ class FlowSequence1PlaneDataset(Dataset):
         data = {"input_seq": input_seq}
         label = target_seq
 
-        return {"description": np.array([description], dtype="<U200"), "data": data, "label": label}
+        return {
+            "description": np.array([description], dtype="<U200"),
+            "data": data,
+            "label": label,
+        }
 
     def get_channel_info(self):
         """Return information about channel organization."""

@@ -15,9 +15,14 @@ class PrintModel(L.Callback):
     def on_train_start(self, trainer: L.Trainer, pl_module: L.LightningModule):
         # print the model details customly
         pl_module.print(type(pl_module.net))
-        model = pl_module.net.module if hasattr(pl_module.net, "module") else pl_module.net
+        model = (
+            pl_module.net.module if hasattr(pl_module.net, "module") else pl_module.net
+        )
         headers = ["Parameter Name", "Shape", "Requires Grad"]
-        table_data = [(name, str(param.shape), param.requires_grad) for name, param in model.named_parameters()]
+        table_data = [
+            (name, str(param.shape), param.requires_grad)
+            for name, param in model.named_parameters()
+        ]
         pl_module.print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
         total_params = sum(p.numel() for p in model.parameters())

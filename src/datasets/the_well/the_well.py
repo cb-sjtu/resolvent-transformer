@@ -9,10 +9,16 @@ from torch.utils.data import Dataset
 class TheWellActiveMatterDataset(Dataset):
     def __init__(self, well_base_path, split="train", norm_stats=None, ex_num=5, c=3):
         self.dataset = WellDataset(
-            well_base_path=well_base_path, well_dataset_name="active_matter", well_split_name=split
+            well_base_path=well_base_path,
+            well_dataset_name="active_matter",
+            well_split_name=split,
         )
-        self.mean = torch.tensor(norm_stats["mean"]).view(1, c, 1, 1) if norm_stats else None
-        self.std = torch.tensor(norm_stats["std"]).view(1, c, 1, 1) if norm_stats else None
+        self.mean = (
+            torch.tensor(norm_stats["mean"]).view(1, c, 1, 1) if norm_stats else None
+        )
+        self.std = (
+            torch.tensor(norm_stats["std"]).view(1, c, 1, 1) if norm_stats else None
+        )
         self.ex_num = ex_num
         self.c = c
 
@@ -45,19 +51,29 @@ class TheWellActiveMatterDataset(Dataset):
         data = {"ex_f": examples_f, "ex_g": examples_g, "qn_f": qn_f}
         label = qn_g
 
-        return {"description": np.array([description], dtype=np.dtypes.StringDType()), "data": data, "label": label}
+        return {
+            "description": np.array([description], dtype=np.dtypes.StringDType()),
+            "data": data,
+            "label": label,
+        }
 
 
 class TheWellActiveMatterDataset_pro(Dataset):
     def __init__(self, well_base_path, split="train", norm_stats=None, ex_num=5):
         self.dataset = WellDataset(
-            well_base_path=well_base_path, well_dataset_name="active_matter", well_split_name=split
+            well_base_path=well_base_path,
+            well_dataset_name="active_matter",
+            well_split_name=split,
         )
         # 假设输入 shape: (T_in, Lx, Ly, F)
         sample = self.dataset[0]
         self.field_dim = sample["input_fields"].shape[-1]  # 通道数 F
-        self.mean = torch.tensor(norm_stats["mean"]).view(1, 1, 1, 1) if norm_stats else None
-        self.std = torch.tensor(norm_stats["std"]).view(1, 1, 1, 1) if norm_stats else None
+        self.mean = (
+            torch.tensor(norm_stats["mean"]).view(1, 1, 1, 1) if norm_stats else None
+        )
+        self.std = (
+            torch.tensor(norm_stats["std"]).view(1, 1, 1, 1) if norm_stats else None
+        )
         self.ex_num = ex_num
 
     def __len__(self):
@@ -73,13 +89,21 @@ class TheWellActiveMatterDataset_pro(Dataset):
         examples_f = []
         examples_g = []
         for i in range(self.ex_num):
-            f = self.dataset[true_idx + i]["input_fields"][:, :, :, channel_idx]  # (T_in, Lx, Ly)
-            g = self.dataset[true_idx + i]["output_fields"][:, :, :, channel_idx]  # (T_out, Lx, Ly)
+            f = self.dataset[true_idx + i]["input_fields"][
+                :, :, :, channel_idx
+            ]  # (T_in, Lx, Ly)
+            g = self.dataset[true_idx + i]["output_fields"][
+                :, :, :, channel_idx
+            ]  # (T_out, Lx, Ly)
             examples_f.append(f)
             examples_g.append(g)
 
-        qn_f = self.dataset[true_idx + self.ex_num]["input_fields"][:, :, :, channel_idx]
-        qn_g = self.dataset[true_idx + self.ex_num]["output_fields"][:, :, :, channel_idx]
+        qn_f = self.dataset[true_idx + self.ex_num]["input_fields"][
+            :, :, :, channel_idx
+        ]
+        qn_g = self.dataset[true_idx + self.ex_num]["output_fields"][
+            :, :, :, channel_idx
+        ]
 
         # 转成统一格式 (1, ex_num, T or c, H, W)
         examples_f = torch.stack(examples_f, dim=0).unsqueeze(0)
@@ -98,4 +122,8 @@ class TheWellActiveMatterDataset_pro(Dataset):
         }
         label = qn_g  # (1, 1, T_out, H, W)
 
-        return {"description": np.array([description], dtype=np.dtypes.StringDType()), "data": data, "label": label}
+        return {
+            "description": np.array([description], dtype=np.dtypes.StringDType()),
+            "data": data,
+            "label": label,
+        }

@@ -90,7 +90,9 @@ class FastFlowSequence2DDataset(Dataset):
         self.num_samples = self.num_frames - self.input_length - self.max_k_steps + 1
 
         if self.num_samples <= 0:
-            raise ValueError(f"Not enough frames. Need at least {input_length + max_k_steps}, got {self.num_frames}")
+            raise ValueError(
+                f"Not enough frames. Need at least {input_length + max_k_steps}, got {self.num_frames}"
+            )
 
         # Split data indices
         train_samples = int(self.num_samples * train_ratio)
@@ -103,7 +105,9 @@ class FastFlowSequence2DDataset(Dataset):
         else:  # test
             self.indices = list(range(train_samples + valid_samples, self.num_samples))
 
-        print(f"FastFlowSequence2DDataset {split}: {len(self.indices)} samples from {self.num_frames} files")
+        print(
+            f"FastFlowSequence2DDataset {split}: {len(self.indices)} samples from {self.num_frames} files"
+        )
 
         # Get data shape from first file
         if self.file_list:
@@ -111,7 +115,9 @@ class FastFlowSequence2DDataset(Dataset):
                 self.data_shape = f["data"].shape
                 # Try to read metadata
                 try:
-                    stored_field_names = list(f.attrs.get("field_names", self.field_names))
+                    stored_field_names = list(
+                        f.attrs.get("field_names", self.field_names)
+                    )
                     stored_num_channels = f.attrs.get("num_channels", self.num_channels)
                     print(f"Data shape per frame: {self.data_shape}")
                     print(f"Stored field names: {stored_field_names}")
@@ -140,7 +146,9 @@ class FastFlowSequence2DDataset(Dataset):
                 with open(norm_stats_path) as f:
                     stats = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError) as e:
-                print(f"Warning: Could not load normalization stats from {norm_stats_path}: {e}")
+                print(
+                    f"Warning: Could not load normalization stats from {norm_stats_path}: {e}"
+                )
                 print("Normalization will be disabled.")
                 self.mean = None
                 self.std = None
@@ -148,7 +156,9 @@ class FastFlowSequence2DDataset(Dataset):
         elif isinstance(norm_stats, dict):
             stats = norm_stats
         else:
-            raise ValueError(f"norm_stats must be dict or file path, got {type(norm_stats)}")
+            raise ValueError(
+                f"norm_stats must be dict or file path, got {type(norm_stats)}"
+            )
 
         # Extract mean and std - support both global and per-channel normalization
         try:
@@ -165,37 +175,51 @@ class FastFlowSequence2DDataset(Dataset):
                         self.std.append(float(per_channel_stats[field_name]["std"]))
                     else:
                         # Fallback to global stats if channel not found
-                        print(f"Warning: No stats found for channel {field_name}, using global stats")
+                        print(
+                            f"Warning: No stats found for channel {field_name}, using global stats"
+                        )
                         self.mean.append(float(stats["mean"]))
                         self.std.append(float(stats["std"]))
 
                 # Convert to tensors for efficient computation
                 import torch
 
-                self.mean = torch.tensor(self.mean, dtype=torch.float32).view(-1, 1, 1)  # (C, 1, 1)
-                self.std = torch.tensor(self.std, dtype=torch.float32).view(-1, 1, 1)  # (C, 1, 1)
+                self.mean = torch.tensor(self.mean, dtype=torch.float32).view(
+                    -1, 1, 1
+                )  # (C, 1, 1)
+                self.std = torch.tensor(self.std, dtype=torch.float32).view(
+                    -1, 1, 1
+                )  # (C, 1, 1)
                 self.per_channel_norm = True
 
                 print(f"Per-channel normalization enabled for {self.split} split:")
                 for i, field_name in enumerate(self.field_names):
                     if i < len(self.mean):
-                        print(f"  {field_name}: mean={self.mean[i, 0, 0]:.6f}, std={self.std[i, 0, 0]:.6f}")
+                        print(
+                            f"  {field_name}: mean={self.mean[i, 0, 0]:.6f}, std={self.std[i, 0, 0]:.6f}"
+                        )
 
             else:
                 # Global normalization (backward compatibility)
                 self.mean = float(stats["mean"])
                 self.std = float(stats["std"])
                 self.per_channel_norm = False
-                print(f"Global normalization enabled for {self.split} split: mean={self.mean:.6f}, std={self.std:.6f}")
+                print(
+                    f"Global normalization enabled for {self.split} split: mean={self.mean:.6f}, std={self.std:.6f}"
+                )
 
             # Validate std is not zero
             if self.per_channel_norm:
                 for i in range(len(self.std)):
                     if abs(self.std[i, 0, 0]) < 1e-8:
-                        print(f"Warning: Standard deviation for channel {self.field_names[i]} is very small")
+                        print(
+                            f"Warning: Standard deviation for channel {self.field_names[i]} is very small"
+                        )
             else:
                 if abs(self.std) < 1e-8:
-                    print("Warning: Standard deviation is very small, normalization might be unstable")
+                    print(
+                        "Warning: Standard deviation is very small, normalization might be unstable"
+                    )
 
         except (KeyError, TypeError, ValueError) as e:
             print(f"Warning: Invalid normalization stats format: {e}")
@@ -271,12 +295,18 @@ class FastFlowSequence2DDataset(Dataset):
         for i in range(self.input_length + self.max_k_steps):
             fpath = self.file_list[base_idx + i]
             with h5py.File(fpath, "r") as f:
-                data_multi_channel = f["data"][()]  # Already preprocessed multi-channel 2D data (C, H, W)
+                data_multi_channel = f["data"][
+                    ()
+                ]  # Already preprocessed multi-channel 2D data (C, H, W)
                 frames.append(data_multi_channel)
 
         # Convert to tensors
-        input_seq = np.stack(frames[: self.input_length], axis=0)  # (input_length, C, H, W)
-        target_seq = np.stack(frames[self.input_length :], axis=0)  # (max_k_steps, C, H, W)
+        input_seq = np.stack(
+            frames[: self.input_length], axis=0
+        )  # (input_length, C, H, W)
+        target_seq = np.stack(
+            frames[self.input_length :], axis=0
+        )  # (max_k_steps, C, H, W)
 
         # Convert to tensors
         input_seq = torch.from_numpy(input_seq).float()  # (input_length, C, H, W)
@@ -298,14 +328,22 @@ class FastFlowSequence2DDataset(Dataset):
         data = {"input_seq": input_seq}
         label = target_seq
 
-        return {"description": np.array([description], dtype="<U100"), "data": data, "label": label}
+        return {
+            "description": np.array([description], dtype="<U100"),
+            "data": data,
+            "label": label,
+        }
 
 
 if __name__ == "__main__":
     # Test the fast dataset with multi-channel data
     import sys
 
-    data_dir = sys.argv[1] if len(sys.argv) > 1 else "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
+    data_dir = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
+    )
 
     print("Testing FastFlowSequence2DDataset with multi-channel data...")
     print(f"Data directory: {data_dir}")
@@ -320,8 +358,12 @@ if __name__ == "__main__":
             sample = dataset[0]
             print(f"Input sequence shape: {sample['data']['input_seq'].shape}")
             print(f"Target sequence shape: {sample['label'].shape}")
-            print(f"Expected input shape: (1, input_length={dataset.input_length}, C={dataset.num_channels}, H, W)")
-            print(f"Expected target shape: (1, max_k_steps={dataset.max_k_steps}, C={dataset.num_channels}, H, W)")
+            print(
+                f"Expected input shape: (1, input_length={dataset.input_length}, C={dataset.num_channels}, H, W)"
+            )
+            print(
+                f"Expected target shape: (1, max_k_steps={dataset.max_k_steps}, C={dataset.num_channels}, H, W)"
+            )
             print("✓ Multi-channel dataset test passed!")
         else:
             print("Warning: Dataset is empty - no preprocessed files found")

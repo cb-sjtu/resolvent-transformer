@@ -65,7 +65,9 @@ def window_reverse_2d(windows, window_size, H, W):
 class WindowAttention2D(nn.Module):
     """2D Window based multi-head self attention module."""
 
-    def __init__(self, dim, window_size, num_heads, qkv_bias=True, attn_drop=0.0, proj_drop=0.0):
+    def __init__(
+        self, dim, window_size, num_heads, qkv_bias=True, attn_drop=0.0, proj_drop=0.0
+    ):
         super().__init__()
         self.dim = dim
         self.window_size = window_size  # (Wh, Ww)
@@ -107,21 +109,31 @@ class WindowAttention2D(nn.Module):
             mask: (0/-inf) mask with shape of (num_windows, Wh*Ww, Wh*Ww) or None
         """
         B_, N, C = x.shape
-        qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        qkv = (
+            self.qkv(x)
+            .reshape(B_, N, 3, self.num_heads, C // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
         q, k, v = qkv[0], qkv[1], qkv[2]
 
         q = q * self.scale
         attn = q @ k.transpose(-2, -1)
 
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
-            self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
+        relative_position_bias = self.relative_position_bias_table[
+            self.relative_position_index.view(-1)
+        ].view(
+            self.window_size[0] * self.window_size[1],
+            self.window_size[0] * self.window_size[1],
+            -1,
         )
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
         attn = attn + relative_position_bias.unsqueeze(0)
 
         if mask is not None:
             nW = mask.shape[0]
-            attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
+            attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(
+                1
+            ).unsqueeze(0)
             attn = attn.view(-1, self.num_heads, N, N)
             attn = F.softmax(attn, dim=-1)
         else:
@@ -193,12 +205,16 @@ class SwinTransformerBlock2D(nn.Module):
 
         # Cyclic shift
         if self.shift_size[0] > 0 or self.shift_size[1] > 0:
-            shifted_x = torch.roll(x, shifts=(-self.shift_size[0], -self.shift_size[1]), dims=(1, 2))
+            shifted_x = torch.roll(
+                x, shifts=(-self.shift_size[0], -self.shift_size[1]), dims=(1, 2)
+            )
         else:
             shifted_x = x
 
         # Partition windows
-        x_windows = window_partition_2d(shifted_x, self.window_size)  # (nW*B, window_size**2, C)
+        x_windows = window_partition_2d(
+            shifted_x, self.window_size
+        )  # (nW*B, window_size**2, C)
 
         # W-MSA/SW-MSA
         attn_windows = self.attn(x_windows, mask=None)
@@ -208,7 +224,9 @@ class SwinTransformerBlock2D(nn.Module):
 
         # Reverse cyclic shift
         if self.shift_size[0] > 0 or self.shift_size[1] > 0:
-            x = torch.roll(shifted_x, shifts=(self.shift_size[0], self.shift_size[1]), dims=(1, 2))
+            x = torch.roll(
+                shifted_x, shifts=(self.shift_size[0], self.shift_size[1]), dims=(1, 2)
+            )
         else:
             x = shifted_x
 
@@ -266,7 +284,9 @@ class PatchExpand2D(nn.Module):
     Output: x: (B, (dim_scale**2)*H*W, dim // dim_scale)
     """
 
-    def __init__(self, input_resolution, dim, dim_scale=2, norm_layer=nn.LayerNorm, out_dim=None):
+    def __init__(
+        self, input_resolution, dim, dim_scale=2, norm_layer=nn.LayerNorm, out_dim=None
+    ):
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
@@ -274,7 +294,9 @@ class PatchExpand2D(nn.Module):
 
         # 默认把通道按 dim_scale 降，确保可整除
         if out_dim is None:
-            assert dim % dim_scale == 0, f"dim ({dim}) must be divisible by dim_scale ({dim_scale})"
+            assert dim % dim_scale == 0, (
+                f"dim ({dim}) must be divisible by dim_scale ({dim_scale})"
+            )
             out_dim = dim // dim_scale
         self.out_dim = out_dim
 
@@ -302,7 +324,11 @@ class PatchExpand2D(nn.Module):
 
         # 子像素重排: (H, W, s, s) -> (H*s, W*s)
         # (B, H, s, W, s, C_out) -> (B, H*s, W*s, C_out)
-        x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H * self.dim_scale, W * self.dim_scale, self.out_dim)
+        x = (
+            x.permute(0, 1, 3, 2, 4, 5)
+            .contiguous()
+            .view(B, H * self.dim_scale, W * self.dim_scale, self.out_dim)
+        )
 
         # 展平成 token 序列，再做 LN
         x = x.view(B, -1, self.out_dim)
@@ -398,15 +424,23 @@ class ChannelAttention(nn.Module):
         # Apply self-attention along channel dimension
         # Q, K, V: (B*T*N, C=3, d_c=32)
         B_flat, C_seq, d_c = x.shape
-        qkv = self.qkv(x).reshape(B_flat, C_seq, 3, self.num_heads, d_c // self.num_heads).permute(2, 0, 3, 1, 4)
+        qkv = (
+            self.qkv(x)
+            .reshape(B_flat, C_seq, 3, self.num_heads, d_c // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
         q, k, v = qkv[0], qkv[1], qkv[2]  # Each: (B*T*N, num_heads, C=3, head_dim)
 
         q = q * self.scale
-        attn = q @ k.transpose(-2, -1)  # (B*T*N, num_heads, C=3, C=3) - Score matrix: 3x3 attention between u,v,w
+        attn = q @ k.transpose(
+            -2, -1
+        )  # (B*T*N, num_heads, C=3, C=3) - Score matrix: 3x3 attention between u,v,w
         attn = F.softmax(attn, dim=-1)
         attn = self.attn_drop(attn)
 
-        x = (attn @ v).transpose(1, 2).reshape(B_flat, C_seq, d_c)  # (B*T*N, C=3, d_c=32)
+        x = (
+            (attn @ v).transpose(1, 2).reshape(B_flat, C_seq, d_c)
+        )  # (B*T*N, C=3, d_c=32)
         x = self.proj(x)
         x = self.proj_drop(x)
 
@@ -426,7 +460,12 @@ class TemporalAttention(nn.Module):
     """
 
     def __init__(
-        self, embed_dim: int, num_heads: int = 8, qkv_bias: bool = True, attn_drop: float = 0.0, proj_drop: float = 0.0
+        self,
+        embed_dim: int,
+        num_heads: int = 8,
+        qkv_bias: bool = True,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -454,11 +493,17 @@ class TemporalAttention(nn.Module):
         # Apply self-attention along temporal dimension
         # Q, K, V: (B*N, T=3, embed_dim=96)
         BN, T_seq, D = x.shape
-        qkv = self.qkv(x).reshape(BN, T_seq, 3, self.num_heads, D // self.num_heads).permute(2, 0, 3, 1, 4)
+        qkv = (
+            self.qkv(x)
+            .reshape(BN, T_seq, 3, self.num_heads, D // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
         q, k, v = qkv[0], qkv[1], qkv[2]  # Each: (B*N, num_heads, T=3, head_dim)
 
         q = q * self.scale
-        attn = q @ k.transpose(-2, -1)  # (B*N, num_heads, T=3, T=3) - Score matrix: 3x3 attention between time steps
+        attn = q @ k.transpose(
+            -2, -1
+        )  # (B*N, num_heads, T=3, T=3) - Score matrix: 3x3 attention between time steps
         attn = F.softmax(attn, dim=-1)
         attn = self.attn_drop(attn)
 
@@ -483,7 +528,13 @@ class PatchEmbed2D(nn.Module):
     """
 
     def __init__(
-        self, patch_size=(4, 4), in_chans=3, embed_dim=96, d_c=32, use_channel_attention=True, norm_layer=None
+        self,
+        patch_size=(4, 4),
+        in_chans=3,
+        embed_dim=96,
+        d_c=32,
+        use_channel_attention=True,
+        norm_layer=None,
     ):
         super().__init__()
         self.patch_size = patch_size
@@ -491,11 +542,15 @@ class PatchEmbed2D(nn.Module):
         self.embed_dim = embed_dim
         self.d_c = d_c
         self.use_channel_attention = use_channel_attention
-        self.patch_area = patch_size[0] * patch_size[1]  # ph*pw = 16 for patch_size=(4,4)
+        self.patch_area = (
+            patch_size[0] * patch_size[1]
+        )  # ph*pw = 16 for patch_size=(4,4)
 
         # Channel attention module
         if use_channel_attention:
-            self.channel_attention = ChannelAttention(patch_dim=self.patch_area, d_c=d_c, num_heads=1)
+            self.channel_attention = ChannelAttention(
+                patch_dim=self.patch_area, d_c=d_c, num_heads=1
+            )
             # Project from (C * d_c) to embed_dim
             self.proj = nn.Linear(in_chans * d_c, embed_dim)
         else:
@@ -582,7 +637,9 @@ class SwinTransformer2DWithMerging(nn.Module):
         super().__init__()
 
         # Validate depths parameter
-        assert len(depths) % 2 == 1, "depths must have odd length for symmetric encoder-decoder structure"
+        assert len(depths) % 2 == 1, (
+            "depths must have odd length for symmetric encoder-decoder structure"
+        )
 
         self.input_shape = input_shape
         self.sequence_length = sequence_length
@@ -617,7 +674,9 @@ class SwinTransformer2DWithMerging(nn.Module):
         )
 
         # Temporal position embedding
-        self.temporal_pos_embed = nn.Parameter(torch.zeros(1, sequence_length, self.num_channels, 1, 1))
+        self.temporal_pos_embed = nn.Parameter(
+            torch.zeros(1, sequence_length, self.num_channels, 1, 1)
+        )
         nn.init.trunc_normal_(self.temporal_pos_embed, std=0.02)
 
         # Enhanced patch embedding with channel attention
@@ -642,8 +701,14 @@ class SwinTransformer2DWithMerging(nn.Module):
         self.pos_drop = nn.Dropout(drop_rate)
 
         # Stochastic depth
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths_encoder))]
-        dpr_decoder = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths_decoder))]
+        dpr = [
+            x.item()
+            for x in torch.linspace(0, drop_path_rate, sum(self.depths_encoder))
+        ]
+        dpr_decoder = [
+            x.item()
+            for x in torch.linspace(0, drop_path_rate, sum(self.depths_decoder))
+        ]
 
         # Build encoder layers
         self.layers = nn.ModuleList()
@@ -656,7 +721,9 @@ class SwinTransformer2DWithMerging(nn.Module):
                         dim=int(embed_dim * 2**i_layer),
                         num_heads=num_heads,
                         window_size=window_size,
-                        shift_size=(0, 0) if (i % 2 == 0) else tuple(ws // 2 for ws in window_size),
+                        shift_size=(0, 0)
+                        if (i % 2 == 0)
+                        else tuple(ws // 2 for ws in window_size),
                         mlp_ratio=mlp_ratio,
                         qkv_bias=qkv_bias,
                         drop=drop_rate,
@@ -672,7 +739,10 @@ class SwinTransformer2DWithMerging(nn.Module):
             # Add patch merging layer (except for the last layer)
             if i_layer < self.num_layers - 1:
                 downsample = PatchMerging2D(
-                    input_resolution=(self.patch_H // (2**i_layer), self.patch_W // (2**i_layer)),
+                    input_resolution=(
+                        self.patch_H // (2**i_layer),
+                        self.patch_W // (2**i_layer),
+                    ),
                     dim=int(embed_dim * 2**i_layer),
                     norm_layer=norm_layer,
                 )
@@ -687,10 +757,13 @@ class SwinTransformer2DWithMerging(nn.Module):
 
         for i_layer in range(self.num_layers_decoder):
             # After upsampling, dimension is halved, then doubled by concatenation
-            dim_after_upsample = int(embed_dim * 2 ** (self.num_encoder_layers - 1 - i_layer)) // 2
+            dim_after_upsample = (
+                int(embed_dim * 2 ** (self.num_encoder_layers - 1 - i_layer)) // 2
+            )
             concat_linear = (
                 nn.Linear(
-                    2 * dim_after_upsample,  # Input: concatenated features (upsampled + skip)
+                    2
+                    * dim_after_upsample,  # Input: concatenated features (upsampled + skip)
                     dim_after_upsample,  # Output: back to upsampled dimension
                 )
                 if i_layer < self.num_layers_decoder - 1
@@ -714,10 +787,14 @@ class SwinTransformer2DWithMerging(nn.Module):
             layer = nn.ModuleList(
                 [
                     SwinTransformerBlock2D(
-                        dim=int(embed_dim * 2 ** (self.num_encoder_layers - 1 - i_layer)),
+                        dim=int(
+                            embed_dim * 2 ** (self.num_encoder_layers - 1 - i_layer)
+                        ),
                         num_heads=num_heads,
                         window_size=window_size,
-                        shift_size=(0, 0) if (i % 2 == 0) else tuple(ws // 2 for ws in window_size),
+                        shift_size=(0, 0)
+                        if (i % 2 == 0)
+                        else tuple(ws // 2 for ws in window_size),
                         mlp_ratio=mlp_ratio,
                         qkv_bias=qkv_bias,
                         drop=drop_rate,
@@ -745,8 +822,12 @@ class SwinTransformer2DWithMerging(nn.Module):
                 norm_layer=norm_layer,
             )
             self.output = nn.Conv2d(
-                in_channels=sequence_length * (embed_dim // patch_size[0]),  # T * (reduced channels after PatchExpand)
-                out_channels=prediction_horizon * self.num_channels,  # Output all channels
+                in_channels=sequence_length
+                * (
+                    embed_dim // patch_size[0]
+                ),  # T * (reduced channels after PatchExpand)
+                out_channels=prediction_horizon
+                * self.num_channels,  # Output all channels
                 kernel_size=1,
                 bias=False,
             )
@@ -779,13 +860,19 @@ class SwinTransformer2DWithMerging(nn.Module):
             BT, C, H, W = x.shape
             B = BT // (self.sequence_length * self.num_channels)
             T = self.sequence_length
-            x = einops.rearrange(x, "(b t c) h w -> b t c h w", b=B, t=T, c=self.num_channels)
+            x = einops.rearrange(
+                x, "(b t c) h w -> b t c h w", b=B, t=T, c=self.num_channels
+            )
         else:
             B, T, C, H, W = x.shape
 
-        assert self.sequence_length == T, f"Expected sequence length {self.sequence_length}, got {T}"
+        assert self.sequence_length == T, (
+            f"Expected sequence length {self.sequence_length}, got {T}"
+        )
         assert self.num_channels == C, f"Expected {self.num_channels} channels, got {C}"
-        assert tuple(self.input_shape) == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
+        assert tuple(self.input_shape) == (H, W), (
+            f"Expected shape {self.input_shape}, got {(H, W)}"
+        )
 
         # Add temporal position embedding
         x = x + self.temporal_pos_embed  # (B, T, C=3, H, W)
@@ -796,7 +883,9 @@ class SwinTransformer2DWithMerging(nn.Module):
 
         # Enhanced patch embedding with channel attention
         # Input: (B, T*C, H, W) -> Output: (B, T, N, embed_dim)
-        x, (patch_H, patch_W) = self.patch_embed(x, sequence_length=self.sequence_length)
+        x, (patch_H, patch_W) = self.patch_embed(
+            x, sequence_length=self.sequence_length
+        )
         x = self.pos_drop(x)
 
         # Apply temporal attention across T dimension
@@ -810,12 +899,17 @@ class SwinTransformer2DWithMerging(nn.Module):
         x_downsample = []
 
         # Encoder
-        for i_layer, (layer, downsample) in enumerate(zip(self.layers, self.downsample_layers, strict=False)):
+        for i_layer, (layer, downsample) in enumerate(
+            zip(self.layers, self.downsample_layers, strict=False)
+        ):
             # Store current features for skip connection
             x_downsample.append(x)
 
             # Apply transformer blocks
-            current_resolution = (self.patch_H // (2**i_layer), self.patch_W // (2**i_layer))
+            current_resolution = (
+                self.patch_H // (2**i_layer),
+                self.patch_W // (2**i_layer),
+            )
             for block in layer:
                 x = block(x, current_resolution[0], current_resolution[1])
 
@@ -825,7 +919,12 @@ class SwinTransformer2DWithMerging(nn.Module):
 
         # Decoder with skip connections
         for i_layer, (layer_up, layer, concat_back_dim) in enumerate(
-            zip(self.upsample_layers, self.layers_decoder, self.concat_back_dim, strict=False)
+            zip(
+                self.upsample_layers,
+                self.layers_decoder,
+                self.concat_back_dim,
+                strict=False,
+            )
         ):
             # Apply transformer blocks first
             current_resolution = (
@@ -839,7 +938,9 @@ class SwinTransformer2DWithMerging(nn.Module):
             if i_layer < self.num_layers_decoder - 1:
                 x = layer_up(x)
                 # Concatenate with encoder features (skip connection)
-                skip_idx = self.num_encoder_layers - 2 - i_layer  # Correct skip connection index
+                skip_idx = (
+                    self.num_encoder_layers - 2 - i_layer
+                )  # Correct skip connection index
                 if skip_idx >= 0:
                     x = torch.cat([x, x_downsample[skip_idx]], -1)
                     x = concat_back_dim(x)
@@ -920,12 +1021,18 @@ class SwinTransformer2D(nn.Module):
             padding=1,
             groups=sequence_length * num_channels,
         )
-        self.temporal_pos_embed = nn.Parameter(torch.zeros(1, sequence_length, num_channels, 1, 1))
+        self.temporal_pos_embed = nn.Parameter(
+            torch.zeros(1, sequence_length, num_channels, 1, 1)
+        )
         nn.init.trunc_normal_(self.temporal_pos_embed, std=0.02)
 
         # Enhanced patch embedding with channel attention
         self.patch_embed = PatchEmbed2D(
-            patch_size=patch_size, in_chans=num_channels, embed_dim=embed_dim, d_c=32, use_channel_attention=True
+            patch_size=patch_size,
+            in_chans=num_channels,
+            embed_dim=embed_dim,
+            d_c=32,
+            use_channel_attention=True,
         )
         self.pos_drop = nn.Dropout(drop_rate)
 
@@ -937,7 +1044,9 @@ class SwinTransformer2D(nn.Module):
         current_dim = embed_dim
         current_resolution = (self.patch_H, self.patch_W)
 
-        for i_layer, (depth, num_head) in enumerate(zip(depths, num_heads, strict=False)):
+        for i_layer, (depth, num_head) in enumerate(
+            zip(depths, num_heads, strict=False)
+        ):
             # Swin Transformer blocks
             layer = nn.ModuleList(
                 [
@@ -945,7 +1054,9 @@ class SwinTransformer2D(nn.Module):
                         dim=current_dim,
                         num_heads=num_head,
                         window_size=window_size,
-                        shift_size=(0, 0) if (i % 2 == 0) else tuple(ws // 2 for ws in window_size),
+                        shift_size=(0, 0)
+                        if (i % 2 == 0)
+                        else tuple(ws // 2 for ws in window_size),
                         mlp_ratio=mlp_ratio,
                         qkv_bias=qkv_bias,
                         drop=drop_rate,
@@ -959,10 +1070,17 @@ class SwinTransformer2D(nn.Module):
 
             # Patch merging (except for the last layer)
             if self.use_patch_merging and i_layer < len(depths) - 1:
-                merging = PatchMerging2D(input_resolution=current_resolution, dim=current_dim, norm_layer=nn.LayerNorm)
+                merging = PatchMerging2D(
+                    input_resolution=current_resolution,
+                    dim=current_dim,
+                    norm_layer=nn.LayerNorm,
+                )
                 self.merging_layers.append(merging)
                 current_dim *= 2
-                current_resolution = (current_resolution[0] // 2, current_resolution[1] // 2)
+                current_resolution = (
+                    current_resolution[0] // 2,
+                    current_resolution[1] // 2,
+                )
             else:
                 self.merging_layers.append(None)
 
@@ -975,7 +1093,10 @@ class SwinTransformer2D(nn.Module):
             nn.Dropout(drop_rate),
             nn.Linear(current_dim * 2, embed_dim),  # Project back to original embed_dim
             nn.GELU(),
-            nn.Linear(embed_dim, prediction_horizon * num_channels * (patch_size[0] * patch_size[1])),
+            nn.Linear(
+                embed_dim,
+                prediction_horizon * num_channels * (patch_size[0] * patch_size[1]),
+            ),
         )
 
         # Initialize weights
@@ -1006,13 +1127,19 @@ class SwinTransformer2D(nn.Module):
             BT, C, H, W = x.shape
             B = BT // (self.sequence_length * self.num_channels)
             T = self.sequence_length
-            x = einops.rearrange(x, "(b t c) h w -> b t c h w", b=B, t=T, c=self.num_channels)
+            x = einops.rearrange(
+                x, "(b t c) h w -> b t c h w", b=B, t=T, c=self.num_channels
+            )
         else:
             B, T, C, H, W = x.shape
 
-        assert self.sequence_length == T, f"Expected sequence length {self.sequence_length}, got {T}"
+        assert self.sequence_length == T, (
+            f"Expected sequence length {self.sequence_length}, got {T}"
+        )
         assert self.num_channels == C, f"Expected {self.num_channels} channels, got {C}"
-        assert tuple(self.input_shape) == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
+        assert tuple(self.input_shape) == (H, W), (
+            f"Expected shape {self.input_shape}, got {(H, W)}"
+        )
 
         # Temporal processing
         x = x + self.temporal_pos_embed  # (B, T, C=3, H, W)
@@ -1047,17 +1174,30 @@ class SwinTransformer2D(nn.Module):
         # Note: After patch_embed and temporal attention, x is (B*T, N, embed_dim)
         BT = x.shape[0]
         x = x.transpose(1, 2).reshape(BT, -1, current_H, current_W)
-        x = F.adaptive_avg_pool2d(x, (self.patch_H, self.patch_W))  # Pool back to original patch resolution
-        x = x.view(BT, -1, self.patch_H * self.patch_W).transpose(1, 2)  # Back to (B*T, H*W, C)
+        x = F.adaptive_avg_pool2d(
+            x, (self.patch_H, self.patch_W)
+        )  # Pool back to original patch resolution
+        x = x.view(BT, -1, self.patch_H * self.patch_W).transpose(
+            1, 2
+        )  # Back to (B*T, H*W, C)
         # Average across time dimension
         x = x.view(B, T, self.patch_H * self.patch_W, -1).mean(dim=1)  # (B, H*W, C)
 
         # Output projection
-        x = self.output_proj(x)  # (B, N_patches, prediction_horizon * num_channels * patch_area)
+        x = self.output_proj(
+            x
+        )  # (B, N_patches, prediction_horizon * num_channels * patch_area)
 
         # Reshape to output format with multi-channel support
         patch_area = self.patch_size[0] * self.patch_size[1]
-        x = x.reshape(B, self.patch_H, self.patch_W, self.prediction_horizon, self.num_channels, patch_area)
+        x = x.reshape(
+            B,
+            self.patch_H,
+            self.patch_W,
+            self.prediction_horizon,
+            self.num_channels,
+            patch_area,
+        )
 
         # Reconstruct spatial dimensions
         x = x.permute(0, 3, 4, 1, 2, 5)  # (B, T_pred, C, patch_H, patch_W, patch_area)
@@ -1072,7 +1212,9 @@ class SwinTransformer2D(nn.Module):
         )
 
         # Unfold patches back to original spatial resolution
-        x = x.permute(0, 1, 2, 3, 5, 4, 6)  # (B, T_pred, C, patch_H, patch_size[0], patch_W, patch_size[1])
+        x = x.permute(
+            0, 1, 2, 3, 5, 4, 6
+        )  # (B, T_pred, C, patch_H, patch_size[0], patch_W, patch_size[1])
         x = x.contiguous().reshape(B, self.prediction_horizon, self.num_channels, H, W)
 
         # Handle output format
@@ -1108,7 +1250,9 @@ def SwinTransformerAuto(use_patch_merging: bool = True, **kwargs):
         # Convert depths parameter for SwinTransformer2D (extract encoder depths only)
         if "depths" in filtered_kwargs:
             depths = filtered_kwargs["depths"]
-            if len(depths) % 2 == 1:  # If it's the new format (encoder, latent, decoder)
+            if (
+                len(depths) % 2 == 1
+            ):  # If it's the new format (encoder, latent, decoder)
                 num_encoder_layers = len(depths) // 2
                 filtered_kwargs["depths"] = depths[:num_encoder_layers]
         return SwinTransformer2D(use_patch_merging=False, **filtered_kwargs)
@@ -1140,7 +1284,9 @@ if __name__ == "__main__":
         output_unet = model_unet(x)
     print(f"Output shape: {output_unet.shape}")
     print("Expected: (B=1, C=3, H=64, W=48) for multi-channel prediction")
-    print(f"Model parameters: {sum(p.numel() for p in model_unet.parameters()) / 1e6:.2f}M")
+    print(
+        f"Model parameters: {sum(p.numel() for p in model_unet.parameters()) / 1e6:.2f}M"
+    )
 
     # Test with standard Swin architecture
     print("\n2. Testing SwinTransformer2D (standard architecture):")
@@ -1161,7 +1307,9 @@ if __name__ == "__main__":
     with torch.no_grad():
         output_std = model_std(x)
     print(f"Output shape: {output_std.shape}")
-    print(f"Model parameters: {sum(p.numel() for p in model_std.parameters()) / 1e6:.2f}M")
+    print(
+        f"Model parameters: {sum(p.numel() for p in model_std.parameters()) / 1e6:.2f}M"
+    )
 
     # Test channel attention module separately
     print("\n3. Testing ChannelAttention module:")
@@ -1190,7 +1338,9 @@ if __name__ == "__main__":
     print("Expected: (B=2, T=3, N=1536, embed_dim=96)")
 
     print("\n✓ All tests passed! Enhanced multi-channel Swin Transformer is working.")
-    print("  ✓ Channel-wise attention processes u,v,w channels separately then combines them")
+    print(
+        "  ✓ Channel-wise attention processes u,v,w channels separately then combines them"
+    )
     print("  ✓ Temporal attention processes across time dimension (T=3)")
     print("  ✓ Spatial attention uses Swin blocks for local-global feature extraction")
     print("  ✓ Output supports multi-channel prediction (C=3 for u,v,w)")

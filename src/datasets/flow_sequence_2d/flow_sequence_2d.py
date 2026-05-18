@@ -57,7 +57,9 @@ class FlowSequence2DDataset(Dataset):
             # If old field_name is provided and field_names is default, use single field
             self.field_names = [field_name]
         else:
-            self.field_names = field_names if isinstance(field_names, list) else [field_names]
+            self.field_names = (
+                field_names if isinstance(field_names, list) else [field_names]
+            )
 
         self.num_channels = len(self.field_names)
         self.resolution_scale = resolution_scale
@@ -70,7 +72,9 @@ class FlowSequence2DDataset(Dataset):
         self.num_samples = self.num_frames - self.input_length
 
         if self.num_samples <= 0:
-            raise ValueError(f"Not enough frames. Need at least {input_length + 1}, got {self.num_frames}")
+            raise ValueError(
+                f"Not enough frames. Need at least {input_length + 1}, got {self.num_frames}"
+            )
 
         # Split data indices
         train_samples = int(self.num_samples * train_ratio)
@@ -83,7 +87,9 @@ class FlowSequence2DDataset(Dataset):
         else:  # test
             self.indices = list(range(train_samples + valid_samples, self.num_samples))
 
-        print(f"Created {split} dataset with {len(self.indices)} samples from {self.num_frames} files")
+        print(
+            f"Created {split} dataset with {len(self.indices)} samples from {self.num_frames} files"
+        )
 
         # Get data shape from first file
         self._get_data_shape()
@@ -96,11 +102,17 @@ class FlowSequence2DDataset(Dataset):
             data = f["data"][first_field][()]
 
             # Apply downsampling
-            data = data[:: self.resolution_scale[0], :: self.resolution_scale[1], :: self.resolution_scale[2]]
+            data = data[
+                :: self.resolution_scale[0],
+                :: self.resolution_scale[1],
+                :: self.resolution_scale[2],
+            ]
 
             # Extract 2D slice (take slice in y-direction, so result is (z, x))
             if self.y_slice is None:
-                self.y_slice = data.shape[1] // 2  # Use middle slice in y-direction (assuming shape is (z,y,x))
+                self.y_slice = (
+                    data.shape[1] // 2
+                )  # Use middle slice in y-direction (assuming shape is (z,y,x))
 
             data_2d = data[:, self.y_slice, :]  # Shape: (z, x)
             self.data_shape = data_2d.shape
@@ -136,7 +148,11 @@ class FlowSequence2DDataset(Dataset):
                     data = f["data"][field_name][()]
 
                     # Apply downsampling
-                    data = data[:: self.resolution_scale[0], :: self.resolution_scale[1], :: self.resolution_scale[2]]
+                    data = data[
+                        :: self.resolution_scale[0],
+                        :: self.resolution_scale[1],
+                        :: self.resolution_scale[2],
+                    ]
 
                     # Extract 2D slice (y-slice, result is (z, x))
                     data_2d = data[:, self.y_slice, :]
@@ -151,14 +167,20 @@ class FlowSequence2DDataset(Dataset):
         target = frames[-1]  # (C, H, W)
 
         # Add leading batch dimension of 1 (like TheWell dataset)
-        input_seq = torch.from_numpy(input_seq).float().unsqueeze(0)  # (1, input_length, C, H, W)
+        input_seq = (
+            torch.from_numpy(input_seq).float().unsqueeze(0)
+        )  # (1, input_length, C, H, W)
         target = torch.from_numpy(target).float().unsqueeze(0)  # (1, C, H, W)
 
         # Structure like TheWell dataset
         data = {"input_seq": input_seq}  # Could add more fields here if needed
         label = target
 
-        return {"description": np.array([description], dtype="<U100"), "data": data, "label": label}
+        return {
+            "description": np.array([description], dtype="<U100"),
+            "data": data,
+            "label": label,
+        }
 
 
 class TurbulenceDataset2D(Dataset):
@@ -225,7 +247,9 @@ class TurbulenceDataset2D(Dataset):
                     field_data = f["data"][field_name][()]
 
                     # Apply downsampling
-                    field_data = field_data[:: self.scale[0], :: self.scale[1], :: self.scale[2]]
+                    field_data = field_data[
+                        :: self.scale[0], :: self.scale[1], :: self.scale[2]
+                    ]
 
                     # Extract 2D slice (y-slice, result is (z, x))
                     field_2d = field_data[:, self.y_slice, :]

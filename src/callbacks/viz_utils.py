@@ -91,7 +91,9 @@ def merge_images(figs_2d, spacing=0):
                 plt.close(item)
 
     # Determine the total height for the final merged image.
-    total_height = sum(row_img.height for row_img in row_images) + spacing * (len(row_images) - 1)
+    total_height = sum(row_img.height for row_img in row_images) + spacing * (
+        len(row_images) - 1
+    )
 
     # Create the final merged image and paste each row image.
     merged_img = Image.new("RGB", (total_width, total_height))

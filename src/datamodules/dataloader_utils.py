@@ -37,7 +37,10 @@ def get_dataloader_rng(
     seed = base_seed + rank if enable_device_seed else base_seed
     generator.manual_seed(seed)
     if print_lv >= 2:
-        print(f"dataloader rng, rank=[0x{rank:04x}]\tseed=[0x{seed:016x}]\t({print_info})", flush=True)
+        print(
+            f"dataloader rng, rank=[0x{rank:04x}]\tseed=[0x{seed:016x}]\t({print_info})",
+            flush=True,
+        )
     return generator
 
 
@@ -115,7 +118,9 @@ class CycleLoader:
         try:
             # Attempt to get a batch from the current loader
             current_loader = self.loaders[self.idx]
-            batch = next(current_loader["iterator"])  # raises StopIteration if the iterator is exhausted
+            batch = next(
+                current_loader["iterator"]
+            )  # raises StopIteration if the iterator is exhausted
             # Move to the next loader
             self.idx = (self.idx + 1) % len(self.loaders)
             return batch

@@ -13,7 +13,9 @@ from src.datasets import dataset_utils as dsu
 
 
 class DummyNopDataset(Dataset):
-    def __init__(self, f_len: int, g_len: int, fx_dim: int, fy_dim: int, gx_dim: int, gy_dim: int):
+    def __init__(
+        self, f_len: int, g_len: int, fx_dim: int, fy_dim: int, gx_dim: int, gy_dim: int
+    ):
         self.f_len = f_len
         self.g_len = g_len
         self.fx_dim = fx_dim

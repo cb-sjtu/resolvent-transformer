@@ -48,7 +48,9 @@ def extract_flow_data(
     # Get list of input files
     input_files = sorted(glob.glob(os.path.join(input_dir, file_pattern)))
     if not input_files:
-        raise ValueError(f"No files found matching pattern {file_pattern} in {input_dir}")
+        raise ValueError(
+            f"No files found matching pattern {file_pattern} in {input_dir}"
+        )
 
     # Filter files starting from start_file if specified
     if start_file:
@@ -122,7 +124,9 @@ def extract_flow_data(
 
                     # Apply downsampling
                     downsampled_data = original_data[
-                        :: resolution_scale[0], :: resolution_scale[1], :: resolution_scale[2]
+                        :: resolution_scale[0],
+                        :: resolution_scale[1],
+                        :: resolution_scale[2],
                     ]
 
                     # Extract 2D slice (y-slice, result is (z, x))
@@ -137,11 +141,18 @@ def extract_flow_data(
                 total_original_size += original_size
 
             # Save extracted data
-            compression_opts = {"compression": "gzip", "compression_opts": 9} if compress else {}
+            compression_opts = (
+                {"compression": "gzip", "compression_opts": 9} if compress else {}
+            )
 
             with h5py.File(output_path, "w") as f_out:
                 # Save the multi-channel 2D extracted data
-                f_out.create_dataset("data", data=multi_channel_data, dtype=np.float32, **compression_opts)
+                f_out.create_dataset(
+                    "data",
+                    data=multi_channel_data,
+                    dtype=np.float32,
+                    **compression_opts,
+                )
 
                 # Save metadata
                 f_out.attrs["field_names"] = field_names
@@ -176,7 +187,9 @@ def extract_flow_data(
 
     if total_original_size > 0:
         total_reduction = total_saved_size / total_original_size
-        print(f"Total size reduction: {total_reduction:.4f}x ({100 * (1 - total_reduction):.1f}% smaller)")
+        print(
+            f"Total size reduction: {total_reduction:.4f}x ({100 * (1 - total_reduction):.1f}% smaller)"
+        )
 
 
 def extract_flow_data_xz(
@@ -220,7 +233,9 @@ def extract_flow_data_xz(
     # Get list of input files
     input_files = sorted(glob.glob(os.path.join(input_dir, file_pattern)))
     if not input_files:
-        raise ValueError(f"No files found matching pattern {file_pattern} in {input_dir}")
+        raise ValueError(
+            f"No files found matching pattern {file_pattern} in {input_dir}"
+        )
 
     # Filter files starting from start_file if specified
     if start_file:
@@ -270,9 +285,7 @@ def extract_flow_data_xz(
         # Generate output filename
         input_filename = os.path.basename(input_file)
         field_names_str = "-".join(field_names)
-        output_filename = (
-            f"{field_names_str}_scale{resolution_scale[0]}-{resolution_scale[1]}_ylayer{y_layer_index}_{input_filename}"
-        )
+        output_filename = f"{field_names_str}_scale{resolution_scale[0]}-{resolution_scale[1]}_ylayer{y_layer_index}_{input_filename}"
         output_path = os.path.join(output_dir, output_filename)
 
         # Skip if file exists and not overwriting
@@ -296,7 +309,9 @@ def extract_flow_data_xz(
                     data_2d = original_data[:, :, y_layer_index]
 
                     # Apply downsampling: (512, 768) -> (256, 256)
-                    downsampled_data = data_2d[:: resolution_scale[0], :: resolution_scale[1]]
+                    downsampled_data = data_2d[
+                        :: resolution_scale[0], :: resolution_scale[1]
+                    ]
 
                     channel_data_list.append(downsampled_data)
 
@@ -308,11 +323,18 @@ def extract_flow_data_xz(
                 total_original_size += original_size
 
             # Save extracted data
-            compression_opts = {"compression": "gzip", "compression_opts": 9} if compress else {}
+            compression_opts = (
+                {"compression": "gzip", "compression_opts": 9} if compress else {}
+            )
 
             with h5py.File(output_path, "w") as f_out:
                 # Save the multi-channel 2D extracted data
-                f_out.create_dataset("data", data=multi_channel_data, dtype=np.float32, **compression_opts)
+                f_out.create_dataset(
+                    "data",
+                    data=multi_channel_data,
+                    dtype=np.float32,
+                    **compression_opts,
+                )
 
                 # Save metadata
                 f_out.attrs["field_names"] = field_names
@@ -341,10 +363,14 @@ def extract_flow_data_xz(
 
     if total_original_size > 0:
         total_reduction = total_saved_size / total_original_size
-        print(f"Total size reduction: {total_reduction:.4f}x ({100 * (1 - total_reduction):.1f}% smaller)")
+        print(
+            f"Total size reduction: {total_reduction:.4f}x ({100 * (1 - total_reduction):.1f}% smaller)"
+        )
 
 
-def create_fast_dataset_class(output_dir: str, field_names: list[str], resolution_scale: tuple, y_slice: int) -> str:
+def create_fast_dataset_class(
+    output_dir: str, field_names: list[str], resolution_scale: tuple, y_slice: int
+) -> str:
     """Create a fast dataset class for the preprocessed data."""
 
     dataset_code = f'''import glob
@@ -475,7 +501,9 @@ if __name__ == "__main__":
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Preprocess flow field data for faster training")
+    parser = argparse.ArgumentParser(
+        description="Preprocess flow field data for faster training"
+    )
 
     # Mode selection
     parser.add_argument(
@@ -487,8 +515,15 @@ def main():
     )
 
     # Common arguments
-    parser.add_argument("--input_dir", type=str, required=True, help="Input directory with HDF5 files")
-    parser.add_argument("--output_dir", type=str, required=True, help="Output directory for extracted files")
+    parser.add_argument(
+        "--input_dir", type=str, required=True, help="Input directory with HDF5 files"
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Output directory for extracted files",
+    )
     parser.add_argument(
         "--fields",
         type=str,
@@ -504,17 +539,34 @@ def main():
         default=[1, 4, 4],
         help="Downsampling factors (standard mode: z y x; xz mode: z x)",
     )
-    parser.add_argument("--pattern", type=str, default="*.h5", help="File pattern to match (default: *.h5)")
     parser.add_argument(
-        "--start_file", type=str, default=None, help="Start processing from this file (e.g., t00401.h5)"
+        "--pattern",
+        type=str,
+        default="*.h5",
+        help="File pattern to match (default: *.h5)",
     )
-    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output files")
-    parser.add_argument("--no_compress", action="store_true", help="Disable HDF5 compression")
-    parser.add_argument("--create_dataset", action="store_true", help="Create fast dataset class file")
+    parser.add_argument(
+        "--start_file",
+        type=str,
+        default=None,
+        help="Start processing from this file (e.g., t00401.h5)",
+    )
+    parser.add_argument(
+        "--overwrite", action="store_true", help="Overwrite existing output files"
+    )
+    parser.add_argument(
+        "--no_compress", action="store_true", help="Disable HDF5 compression"
+    )
+    parser.add_argument(
+        "--create_dataset", action="store_true", help="Create fast dataset class file"
+    )
 
     # Standard mode specific arguments
     parser.add_argument(
-        "--y_slice", type=int, default=None, help="[Standard mode] Y-slice index to extract (default: middle slice)"
+        "--y_slice",
+        type=int,
+        default=None,
+        help="[Standard mode] Y-slice index to extract (default: middle slice)",
     )
 
     # XZ mode specific arguments
@@ -558,7 +610,9 @@ def main():
             elif len(args.resolution_scale) == 2:
                 resolution_scale = tuple(args.resolution_scale)
             else:
-                raise ValueError("resolution_scale must have at least 2 values for xz mode")
+                raise ValueError(
+                    "resolution_scale must have at least 2 values for xz mode"
+                )
 
             extract_flow_data_xz(
                 input_dir=args.input_dir,
@@ -575,7 +629,10 @@ def main():
         # Create fast dataset class if requested
         if args.create_dataset:
             dataset_code = create_fast_dataset_class(
-                args.output_dir, args.fields, tuple(args.resolution_scale), args.y_slice or "middle"
+                args.output_dir,
+                args.fields,
+                tuple(args.resolution_scale),
+                args.y_slice or "middle",
             )
 
             dataset_file = os.path.join(args.output_dir, "fast_flow_dataset.py")

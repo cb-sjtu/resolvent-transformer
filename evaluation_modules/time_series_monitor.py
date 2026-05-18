@@ -17,8 +17,12 @@ from .utils import compute_velocity_magnitude
 # ========================================
 # 🎯 CONFIGURATION: Modify these values to control evaluation behavior
 # ========================================
-MAX_RECORDED_TIMESTEPS = 300  # Maximum number of timesteps to record for time series plots
-MAX_GROUND_TRUTH_STEPS = 300  # Maximum number of ground truth steps to load from dataset
+MAX_RECORDED_TIMESTEPS = (
+    300  # Maximum number of timesteps to record for time series plots
+)
+MAX_GROUND_TRUTH_STEPS = (
+    300  # Maximum number of ground truth steps to load from dataset
+)
 
 
 class TimeSeriesMonitor:
@@ -108,7 +112,9 @@ class TimeSeriesMonitor:
 
         # Ensure data has at least 3 channels (u, v, w)
         if data.shape[0] < 3:
-            raise ValueError(f"Data must have at least 3 channels (u, v, w), got {data.shape[0]}")
+            raise ValueError(
+                f"Data must have at least 3 channels (u, v, w), got {data.shape[0]}"
+            )
 
         point_values = {"u": [], "v": [], "w": [], "mag": []}
 
@@ -134,7 +140,12 @@ class TimeSeriesMonitor:
         return point_values
 
     def record_timestep(
-        self, pred_data: torch.Tensor, split: str, mode: str, timestep: int, gt_data: torch.Tensor = None
+        self,
+        pred_data: torch.Tensor,
+        split: str,
+        mode: str,
+        timestep: int,
+        gt_data: torch.Tensor = None,
     ):
         """
         Record prediction and ground truth data for current timestep.
@@ -152,7 +163,9 @@ class TimeSeriesMonitor:
         # Use a reasonable upper limit - if we already have many steps, likely from first sample
         max_steps_per_sample = MAX_RECORDED_TIMESTEPS  # Use the configurable constant
         if max_recorded_steps >= max_steps_per_sample:
-            print(f"    ⏭️ Skipping timestep {timestep} (already have {max_recorded_steps} steps)")
+            print(
+                f"    ⏭️ Skipping timestep {timestep} (already have {max_recorded_steps} steps)"
+            )
             return
 
         # Extract prediction values
@@ -170,22 +183,32 @@ class TimeSeriesMonitor:
                 if (
                     max_recorded_steps < 3 and timestep < 3 and i == 0
                 ):  # Only for first monitoring point and first few timesteps from first sample
-                    print(f"    🔍 Recorded {split}-{mode} t={timestep} {component}_pred[{i}] = {value:.6f}")
+                    print(
+                        f"    🔍 Recorded {split}-{mode} t={timestep} {component}_pred[{i}] = {value:.6f}"
+                    )
 
         # Record ground truth values if available
         if gt_data is not None:
             gt_values = self.extract_point_values(gt_data, timestep)
             for component in ["u", "v", "w", "mag"]:
                 for i, value in enumerate(gt_values[component]):
-                    self.time_series_data[split][mode][f"{component}_gt"][i].append(value)
+                    self.time_series_data[split][mode][f"{component}_gt"][i].append(
+                        value
+                    )
         else:
             # Fill with None if no ground truth available
             for component in ["u", "v", "w", "mag"]:
                 for i in range(len(self.monitor_points)):
-                    self.time_series_data[split][mode][f"{component}_gt"][i].append(None)
+                    self.time_series_data[split][mode][f"{component}_gt"][i].append(
+                        None
+                    )
 
     def plot_point_time_series(
-        self, point_idx: int, output_dir: Path, split: str = "test", show_both_modes: bool = True
+        self,
+        point_idx: int,
+        output_dir: Path,
+        split: str = "test",
+        show_both_modes: bool = True,
     ):
         """
         Plot time series for a specific monitoring point.
@@ -202,7 +225,10 @@ class TimeSeriesMonitor:
         z_idx, x_idx = self.monitor_points[point_idx]
 
         fig, axes = plt.subplots(2, 2, figsize=(15, 10))
-        fig.suptitle(f"Time Series at Point ({z_idx}, {x_idx}) - {split.upper()} Data", fontsize=16)
+        fig.suptitle(
+            f"Time Series at Point ({z_idx}, {x_idx}) - {split.upper()} Data",
+            fontsize=16,
+        )
 
         components = ["u", "v", "w", "mag"]
         colors = {"ar": "blue", "tf": "red"}
@@ -214,7 +240,10 @@ class TimeSeriesMonitor:
             modes_to_plot = ["ar", "tf"] if show_both_modes else ["ar"]
 
             for mode in modes_to_plot:
-                if split in self.time_series_data and mode in self.time_series_data[split]:
+                if (
+                    split in self.time_series_data
+                    and mode in self.time_series_data[split]
+                ):
                     timesteps = self.time_series_data[split][mode]["timesteps"]
                     pred_key = f"{component}_pred"
                     gt_key = f"{component}_gt"
@@ -224,14 +253,22 @@ class TimeSeriesMonitor:
                         pred_key in self.time_series_data[split][mode]
                         and point_idx in self.time_series_data[split][mode][pred_key]
                     ):
-                        pred_values = self.time_series_data[split][mode][pred_key][point_idx]
+                        pred_values = self.time_series_data[split][mode][pred_key][
+                            point_idx
+                        ]
                         print(
                             f"    🎨 Plotting {pred_key}: timesteps={len(timesteps) if timesteps else 0}, "
                             f"pred_values={len(pred_values) if pred_values else 0}"
                         )
                         if pred_values:
-                            print(f"    🎨 Pred values sample: {pred_values[:3]}")  # Show first 3 values
-                        if timesteps and pred_values and len(timesteps) == len(pred_values):
+                            print(
+                                f"    🎨 Pred values sample: {pred_values[:3]}"
+                            )  # Show first 3 values
+                        if (
+                            timesteps
+                            and pred_values
+                            and len(timesteps) == len(pred_values)
+                        ):
                             ax.plot(
                                 timesteps,
                                 pred_values,
@@ -242,7 +279,9 @@ class TimeSeriesMonitor:
                                 marker="o",
                                 markersize=4,
                             )
-                            print(f"    ✅ Plotted {len(pred_values)} prediction points for {component}")
+                            print(
+                                f"    ✅ Plotted {len(pred_values)} prediction points for {component}"
+                            )
                         else:
                             print(
                                 f"    ❌ Cannot plot {pred_key}: timesteps={len(timesteps) if timesteps else 0}, "
@@ -254,9 +293,15 @@ class TimeSeriesMonitor:
                         gt_key in self.time_series_data[split][mode]
                         and point_idx in self.time_series_data[split][mode][gt_key]
                     ):
-                        gt_values = self.time_series_data[split][mode][gt_key][point_idx]
+                        gt_values = self.time_series_data[split][mode][gt_key][
+                            point_idx
+                        ]
                         # Filter out None values
-                        valid_gt = [(t, v) for t, v in zip(timesteps, gt_values, strict=False) if v is not None]
+                        valid_gt = [
+                            (t, v)
+                            for t, v in zip(timesteps, gt_values, strict=False)
+                            if v is not None
+                        ]
                         if valid_gt:
                             gt_timesteps, gt_vals = zip(*valid_gt, strict=False)
                             ax.plot(
@@ -272,7 +317,9 @@ class TimeSeriesMonitor:
                             )
 
             ax.set_xlabel("Timestep")
-            ax.set_ylabel(f"{component.upper()} {'Magnitude' if component == 'mag' else 'Velocity'}")
+            ax.set_ylabel(
+                f"{component.upper()} {'Magnitude' if component == 'mag' else 'Velocity'}"
+            )
             ax.set_title(f"{component.upper()} Component")
             ax.grid(True, alpha=0.3)
             ax.legend()
@@ -280,14 +327,18 @@ class TimeSeriesMonitor:
         plt.tight_layout()
 
         # Save plot
-        plot_path = output_dir / f"time_series_point_{point_idx}_z{z_idx}_x{x_idx}_{split}.png"
+        plot_path = (
+            output_dir / f"time_series_point_{point_idx}_z{z_idx}_x{x_idx}_{split}.png"
+        )
         plt.savefig(plot_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
         print(f"Time series plot saved: {plot_path}")
         return plot_path
 
-    def plot_all_points_component(self, component: str, output_dir: Path, split: str = "test", mode: str = "ar"):
+    def plot_all_points_component(
+        self, component: str, output_dir: Path, split: str = "test", mode: str = "ar"
+    ):
         """
         Plot time series for all monitoring points for a specific component.
 
@@ -298,7 +349,9 @@ class TimeSeriesMonitor:
             mode: 'ar' or 'tf'
         """
         if component not in ["u", "v", "w", "mag"]:
-            raise ValueError(f"Component must be one of ['u', 'v', 'w', 'mag'], got {component}")
+            raise ValueError(
+                f"Component must be one of ['u', 'v', 'w', 'mag'], got {component}"
+            )
 
         fig, ax = plt.subplots(1, 1, figsize=(12, 8))
 
@@ -312,7 +365,10 @@ class TimeSeriesMonitor:
                 gt_key = f"{component}_gt"
 
                 # Plot prediction line
-                if pred_key in self.time_series_data[split][mode] and i in self.time_series_data[split][mode][pred_key]:
+                if (
+                    pred_key in self.time_series_data[split][mode]
+                    and i in self.time_series_data[split][mode][pred_key]
+                ):
                     pred_values = self.time_series_data[split][mode][pred_key][i]
                     if timesteps and pred_values and len(timesteps) == len(pred_values):
                         ax.plot(
@@ -327,9 +383,16 @@ class TimeSeriesMonitor:
                         )
 
                 # Plot ground truth line if available
-                if gt_key in self.time_series_data[split][mode] and i in self.time_series_data[split][mode][gt_key]:
+                if (
+                    gt_key in self.time_series_data[split][mode]
+                    and i in self.time_series_data[split][mode][gt_key]
+                ):
                     gt_values = self.time_series_data[split][mode][gt_key][i]
-                    valid_gt = [(t, v) for t, v in zip(timesteps, gt_values, strict=False) if v is not None]
+                    valid_gt = [
+                        (t, v)
+                        for t, v in zip(timesteps, gt_values, strict=False)
+                        if v is not None
+                    ]
                     if valid_gt:
                         gt_timesteps, gt_vals = zip(*valid_gt, strict=False)
                         ax.plot(
@@ -345,15 +408,21 @@ class TimeSeriesMonitor:
                         )
 
         ax.set_xlabel("Timestep")
-        ax.set_ylabel(f"{component.upper()} {'Magnitude' if component == 'mag' else 'Velocity'}")
-        ax.set_title(f"{component.upper()} Component - All Monitor Points ({split.upper()}, {mode.upper()})")
+        ax.set_ylabel(
+            f"{component.upper()} {'Magnitude' if component == 'mag' else 'Velocity'}"
+        )
+        ax.set_title(
+            f"{component.upper()} Component - All Monitor Points ({split.upper()}, {mode.upper()})"
+        )
         ax.grid(True, alpha=0.3)
         ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 
         plt.tight_layout()
 
         # Save plot
-        plot_path = output_dir / f"time_series_all_points_{component}_{split}_{mode}.png"
+        plot_path = (
+            output_dir / f"time_series_all_points_{component}_{split}_{mode}.png"
+        )
         plt.savefig(plot_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
@@ -372,7 +441,9 @@ class TimeSeriesMonitor:
         ts_dir = output_dir / "time_series_plots"
         ts_dir.mkdir(exist_ok=True, parents=True)
 
-        print(f"Generating time series plots for {len(self.monitor_points)} monitoring points...")
+        print(
+            f"Generating time series plots for {len(self.monitor_points)} monitoring points..."
+        )
 
         # Plot individual points
         for i in range(len(self.monitor_points)):
@@ -402,7 +473,9 @@ class TimeSeriesMonitor:
 
         for mode in ["ar", "tf"]:
             if split in self.time_series_data and mode in self.time_series_data[split]:
-                data_dict = {"timestep": self.time_series_data[split][mode]["timesteps"]}
+                data_dict = {
+                    "timestep": self.time_series_data[split][mode]["timesteps"]
+                }
 
                 # Add data for each point and component (prediction and ground truth)
                 num_timesteps = len(data_dict["timestep"])
@@ -419,7 +492,9 @@ class TimeSeriesMonitor:
                             # Ensure all arrays have the same length
                             if len(point_data) < num_timesteps:
                                 point_data = (
-                                    point_data + [point_data[-1]] * (num_timesteps - len(point_data))
+                                    point_data
+                                    + [point_data[-1]]
+                                    * (num_timesteps - len(point_data))
                                     if point_data
                                     else [0.0] * num_timesteps
                                 )
@@ -439,7 +514,9 @@ class TimeSeriesMonitor:
                             gt_data = self.time_series_data[split][mode][gt_key][i]
                             # Ensure all arrays have the same length
                             if len(gt_data) < num_timesteps:
-                                gt_data = gt_data + [gt_data[-1] if gt_data else None] * (num_timesteps - len(gt_data))
+                                gt_data = gt_data + [
+                                    gt_data[-1] if gt_data else None
+                                ] * (num_timesteps - len(gt_data))
                             elif len(gt_data) > num_timesteps:
                                 gt_data = gt_data[:num_timesteps]
                             data_dict[gt_col_name] = gt_data

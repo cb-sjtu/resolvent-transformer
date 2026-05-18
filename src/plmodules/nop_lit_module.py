@@ -30,7 +30,9 @@ class NopLitModule(BaseLitModule):
 
         self.valid_metrics = torch.nn.ModuleDict(
             {
-                self.cfg.data.valid[key].name: MetricCollection({k: MeanMetric() for k in self.metric_names})
+                self.cfg.data.valid[key].name: MetricCollection(
+                    {k: MeanMetric() for k in self.metric_names}
+                )
                 for key in self.cfg.data.valid
             }
         )
@@ -68,7 +70,9 @@ class NopLitModule(BaseLitModule):
         return loss
 
     ############ validation #############
-    def validation_step(self, batch: PyTree, batch_idx: int, dataloader_idx: int = 0) -> dict:
+    def validation_step(
+        self, batch: PyTree, batch_idx: int, dataloader_idx: int = 0
+    ) -> dict:
         loss = self._loss_function(batch)
         errors = self.get_error(batch)
         preds = self.get_pred(batch["data"])

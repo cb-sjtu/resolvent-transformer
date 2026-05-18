@@ -37,7 +37,12 @@ class BaseLitModule(L.LightningModule):
             return self.net(*args, **kwargs)
 
     def setup(self, stage: str) -> None:
-        if self.cfg.accelerate.compile and stage == "fit" and torch.__version__ >= "2.0.0" and not self._net_compiled:
+        if (
+            self.cfg.accelerate.compile
+            and stage == "fit"
+            and torch.__version__ >= "2.0.0"
+            and not self._net_compiled
+        ):
             self.net = torch.compile(self.net)
             self._net_compiled = True
 

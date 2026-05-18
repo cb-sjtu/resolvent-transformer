@@ -33,7 +33,9 @@ class VizRollout1D(Viz):
         )
         self.category = "viz_rollout_1d"
 
-    def get_image(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0) -> Image.Image:
+    def get_image(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
+    ) -> Image.Image:
         """
         rollout_errors: (n_samples, n_steps, L)
         Visualize the spatial error distribution with color gradient
@@ -52,8 +54,12 @@ class VizRollout1D(Viz):
         # Plot initial and final states with thicker lines
         mean_error_initial = np.mean(rollout_errors[:, 0, :], axis=0)
         mean_error_final = np.mean(rollout_errors[:, -1, :], axis=0)
-        ax.plot(x_spatial, mean_error_initial, color=colors[0], linewidth=2, label="Initial")
-        ax.plot(x_spatial, mean_error_final, color=colors[-1], linewidth=2, label="Final")
+        ax.plot(
+            x_spatial, mean_error_initial, color=colors[0], linewidth=2, label="Initial"
+        )
+        ax.plot(
+            x_spatial, mean_error_final, color=colors[-1], linewidth=2, label="Final"
+        )
 
         # Plot intermediate states with thinner lines and gradient colors
         for t in range(1, n_steps - 1):
@@ -67,7 +73,9 @@ class VizRollout1D(Viz):
         ax.legend(loc="upper right", fontsize=10)
 
         # Add epoch and step information
-        fig.suptitle(f"Epoch {trainer.current_epoch}, Step {trainer.global_step}", fontsize=16)
+        fig.suptitle(
+            f"Epoch {trainer.current_epoch}, Step {trainer.global_step}", fontsize=16
+        )
 
         # Optimize layout
         plt.tight_layout()

@@ -27,19 +27,51 @@ class SaveOutput(L.Callback):
         self.valid_batches_local = eval(valid_batches_local)
         self.test_batches_local = eval(test_batches_local)
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs: dict, batch: PyTree, batch_idx, dataloader_idx=0):
+    def on_validation_batch_end(
+        self,
+        trainer,
+        pl_module,
+        outputs: dict,
+        batch: PyTree,
+        batch_idx,
+        dataloader_idx=0,
+    ):
         if batch_idx in self.valid_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.valid, dataloader_idx)
-            valid_dirpath = Path(self.dirpath) / "valid" / f"step_{trainer.global_step}" / dataset_name
-            self._save_output(valid_dirpath, batch, outputs, batch_idx, trainer.global_rank)
+            valid_dirpath = (
+                Path(self.dirpath)
+                / "valid"
+                / f"step_{trainer.global_step}"
+                / dataset_name
+            )
+            self._save_output(
+                valid_dirpath, batch, outputs, batch_idx, trainer.global_rank
+            )
 
-    def on_test_batch_end(self, trainer, pl_module, outputs: dict, batch: PyTree, batch_idx, dataloader_idx=0):
+    def on_test_batch_end(
+        self,
+        trainer,
+        pl_module,
+        outputs: dict,
+        batch: PyTree,
+        batch_idx,
+        dataloader_idx=0,
+    ):
         if batch_idx in self.test_batches_local:
             dataset_name = cu.get_dataset_name(pl_module.cfg.data.test, dataloader_idx)
-            test_dirpath = Path(self.dirpath) / "test" / f"step_{trainer.global_step}" / dataset_name
-            self._save_output(test_dirpath, batch, outputs, batch_idx, trainer.global_rank)
+            test_dirpath = (
+                Path(self.dirpath)
+                / "test"
+                / f"step_{trainer.global_step}"
+                / dataset_name
+            )
+            self._save_output(
+                test_dirpath, batch, outputs, batch_idx, trainer.global_rank
+            )
 
-    def _save_output(self, dirpath: Path, batch: PyTree, outputs: dict, batch_idx: int, rank: int) -> None:
+    def _save_output(
+        self, dirpath: Path, batch: PyTree, outputs: dict, batch_idx: int, rank: int
+    ) -> None:
         dirpath.mkdir(parents=True, exist_ok=True)
         full_path = dirpath / f"{batch_idx}_rank{rank}.pkl"
 

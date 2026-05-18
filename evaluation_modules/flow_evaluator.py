@@ -54,7 +54,13 @@ class FlowModelEvaluator(BaseFlowEvaluator):
         output_base_dir: str = "evaluation_outputs",
     ):
         """Initialize the flow evaluator."""
-        super().__init__(checkpoint_path, model_config, save_predictions, monitor_points, output_base_dir)
+        super().__init__(
+            checkpoint_path,
+            model_config,
+            save_predictions,
+            monitor_points,
+            output_base_dir,
+        )
 
         # Flow-specific configuration
         self.channel_names = ["u", "v", "w"]
@@ -86,7 +92,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
         print(f"Loading model from {self.checkpoint_path}")
 
         # Load checkpoint
-        checkpoint = torch.load(self.checkpoint_path, map_location="cpu", weights_only=False)
+        checkpoint = torch.load(
+            self.checkpoint_path, map_location="cpu", weights_only=False
+        )
 
         # Extract hyperparameters from checkpoint
         if "hyper_parameters" in checkpoint:
@@ -102,7 +110,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
         # Extract hyperparameters from checkpoint to recreate the module
         if "hyper_parameters" in checkpoint:
             # Create the Lightning module with the same config
-            model = FlowSwin2DLitModule.load_from_checkpoint(self.checkpoint_path, map_location="cpu")
+            model = FlowSwin2DLitModule.load_from_checkpoint(
+                self.checkpoint_path, map_location="cpu"
+            )
         else:
             # Fallback: create module with current config
             print("No hyperparameters found, using current config...")
@@ -110,7 +120,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
             from omegaconf import OmegaConf
 
             # Create a config that includes the model
-            module_cfg = OmegaConf.create({"model": self.model_config, "loss_fn": "mse"})
+            module_cfg = OmegaConf.create(
+                {"model": self.model_config, "loss_fn": "mse"}
+            )
             model = FlowSwin2DLitModule(module_cfg)
 
             # Load the state dict manually
@@ -123,7 +135,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
 
     def _load_datasets(self):
         """Load train/val/test datasets (copied from original evaluation.py)."""
-        from src.datasets.flow_sequence_2d.fast_flow_dataset import FastFlowSequence2DDataset
+        from src.datasets.flow_sequence_2d.fast_flow_dataset import (
+            FastFlowSequence2DDataset,
+        )
 
         data_dir = "/home/sh/CB/icon-thewell-dev/data/preprocessed_flow"
 
@@ -161,7 +175,13 @@ class FlowModelEvaluator(BaseFlowEvaluator):
         print(f"  Val: {len(self.val_dataset)} samples")
         print(f"  Test: {len(self.test_dataset)} samples")
 
-    def evaluate_sample(self, sample_idx: int = 0, split: str = "test", num_future: int = 10, save_h5: bool = None):
+    def evaluate_sample(
+        self,
+        sample_idx: int = 0,
+        split: str = "test",
+        num_future: int = 10,
+        save_h5: bool = None,
+    ):
         """
         Evaluate a single sample with comprehensive analysis.
 
@@ -199,14 +219,22 @@ class FlowModelEvaluator(BaseFlowEvaluator):
         print(f"  Predicting {num_future} future steps...")
 
         # Run evaluations
-        self._evaluate_autoregressive(input_seq, ground_truth_frames, sample_idx, split, num_future, save_h5)
+        self._evaluate_autoregressive(
+            input_seq, ground_truth_frames, sample_idx, split, num_future, save_h5
+        )
 
-        self._evaluate_teacher_forcing(input_seq, ground_truth_frames, sample_idx, split, num_future, save_h5)
+        self._evaluate_teacher_forcing(
+            input_seq, ground_truth_frames, sample_idx, split, num_future, save_h5
+        )
 
         # Create visualizations
-        self._create_sample_visualizations(input_seq, ground_truth_frames, sample_idx, split)
+        self._create_sample_visualizations(
+            input_seq, ground_truth_frames, sample_idx, split
+        )
 
-    def _evaluate_autoregressive(self, input_seq, ground_truth_frames, sample_idx, split, num_future, save_h5):
+    def _evaluate_autoregressive(
+        self, input_seq, ground_truth_frames, sample_idx, split, num_future, save_h5
+    ):
         """Evaluate using autoregressive prediction."""
         print("  🔄 Autoregressive evaluation...")
 
@@ -231,14 +259,20 @@ class FlowModelEvaluator(BaseFlowEvaluator):
                     raise ValueError(f"Unexpected prediction shape: {next_pred.shape}")
 
                 # Store prediction (denormalized for proper evaluation)
-                pred_frame_normalized = next_pred[0]  # Remove batch dimension: (C, H, W)
-                pred_frame_denorm = dataset.denormalize(pred_frame_normalized.unsqueeze(0))[
+                pred_frame_normalized = next_pred[
                     0
-                ].cpu()  # Denormalize: (C, H, W)
+                ]  # Remove batch dimension: (C, H, W)
+                pred_frame_denorm = dataset.denormalize(
+                    pred_frame_normalized.unsqueeze(0)
+                )[0].cpu()  # Denormalize: (C, H, W)
                 predictions.append(pred_frame_denorm)
 
                 # Record for time series monitoring (use denormalized data)
-                gt_frame = ground_truth_frames[step] if step < len(ground_truth_frames) else None
+                gt_frame = (
+                    ground_truth_frames[step]
+                    if step < len(ground_truth_frames)
+                    else None
+                )
                 gt_frame_denorm = None
                 if gt_frame is not None:
                     gt_frame_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[
@@ -251,7 +285,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
                         f"pred range=[{pred_frame_denorm.min():.6f}, {pred_frame_denorm.max():.6f}]"
                     )
 
-                self.record_timestep_data(pred_frame_denorm, split, "ar", step, gt_frame_denorm)
+                self.record_timestep_data(
+                    pred_frame_denorm, split, "ar", step, gt_frame_denorm
+                )
 
                 # Update sequence for next prediction
                 next_pred_with_time = next_pred.unsqueeze(1)  # Add time dimension
@@ -268,20 +304,28 @@ class FlowModelEvaluator(BaseFlowEvaluator):
             gt_frames_denorm = []
             for gt_frame in ground_truth_frames:
                 if gt_frame is not None:
-                    gt_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[0].cpu()  # Denormalize GT
+                    gt_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[
+                        0
+                    ].cpu()  # Denormalize GT
                     gt_frames_denorm.append(gt_denorm)
                 else:
                     gt_frames_denorm.append(None)
 
-            self._compute_and_log_metrics(predictions, gt_frames_denorm, sample_idx, split, "autoregressive")
+            self._compute_and_log_metrics(
+                predictions, gt_frames_denorm, sample_idx, split, "autoregressive"
+            )
 
         # Save predictions if requested
         if save_h5:
             self._save_predictions_h5(predictions, sample_idx, split, "ar")
 
-        print(f"    ✅ Autoregressive evaluation completed ({len(predictions)} predictions)")
+        print(
+            f"    ✅ Autoregressive evaluation completed ({len(predictions)} predictions)"
+        )
 
-    def _evaluate_teacher_forcing(self, input_seq, ground_truth_frames, sample_idx, split, num_future, save_h5):
+    def _evaluate_teacher_forcing(
+        self, input_seq, ground_truth_frames, sample_idx, split, num_future, save_h5
+    ):
         """Evaluate using teacher forcing (if ground truth available)."""
         if not ground_truth_frames:
             print("  ⚠️ Skipping teacher forcing (no ground truth)")
@@ -302,15 +346,21 @@ class FlowModelEvaluator(BaseFlowEvaluator):
                     current_seq = input_seq.clone()
                 else:
                     # Build sequence with ground truth
-                    gt_frames = [ground_truth_frames[i].unsqueeze(0) for i in range(step)]
+                    gt_frames = [
+                        ground_truth_frames[i].unsqueeze(0) for i in range(step)
+                    ]
                     if len(gt_frames) >= self.input_length:
                         # Use last input_length ground truth frames
-                        current_seq = torch.stack(gt_frames[-self.input_length :], dim=1).to(self.device)
+                        current_seq = torch.stack(
+                            gt_frames[-self.input_length :], dim=1
+                        ).to(self.device)
                     else:
                         # Pad with original input if needed
                         needed = self.input_length - len(gt_frames)
                         padding = [input_seq[0, i].unsqueeze(0) for i in range(needed)]
-                        gt_frames_tensor = [frame.to(self.device) for frame in gt_frames]
+                        gt_frames_tensor = [
+                            frame.to(self.device) for frame in gt_frames
+                        ]
                         all_frames = padding + gt_frames_tensor
                         current_seq = torch.stack(all_frames, dim=1)
 
@@ -327,38 +377,52 @@ class FlowModelEvaluator(BaseFlowEvaluator):
 
                 # Store prediction (denormalized for proper evaluation)
                 pred_frame_normalized = next_pred[0]  # (C, H, W)
-                pred_frame_denorm = dataset.denormalize(pred_frame_normalized.unsqueeze(0))[
-                    0
-                ].cpu()  # Denormalize: (C, H, W)
+                pred_frame_denorm = dataset.denormalize(
+                    pred_frame_normalized.unsqueeze(0)
+                )[0].cpu()  # Denormalize: (C, H, W)
                 predictions.append(pred_frame_denorm)
 
                 # Record for time series monitoring (use denormalized data)
-                gt_frame = ground_truth_frames[step] if step < len(ground_truth_frames) else None
+                gt_frame = (
+                    ground_truth_frames[step]
+                    if step < len(ground_truth_frames)
+                    else None
+                )
                 gt_frame_denorm = None
                 if gt_frame is not None:
                     gt_frame_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[
                         0
                     ].cpu()  # Denormalize GT: (C, H, W) and move to CPU
-                self.record_timestep_data(pred_frame_denorm, split, "tf", step, gt_frame_denorm)
+                self.record_timestep_data(
+                    pred_frame_denorm, split, "tf", step, gt_frame_denorm
+                )
 
         # Compute metrics (denormalize ground truth for fair comparison)
         gt_frames_denorm = []
         for gt_frame in ground_truth_frames[: len(predictions)]:
             if gt_frame is not None:
-                gt_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[0].cpu()  # Denormalize GT
+                gt_denorm = dataset.denormalize(gt_frame.unsqueeze(0))[
+                    0
+                ].cpu()  # Denormalize GT
                 gt_frames_denorm.append(gt_denorm)
             else:
                 gt_frames_denorm.append(None)
 
-        self._compute_and_log_metrics(predictions, gt_frames_denorm, sample_idx, split, "teacher_forcing")
+        self._compute_and_log_metrics(
+            predictions, gt_frames_denorm, sample_idx, split, "teacher_forcing"
+        )
 
         # Save predictions if requested
         if save_h5:
             self._save_predictions_h5(predictions, sample_idx, split, "tf")
 
-        print(f"    ✅ Teacher forcing evaluation completed ({len(predictions)} predictions)")
+        print(
+            f"    ✅ Teacher forcing evaluation completed ({len(predictions)} predictions)"
+        )
 
-    def _compute_and_log_metrics(self, predictions, ground_truth, sample_idx, split, mode):
+    def _compute_and_log_metrics(
+        self, predictions, ground_truth, sample_idx, split, mode
+    ):
         """Compute and log comprehensive metrics."""
         print(f"    📊 Computing metrics for {mode}...")
 
@@ -370,7 +434,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
             gt = gt.cpu()
 
             # Compute comprehensive metrics
-            metrics = self.metrics_calculator.compute_comprehensive_metrics(pred, gt, self.channel_names)
+            metrics = self.metrics_calculator.compute_comprehensive_metrics(
+                pred, gt, self.channel_names
+            )
 
             # Add step info
             metrics["step"] = step
@@ -382,7 +448,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
 
             # Log to wandb if available
             if self.wandb_run is not None:
-                self.metrics_calculator.log_metrics_to_wandb(metrics, f"{split}/{mode}/sample_{sample_idx}", step)
+                self.metrics_calculator.log_metrics_to_wandb(
+                    metrics, f"{split}/{mode}/sample_{sample_idx}", step
+                )
 
         # Print summary
         if all_metrics:
@@ -390,7 +458,9 @@ class FlowModelEvaluator(BaseFlowEvaluator):
             summary = self.metrics_calculator.format_metrics_summary(final_metrics)
             print(f"    📈 Final step metrics: {summary}")
 
-    def _create_sample_visualizations(self, input_seq, ground_truth_frames, sample_idx, split):
+    def _create_sample_visualizations(
+        self, input_seq, ground_truth_frames, sample_idx, split
+    ):
         """Create visualizations for the sample."""
         print("    🎨 Creating visualizations...")
 
@@ -409,10 +479,14 @@ class FlowModelEvaluator(BaseFlowEvaluator):
                 pred_normalized = pred_normalized[0]  # (C, H, W)
 
                 # Denormalize prediction for proper visualization
-                pred_denorm = dataset.denormalize(pred_normalized.unsqueeze(0))[0].cpu()  # (C, H, W)
+                pred_denorm = dataset.denormalize(pred_normalized.unsqueeze(0))[
+                    0
+                ].cpu()  # (C, H, W)
 
                 # Denormalize ground truth for proper visualization
-                gt_denorm = dataset.denormalize(ground_truth_frames[0].unsqueeze(0))[0].cpu()  # (C, H, W)
+                gt_denorm = dataset.denormalize(ground_truth_frames[0].unsqueeze(0))[
+                    0
+                ].cpu()  # (C, H, W)
 
             plot_path = self.visualizer.plot_single_frame_comparison(
                 pred_denorm, gt_denorm, sample_idx, 0, self.channel_names
@@ -473,12 +547,18 @@ class FlowModelEvaluator(BaseFlowEvaluator):
             f.write("# Time Series Monitoring Report\n\n")
             f.write("## Monitoring Configuration\n\n")
             f.write(f"- **Monitor Points**: {len(self.time_monitor.monitor_points)}\n")
-            f.write(f"- **Point Locations (z, x)**: {self.time_monitor.monitor_points}\n")
+            f.write(
+                f"- **Point Locations (z, x)**: {self.time_monitor.monitor_points}\n"
+            )
             f.write(f"- **Channels**: {self.channel_names}\n\n")
 
             f.write("## Generated Outputs\n\n")
-            f.write("- **Individual Point Plots**: `time_series_plots/time_series_point_*.png`\n")
-            f.write("- **Component Overview Plots**: `time_series_plots/time_series_all_points_*.png`\n")
+            f.write(
+                "- **Individual Point Plots**: `time_series_plots/time_series_point_*.png`\n"
+            )
+            f.write(
+                "- **Component Overview Plots**: `time_series_plots/time_series_all_points_*.png`\n"
+            )
             f.write("- **Time Series Data**: `time_series_data/*.csv`\n\n")
 
             f.write("## Data Format\n\n")
@@ -487,6 +567,8 @@ class FlowModelEvaluator(BaseFlowEvaluator):
 
             for component in ["u", "v", "w", "mag"]:
                 for i, (z, x) in enumerate(self.time_monitor.monitor_points):
-                    f.write(f"- `{component}_point{i}_z{z}_x{x}`: {component.upper()} value at point ({z}, {x})\n")
+                    f.write(
+                        f"- `{component}_point{i}_z{z}_x{x}`: {component.upper()} value at point ({z}, {x})\n"
+                    )
 
         print(f"📄 Monitoring report saved: {report_path}")

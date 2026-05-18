@@ -82,8 +82,20 @@ class ConvLSTMCell(nn.Module):
         """
         height, width = image_size
         return (
-            torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device),
-            torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device),
+            torch.zeros(
+                batch_size,
+                self.hidden_dim,
+                height,
+                width,
+                device=self.conv.weight.device,
+            ),
+            torch.zeros(
+                batch_size,
+                self.hidden_dim,
+                height,
+                width,
+                device=self.conv.weight.device,
+            ),
         )
 
 
@@ -260,7 +272,9 @@ class LSTM3Plane(nn.Module):
 
         # Input projection - reduce channels before LSTM
         self.input_conv = nn.Sequential(
-            nn.Conv2d(num_channels, self.hidden_dims[0], kernel_size=3, padding=1, bias=bias),
+            nn.Conv2d(
+                num_channels, self.hidden_dims[0], kernel_size=3, padding=1, bias=bias
+            ),
             nn.BatchNorm2d(self.hidden_dims[0]),
             nn.ReLU(inplace=True),
         )
@@ -289,7 +303,13 @@ class LSTM3Plane(nn.Module):
 
         # Output projection - map from hidden dim back to channels
         self.output_conv = nn.Sequential(
-            nn.Conv2d(self.hidden_dims[0], self.hidden_dims[0], kernel_size=3, padding=1, bias=bias),
+            nn.Conv2d(
+                self.hidden_dims[0],
+                self.hidden_dims[0],
+                kernel_size=3,
+                padding=1,
+                bias=bias,
+            ),
             nn.BatchNorm2d(self.hidden_dims[0]),
             nn.ReLU(inplace=True),
             nn.Conv2d(self.hidden_dims[0], num_channels, kernel_size=1, bias=bias),
@@ -325,9 +345,13 @@ class LSTM3Plane(nn.Module):
         else:
             B, T, C, H, W = x.shape
 
-        assert self.sequence_length == T, f"Expected sequence length {self.sequence_length}, got {T}"
+        assert self.sequence_length == T, (
+            f"Expected sequence length {self.sequence_length}, got {T}"
+        )
         assert self.num_channels == C, f"Expected {self.num_channels} channels, got {C}"
-        assert tuple(self.input_shape) == (H, W), f"Expected shape {self.input_shape}, got {(H, W)}"
+        assert tuple(self.input_shape) == (H, W), (
+            f"Expected shape {self.input_shape}, got {(H, W)}"
+        )
 
         # Apply input projection to each timestep
         x_projected = []
@@ -341,7 +365,9 @@ class LSTM3Plane(nn.Module):
 
         # Prepare decoder input - use last encoded state
         # decoder_input: (B, 1, hidden_dims[-1], H, W)
-        decoder_input = encoder_states[-1][0].unsqueeze(1)  # Use hidden state from last encoder layer
+        decoder_input = encoder_states[-1][0].unsqueeze(
+            1
+        )  # Use hidden state from last encoder layer
 
         # Decode for prediction_horizon steps
         predictions = []

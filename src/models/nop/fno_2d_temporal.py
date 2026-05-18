@@ -123,7 +123,9 @@ class FNO2DTemporalModel(nn.Module):
         elif x.dim() == 4:
             # Input is already (B, T*C, H, W)
             B, TC, H, W = x.shape
-            assert self.in_channels == TC, f"Expected {self.in_channels} channels, got {TC}"
+            assert self.in_channels == TC, (
+                f"Expected {self.in_channels} channels, got {TC}"
+            )
         else:
             raise ValueError(f"Expected 4D or 5D input, got {x.dim()}D")
 

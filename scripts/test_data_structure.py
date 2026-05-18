@@ -21,7 +21,9 @@ def examine_h5_file(filepath):
                     print(f"  Dataset: {name}")
                     print(f"    Shape: {obj.shape}")
                     print(f"    Dtype: {obj.dtype}")
-                    print(f"    Size: {obj.size * obj.dtype.itemsize / 1024 / 1024:.1f} MB")
+                    print(
+                        f"    Size: {obj.size * obj.dtype.itemsize / 1024 / 1024:.1f} MB"
+                    )
                 elif isinstance(obj, h5py.Group):
                     print(f"  Group: {name}")
 
@@ -36,12 +38,18 @@ def examine_h5_file(filepath):
                 for field in ["u", "v", "w", "p"]:
                     if field in data_group:
                         field_data = data_group[field]
-                        print(f"  Field '{field}': shape {field_data.shape}, dtype {field_data.dtype}")
+                        print(
+                            f"  Field '{field}': shape {field_data.shape}, dtype {field_data.dtype}"
+                        )
 
                         # Show data range for first field
                         if field == "u":
-                            sample_data = field_data[::10, ::10, ::10]  # Sample for speed
-                            print(f"    Data range (sampled): {sample_data.min():.6f} to {sample_data.max():.6f}")
+                            sample_data = field_data[
+                                ::10, ::10, ::10
+                            ]  # Sample for speed
+                            print(
+                                f"    Data range (sampled): {sample_data.min():.6f} to {sample_data.max():.6f}"
+                            )
 
     except Exception as e:
         print(f"Error reading file: {e}")
@@ -77,15 +85,22 @@ if __name__ == "__main__":
                 )
                 print(f"After downsampling: {downsampled_shape}")
 
-                final_2d_shape = (downsampled_shape[0], downsampled_shape[2])  # (z, x) after y-slice
+                final_2d_shape = (
+                    downsampled_shape[0],
+                    downsampled_shape[2],
+                )  # (z, x) after y-slice
                 print(f"Final 2D shape: {final_2d_shape}")
 
                 # Estimate file size reduction
                 original_size = np.prod(original_shape) * 4  # float32 = 4 bytes
                 final_size = np.prod(final_2d_shape) * 4
                 reduction_factor = final_size / original_size
-                print(f"Size reduction: {reduction_factor:.6f}x ({100 * (1 - reduction_factor):.1f}% smaller)")
-                print(f"Estimated output size per file: {final_size / 1024 / 1024:.1f} MB")
+                print(
+                    f"Size reduction: {reduction_factor:.6f}x ({100 * (1 - reduction_factor):.1f}% smaller)"
+                )
+                print(
+                    f"Estimated output size per file: {final_size / 1024 / 1024:.1f} MB"
+                )
 
     except Exception as e:
         print(f"Error in preprocessing test: {e}")

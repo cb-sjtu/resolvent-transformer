@@ -68,7 +68,9 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
 
     # https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-and-later-devices
     # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
-    torch.backends.cuda.matmul.allow_tf32 = cfg.accelerate.fp32_matmul_precision != "highest"
+    torch.backends.cuda.matmul.allow_tf32 = (
+        cfg.accelerate.fp32_matmul_precision != "highest"
+    )
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     torch.backends.cudnn.allow_tf32 = True
 
@@ -91,9 +93,13 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
 
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
     if cfg.train:
-        trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
+        trainer: Trainer = hydra.utils.instantiate(
+            cfg.trainer, callbacks=callbacks, logger=logger
+        )
     else:
-        trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger, max_steps=0)
+        trainer: Trainer = hydra.utils.instantiate(
+            cfg.trainer, callbacks=callbacks, logger=logger, max_steps=0
+        )
 
     object_dict = {
         "cfg": cfg,
@@ -151,13 +157,17 @@ def train(cfg: DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
                 ckpt_path=ckpt_path,
             )
             log.info("Running trainer.validate() for validation.")
-            trainer.validate(model=model, dataloaders=valid_dataloaders, ckpt_path=ckpt_path)
+            trainer.validate(
+                model=model, dataloaders=valid_dataloaders, ckpt_path=ckpt_path
+            )
     return {}, {}
 
 
 # if train_custom.yaml exists, use it as default config file
 # otherwise, need to specify config file in command line
-config_file_name = "train_custom.yaml" if os.path.exists("./configs/train_custom.yaml") else None
+config_file_name = (
+    "train_custom.yaml" if os.path.exists("./configs/train_custom.yaml") else None
+)
 
 # Register eval resolver for mathematical expressions in config
 OmegaConf.register_new_resolver("eval", eval)

@@ -10,7 +10,9 @@ from torch import optim
 
 
 class PercentageWarmupCosineDecayScheduler(optim.lr_scheduler._LRScheduler):
-    def __init__(self, optimizer, max_iters, warmup_percent, decay_percent, end_lr_factor):
+    def __init__(
+        self, optimizer, max_iters, warmup_percent, decay_percent, end_lr_factor
+    ):
         self.warmup_iters = int(warmup_percent * max_iters // 100)
         self.decay_iters = int(decay_percent * max_iters // 100)
         self.end_lr_factor = end_lr_factor
@@ -24,7 +26,9 @@ class PercentageWarmupCosineDecayScheduler(optim.lr_scheduler._LRScheduler):
         if epoch <= self.warmup_iters:
             lr_factor = epoch * 1.0 / max(self.warmup_iters, 1)
         else:
-            progress = (epoch - self.warmup_iters) / (self.decay_iters - self.warmup_iters)
+            progress = (epoch - self.warmup_iters) / (
+                self.decay_iters - self.warmup_iters
+            )
             # Clamp progress to [0, 1] to handle cases where epoch > max_iters
             progress = np.clip(progress, 0.0, 1.0)
             # Cosine decay from 1.0 to end_lr_factor
